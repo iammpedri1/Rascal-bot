@@ -13,6 +13,8 @@ function corRandom() {
 }
 
 module.exports = {
+    category: 'user',
+
     data: new SlashCommandBuilder()
         .setName('perfil')
         .setDescription('Perfil completo do usuário')

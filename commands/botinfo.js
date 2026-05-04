@@ -23,6 +23,8 @@ function formatUptime(uptime) {
 }
 
 module.exports = {
+  category: 'info',
+
   data: new SlashCommandBuilder()
     .setName('botinfo')
     .setDescription('Informações avançadas sobre o bot'),

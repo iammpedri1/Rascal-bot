@@ -1,6 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
+  category: 'system',
+
   data: new SlashCommandBuilder()
     .setName('ping')
     .setDescription('Mostra a latência do bot'),

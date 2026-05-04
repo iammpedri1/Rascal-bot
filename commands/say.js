@@ -3,6 +3,8 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const cooldowns = new Map();
 
 module.exports = {
+    category: 'utility',
+
     data: new SlashCommandBuilder()
         .setName('say')
         .setDescription('Faz o bot falar algo de forma anônima')

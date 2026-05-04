@@ -1,29 +1,33 @@
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
+require("dotenv").config();
+const { REST, Routes } = require("discord.js");
+const fs = require("fs");
+const path = require("path");
 
-const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
-const registrar = async () => {
-  const comandos = [];
-  const comandosPath = path.join(__dirname, 'commands');
-  const arquivos = fs.readdirSync(comandosPath).filter((f) => f.endsWith('.js'));
+(async () => {
+  const commands = [];
 
-  for (const arquivo of arquivos) {
-    const comando = require(path.join(comandosPath, arquivo));
-    if (comando?.data) {
-      comandos.push(comando.data.toJSON());
-    }
+  const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
+
+  for (const file of files) {
+    const cmd = require(`./commands/${file}`);
+
+    if (!cmd?.data) continue;
+
+    commands.push(cmd.data.toJSON());
   }
 
-  try {
-    console.log(`\n🔄 Registrando ${comandos.length} slash command(s)...`);
-    await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: comandos });
-    console.log('✅ Slash commands registrados com sucesso!\n');
-  } catch (err) {
-    console.error('❌ Erro ao registrar comandos:', err);
-  }
-};
+  // DEBUG IMPORTANTE
+  console.log("📦 comandos finais:", commands.map(c => c.name));
 
-registrar();
+  await rest.put(
+    Routes.applicationGuildCommands(
+      process.env.CLIENT_ID,
+      process.env.GUILD_ID
+    ),
+    { body: commands }
+  );
+
+  console.log("✅ registrado limpo");
+})();
