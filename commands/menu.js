@@ -9,12 +9,20 @@ const {
 } = require("discord.js");
 
 const { loadCommands } = require("../utils/commandLoader");
+const emoji = require("../utils/emojis");
 
 const icons = {
   home: "<:icons_home:1500922691614675004>",
   human: "<:icons_human:1500922689072926980>",
   menu: "<:icons_menu:1500922698111516842>",
   settings: "<:icons_settings:1500922701512970304>",
+  games: "<:icons_games:1500934580125962312>",
+  work: emoji.shop,
+  clock: "<:icons_settings:1500922701512970304>",
+  cookie: emoji.shop,
+  roles: emoji.roles,
+  bot: emoji.botFlag,
+  party: emoji.shop,
 };
 
 const MENU_EMOJI = icons.menu;
@@ -25,12 +33,15 @@ const categoryEmojis = {
   home: icons.home,
   info: icons.human,
   staff: icons.settings,
-  system: icons.settings,
+  system: icons.bot,
   perf: icons.settings,
   mod: icons.settings,
   action: icons.human,
   fun: icons.human,
-  utility: icons.menu,
+  games: icons.games,
+  economy: emoji.shop,
+  minigames: icons.games,
+  utility: icons.clock,
   user: icons.human,
   commands: icons.menu,
   outros: icons.menu,
@@ -45,6 +56,9 @@ const categoryNames = {
   mod: "Moderacao",
   action: "Action",
   fun: "Fun",
+  games: "Games",
+  economy: "Economia",
+  minigames: "Minigames",
   utility: "Utility",
   user: "User",
   commands: "Commands",
@@ -71,8 +85,48 @@ function formatCategoryName(category) {
   );
 }
 
+function commandUsages(command) {
+  const data = command.data.toJSON();
+  const options = data.options || [];
+  const subcommands = options.filter(option => option.type === 1);
+  const subcommandGroups = options.filter(option => option.type === 2);
+
+  if (subcommandGroups.length) {
+    return subcommandGroups.flatMap(group =>
+      (group.options || [])
+        .filter(option => option.type === 1)
+        .map(option => ({
+          name: `/${data.name} ${group.name} ${option.name}`,
+          description: option.description || group.description || data.description,
+        }))
+    );
+  }
+
+  if (subcommands.length) {
+    return subcommands.map(option => ({
+      name: `/${data.name} ${option.name}`,
+      description: option.description || data.description,
+    }));
+  }
+
+  return [
+    {
+      name: `/${data.name}`,
+      description: data.description || "Sem descricao.",
+    },
+  ];
+}
+
 function commandTag(command) {
-  return `\`/${command.data.name}\``;
+  return commandUsages(command)
+    .map(usage => `\`${usage.name}\``)
+    .join(", ");
+}
+
+function commandDetails(command) {
+  return commandUsages(command)
+    .map(usage => `**${usage.name}** - ${usage.description}`)
+    .join("\n");
 }
 
 module.exports = {
@@ -147,6 +201,13 @@ module.exports = {
           [
             "\u2139\uFE0F Escolha uma categoria no menu abaixo para ver os comandos disponiveis.",
             "",
+            "**Atalhos uteis**",
+            `${icons.work} **/work** - ganhe cookies a cada 3 horas`,
+            `${icons.cookie} **/daily** - recompensa a cada 12 horas`,
+            `${icons.roles} **/inventario** - veja suas informacoes da economia`,
+            `${icons.clock} **/lembrete** - receba um aviso na hora marcada`,
+            `${icons.party} **/rank cookies** - veja o ranking global`,
+            "",
             `**Categorias (${categoryList.length})**`,
             categoryLines,
           ].join("\n")
@@ -172,6 +233,18 @@ module.exports = {
       const commandList = currentPageCommands.length
         ? currentPageCommands.map(commandTag).join(", ")
         : "Nenhum comando nesta categoria.";
+      const categoryTips = {
+        economy: [
+          `${icons.work} Use **/work** para trabalhar na firma.`,
+          `${icons.cookie} Use **/daily** para coletar sua recompensa.`,
+          `${icons.roles} Use **/inventario** para ver suas informacoes.`,
+          `${icons.party} Use **/rank cookies** para ver o ranking global.`,
+          `${icons.clock} Use **/lembrete** para nao perder cooldowns.`,
+        ],
+        utility: [
+          `${icons.clock} Use **/lembrete** para agendar avisos pessoais.`,
+        ],
+      };
 
       return new EmbedBuilder()
         .setColor(MENU_COLOR)
@@ -182,9 +255,9 @@ module.exports = {
             `**${emoji} Commands (${commandsInCategory.length})**`,
             commandList,
             "",
-            currentPageCommands
-              .map(command => `**/${command.data.name}** - ${command.data.description || "Sem descricao."}`)
-              .join("\n"),
+            currentPageCommands.map(commandDetails).join("\n"),
+            "",
+            ...(categoryTips[currentCategory] || []),
           ]
             .filter(Boolean)
             .join("\n")
@@ -237,10 +310,11 @@ module.exports = {
       );
     };
 
-    const message = await interaction.reply({
+    await interaction.deferReply();
+
+    const message = await interaction.editReply({
       embeds: [buildEmbed()],
       components: [buildSelect(), buildButtons()],
-      fetchReply: true,
     });
 
     const collector = message.createMessageComponentCollector({

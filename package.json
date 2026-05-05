@@ -3,10 +3,19 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "service:install": "node scripts/install-service.js",
+    "service:uninstall": "node scripts/uninstall-service.js",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f discord-bot"
   },
   "dependencies": {
     "discord.js": "^14.26.4",
     "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "node-windows": "^1.0.0-beta.8"
   }
 }

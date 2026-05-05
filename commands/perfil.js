@@ -1,102 +1,201 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
+} = require("discord.js");
 
-function tempoRelativo(ms) {
-    const dias = Math.floor(ms / (1000 * 60 * 60 * 24));
-    if (dias < 1) return 'hoje';
-    if (dias === 1) return 'há 1 dia';
-    return `há ${dias} dias`;
+const emoji = require("../utils/emojis");
+
+const icons = {
+  human: "<:icons_human:1500922689072926980>",
+  settings: emoji.roles,
+  staff: "<a:972422678143201330:1500207636954746990>",
+  online: emoji.online,
+  dnd: emoji.dnd,
+  idle: emoji.idle,
+  offline: emoji.offline,
+  created: "<:1000106075:1499822894077710497>",
+  userId: "<:1000106067:1499822530213445825>",
+  booster: emoji.booster,
+};
+
+function randomColor() {
+  const colors = [0x5865f2, 0x57f287, 0xed4245, 0xfaa61a, 0xeb459e, 0x3498db];
+  return colors[Math.floor(Math.random() * colors.length)];
 }
 
-function corRandom() {
-    const cores = ['#e06c75', '#e5c07b', '#98c379', '#56b6c2', '#61afef', '#c678dd', '#ff7eb6', '#f0a500', '#00d4aa', '#a29bfe'];
-    return cores[Math.floor(Math.random() * cores.length)];
+function codeLine(value) {
+  return `\`${String(value).replace(/`/g, "'")}\``;
+}
+
+function formatDate(date) {
+  if (!date) return "Data indispon\u00edvel";
+
+  const timestamp = Math.floor(date.getTime() / 1000);
+  return `<t:${timestamp}:F>\n<t:${timestamp}:R>`;
+}
+
+function formatStatus(member, presence) {
+  const status = presence?.status || member.presence?.status;
+
+  if (status === "online") return `${icons.online} Online`;
+  if (status === "dnd") return `${icons.dnd} Ocupado`;
+  if (status === "idle") return `${icons.idle} Ausente`;
+  return `${icons.offline} Offline`;
+}
+
+function formatRoles(member) {
+  const roles = member.roles.cache
+    .filter(role => role.name !== "@everyone")
+    .sort((a, b) => b.position - a.position)
+    .map(role => role.toString());
+
+  if (!roles.length) return "Nenhum cargo";
+
+  const text = roles.join(" ");
+  return text.length > 3500 ? "Muitos cargos para mostrar." : text;
 }
 
 module.exports = {
-    category: 'user',
+  category: "user",
 
-    data: new SlashCommandBuilder()
-        .setName('perfil')
-        .setDescription('Perfil completo do usuário')
-        .addUserOption(option =>
-            option.setName('usuario')
-                .setDescription('Usuário')
-                .setRequired(false)
-        ),
+  data: new SlashCommandBuilder()
+    .setName("perfil")
+    .setDescription("Mostra informa\u00e7\u00f5es de um usu\u00e1rio")
+    .addUserOption(option =>
+      option
+        .setName("user")
+        .setDescription("Usu\u00e1rio")
+        .setRequired(false)
+    ),
 
-    async execute(interaction) {
-        await interaction.deferReply({ flags: 64 });
+  async execute(interaction) {
+    if (!interaction.guild) {
+      return interaction.reply({
+        content: "Esse comando s\u00f3 pode ser usado em um servidor.",
+        flags: 64,
+      });
+    }
 
-        const user = interaction.options.getUser('usuario') || interaction.user;
-        const member = await interaction.guild.members.fetch({ user: user.id, force: true });
-        const userFetch = await user.fetch({ force: true });
+    const user = interaction.options.getUser("user") || interaction.user;
+    const member = await interaction.guild.members.fetch({ user: user.id, force: true });
+    const presence = interaction.guild.presences.cache.get(user.id);
+    const fetchedUser = await user.fetch({ force: true });
+    const banner = fetchedUser.bannerURL({ size: 1024 });
+    const color = randomColor();
+    let currentTab = "profile";
 
-        const cor = corRandom();
-        const titulo = `Perfil de ${user.username}`;
-        const banner = userFetch.bannerURL({ size: 1024 });
-
-        const emoji2 = '<:emoji2:1499822385405366313>';
-        const emoji3 = '<:emoji3:1499822894077710497>';
-        const emojiID = '<:1000106067:1499822530213445825>';
-        const emojiJoined = '<a:972422678143201330:1500207636954746990>';
-        const idStaff = '<a:in_staffLed:1499799637702348902>';
-
-        const now = new Date();
-        const criadoRel = tempoRelativo(now - user.createdAt);
-        const entrouRel = tempoRelativo(now - member.joinedAt);
-
-        const criadoData = user.createdAt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-        const criadoHora = user.createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        const entrouData = member.joinedAt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-        const entrouHora = member.joinedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-        let cargos = member.roles.cache
-            .filter(r => r.name !== '@everyone')
-            .sort((a, b) => b.position - a.position)
-            .map(r => `<@&${r.id}>`)
-            .join(' ');
-
-        if (!cargos) cargos = 'Nenhum cargo';
-        if (cargos.length > 1024) cargos = 'Muitos cargos';
-
-        const profileEmbed = new EmbedBuilder()
-            .setColor(cor)
-            .setTitle(titulo)
-            .setThumbnail(user.displayAvatarURL({ size: 256 }))
-            .addFields(
-                { name: `${emoji2} Username:`, value: `@${user.username}`, inline: true },
-                { name: `${emojiID} Discord ID:`, value: `\`${user.id}\``, inline: true },
-                { name: `${emoji3} Conta criada:`, value: `${criadoData}\n${criadoHora} (${criadoRel})`, inline: true },
-                { name: `${emojiJoined} Entrou no servidor:`, value: `${entrouData} ${entrouHora} (${entrouRel})`, inline: false }
-            )
-            .setFooter({ text: `Solicitado por ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
-            .setTimestamp();
-
-        if (banner) profileEmbed.setImage(banner);
-
-        const rolesEmbed = new EmbedBuilder()
-            .setColor(cor)
-            .setTitle(`Cargos de ${user.username}`)
-            .setDescription(`${idStaff} **Cargos (${member.roles.cache.size - 1}):**\n\n${cargos}`)
-            .setTimestamp();
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('profile').setLabel('Perfil').setEmoji('👤').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('roles').setLabel('Cargos').setEmoji('📜').setStyle(ButtonStyle.Secondary)
+    const buildProfileEmbed = () => {
+      const embed = new EmbedBuilder()
+        .setColor(color)
+        .setAuthor({
+          name: user.username,
+          iconURL: user.displayAvatarURL({ size: 256 }),
+        })
+        .setThumbnail(user.displayAvatarURL({ size: 512 }))
+        .addFields(
+          {
+            name: `${icons.human} Usu\u00e1rio`,
+            value: [
+              `Nome: ${codeLine(user.username)}`,
+              `Tag: ${codeLine(user.tag)}`,
+              `Status: ${formatStatus(member, presence)}`,
+            ].join("\n"),
+            inline: true,
+          },
+          {
+            name: `${icons.userId} Identidade`,
+            value: [
+              `ID: ${codeLine(user.id)}`,
+              `Bot: ${codeLine(user.bot ? "Sim" : "N\u00e3o")}`,
+              `Boost: ${codeLine(member.premiumSince ? "Sim" : "N\u00e3o")}`,
+            ].join("\n"),
+            inline: true,
+          },
+          {
+            name: `${icons.created} Conta criada`,
+            value: formatDate(user.createdAt),
+            inline: false,
+          },
+          {
+            name: `${icons.staff} Entrada no servidor`,
+            value: formatDate(member.joinedAt),
+            inline: false,
+          },
+          {
+            name: `${icons.booster} Impulso do servidor`,
+            value: member.premiumSince ? formatDate(member.premiumSince) : "Este usuario nao impulsiona o servidor.",
+            inline: false,
+          }
         );
 
-        const message = await interaction.editReply({ embeds: [profileEmbed], components: [row] });
+      if (banner) embed.setImage(banner);
+      return embed;
+    };
 
-        const collector = message.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
-
-        collector.on('collect', async (i) => {
-            if (i.user.id !== interaction.user.id) return i.reply({ content: 'Ação negada.', flags: 64 });
-            if (i.customId === 'profile') await i.update({ embeds: [profileEmbed] });
-            if (i.customId === 'roles') await i.update({ embeds: [rolesEmbed] });
+    const buildRolesEmbed = () =>
+      new EmbedBuilder()
+        .setColor(color)
+        .setAuthor({
+          name: `Cargos de ${user.username}`,
+          iconURL: user.displayAvatarURL({ size: 256 }),
+        })
+        .setDescription(formatRoles(member))
+        .addFields({
+          name: `${icons.settings} Resumo`,
+          value: `Total: ${codeLine(member.roles.cache.size - 1)}`,
+          inline: true,
         });
 
-        collector.on('end', () => {
-            interaction.editReply({ components: [] }).catch(() => {});
+    const buildEmbed = () =>
+      currentTab === "roles" ? buildRolesEmbed() : buildProfileEmbed();
+
+    const buildButtons = () =>
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("perfil_profile")
+          .setEmoji(icons.human)
+          .setLabel("Perfil")
+          .setStyle(currentTab === "profile" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("perfil_roles")
+          .setEmoji(icons.settings)
+          .setLabel("Cargos")
+          .setStyle(currentTab === "roles" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      );
+
+    const message = await interaction.reply({
+      embeds: [buildEmbed()],
+      components: [buildButtons()],
+      fetchReply: true,
+    });
+
+    const collector = message.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 120000,
+    });
+
+    collector.on("collect", async buttonInteraction => {
+      if (buttonInteraction.user.id !== interaction.user.id) {
+        return buttonInteraction.reply({
+          content: "Esse painel pertence a outra pessoa.",
+          flags: 64,
         });
-    }
+      }
+
+      currentTab = buttonInteraction.customId.replace("perfil_", "");
+
+      await buttonInteraction.update({
+        embeds: [buildEmbed()],
+        components: [buildButtons()],
+      });
+    });
+
+    collector.on("end", () => {
+      message.edit({ components: [] }).catch(() => {});
+    });
+  },
 };

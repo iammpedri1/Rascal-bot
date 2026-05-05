@@ -1,0 +1,66 @@
+{
+  "users": {
+    "981317076046196786": {
+      "id": "981317076046196786",
+      "username": "amillenium",
+      "balance": 1386,
+      "betWins": 2,
+      "cookiesWon": 7,
+      "cookiesLost": 0,
+      "gamesPlayed": 3,
+      "betLosses": 0,
+      "draws": 0,
+      "totalEarned": 1286,
+      "totalSpent": 0,
+      "dailyClaims": 1,
+      "dailyStreak": 1,
+      "bestDailyStreak": 1,
+      "lastDailyAt": 1777997426548,
+      "workCount": 2,
+      "lastWorkAt": 1778010651512,
+      "transfersSent": 0,
+      "transfersReceived": 0,
+      "transferredOut": 0,
+      "transferredIn": 0,
+      "biggestWin": 0,
+      "createdAt": 1777997426548,
+      "updatedAt": 1778010651514
+    }
+  },
+  "version": 2,
+  "transactions": [
+    {
+      "id": "1777997426549-msi8zc",
+      "type": "daily",
+      "userId": "981317076046196786",
+      "amount": 150,
+      "createdAt": 1777997426549,
+      "guildId": "1499777831654133931",
+      "guildName": "Servidor de Millen1u",
+      "targetId": null,
+      "note": null
+    },
+    {
+      "id": "1777998135991-7oc3wb",
+      "type": "work",
+      "userId": "981317076046196786",
+      "amount": 90,
+      "createdAt": 1777998135991,
+      "guildId": "1499777831654133931",
+      "guildName": "Servidor de Millen1u",
+      "targetId": null,
+      "note": null
+    },
+    {
+      "id": "1778010651513-u48o56",
+      "type": "work",
+      "userId": "981317076046196786",
+      "amount": 1039,
+      "createdAt": 1778010651513,
+      "guildId": "1499777831654133931",
+      "guildName": "Servidor de Millen1u",
+      "targetId": null,
+      "note": null
+    }
+  ]
+}
