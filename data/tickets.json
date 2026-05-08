@@ -7,7 +7,7 @@
         "logChannelId": "1499777832564428914",
         "ratingChannelId": null
       },
-      "lastId": 1,
+      "lastId": 4,
       "tickets": [
         {
           "id": 1,
@@ -22,6 +22,39 @@
           "reason": "resolvido",
           "rating": "like",
           "ratedAt": 1778172733664
+        },
+        {
+          "id": 2,
+          "channelId": "1502358642236592149",
+          "ownerId": "981317076046196786",
+          "type": "suporte",
+          "status": "closed",
+          "claimedBy": null,
+          "createdAt": 1778260611290,
+          "closedBy": "981317076046196786",
+          "closedAt": 1778260898367
+        },
+        {
+          "id": 3,
+          "channelId": "1502359941183311943",
+          "ownerId": "981317076046196786",
+          "type": "denuncia",
+          "status": "closed",
+          "claimedBy": "981317076046196786",
+          "createdAt": 1778260919212,
+          "closedBy": "981317076046196786",
+          "closedAt": 1778260932730
+        },
+        {
+          "id": 4,
+          "channelId": "1502361779911528641",
+          "ownerId": "981317076046196786",
+          "type": "suporte",
+          "status": "closed",
+          "claimedBy": "981317076046196786",
+          "createdAt": 1778261357671,
+          "closedBy": "981317076046196786",
+          "closedAt": 1778261374381
         }
       ]
     }

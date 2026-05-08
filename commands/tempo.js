@@ -3,7 +3,7 @@ const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
 const emoji = require("../utils/emojis");
 const { buildInlineErrorEmbed } = require("../utils/cookieViews");
 
-const WEATHER_COLOR = 0x9b8cff;
+const WEATHER_COLOR = 0xe8cde3;
 const WEATHER_IMAGE = "https://cdn-icons-png.flaticon.com/512/1163/1163661.png";
 
 function cleanText(value, fallback = "N\u00e3o informado") {
@@ -17,11 +17,18 @@ function numberText(value, suffix = "") {
   return `${Math.round(parsed)}${suffix}`;
 }
 
+function decimalText(value, suffix = "", digits = 1) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "N\u00e3o informado";
+
+  return `${parsed.toFixed(digits)}${suffix}`;
+}
+
 function formatWindKmh(kmph) {
   const parsed = Number(kmph);
   if (!Number.isFinite(parsed)) return "N\u00e3o informado";
 
-  return `${(parsed / 3.6).toFixed(2)} m/s`;
+  return `${(parsed / 3.6).toFixed(1)} m/s`;
 }
 
 function iconForWeather(description) {
@@ -56,6 +63,39 @@ function translateWeather(description) {
   return translations.find(([key]) => text.includes(key))?.[1] || cleanText(description).toLowerCase();
 }
 
+function formatDatePt(date = new Date()) {
+  const formatted = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Sao_Paulo",
+  }).format(date);
+
+  return formatted.replace("-feira", "-feira");
+}
+
+function updatedAtLabel(data) {
+  const localTime = data.current_condition?.[0]?.localObsDateTime;
+  const match = String(localTime || "").match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+
+  if (match) {
+    let hours = Number(match[1]);
+    const minutes = match[2];
+    const period = match[3]?.toUpperCase();
+
+    if (period === "PM" && hours < 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+
+    return `${String(hours).padStart(2, "0")}:${minutes}`;
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date());
+}
+
 async function fetchWeather(city) {
   const url = `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=pt`;
   const response = await fetch(url, {
@@ -68,7 +108,6 @@ async function fetchWeather(city) {
 
 function buildWeatherEmbed(city, data) {
   const current = data.current_condition?.[0] || {};
-  const today = data.weather?.[0] || {};
   const area = data.nearest_area?.[0] || {};
   const resolvedCity = area.areaName?.[0]?.value || city;
   const region = area.region?.[0]?.value;
@@ -76,24 +115,34 @@ function buildWeatherEmbed(city, data) {
   const location = [resolvedCity, region, country].filter(Boolean).join(", ");
   const description = current.lang_pt?.[0]?.value || current.weatherDesc?.[0]?.value;
   const climate = translateWeather(description);
+  const temp = numberText(current.temp_C, "\u00b0C");
+  const feelsLike = numberText(current.FeelsLikeC, "\u00b0C");
+  const rain = decimalText(current.precipMM, " mm", 1);
+  const wind = formatWindKmh(current.windspeedKmph);
+  const weatherIcon = iconForWeather(description);
 
   return new EmbedBuilder()
     .setColor(WEATHER_COLOR)
-    .setTitle(`\u2601\uFE0F \u00bb Tempo em ${resolvedCity}`)
+    .setAuthor({ name: "Clima" })
+    .setTitle(resolvedCity)
     .setThumbnail(WEATHER_IMAGE)
     .setDescription(
       [
-        `\uD83C\uDF21\uFE0F \u00bb **Temperatura**        \uD83D\uDD25 \u00bb **M\u00e1xima**        \uD83E\uDDCA \u00bb **M\u00ednima**`,
-        `${numberText(current.temp_C, " \u00b0C")}                         ${numberText(today.maxtempC, " \u00b0C")}                 ${numberText(today.mintempC, " \u00b0C")}`,
+        formatDatePt(),
         "",
-        `\uD83E\uDD76 \u00bb **Sensa\u00e7\u00e3o T\u00e9rmica**     \uD83D\uDCA7 \u00bb **Umidade**        \uD83C\uDF43 \u00bb **Vento**`,
-        `${numberText(current.FeelsLikeC, " \u00b0C")}                         ${numberText(current.humidity, "%")}                   ${formatWindKmh(current.windspeedKmph)}`,
+        `${weatherIcon}  **${temp}**`,
         "",
-        `${iconForWeather(description)} \u00bb **Clima**`,
         climate,
       ].join("\n")
     )
-    .setFooter({ text: location || "Dados meteorol\u00f3gicos" })
+    .addFields(
+      { name: "\uD83C\uDF21\uFE0F Parece que", value: `**${feelsLike}**`, inline: true },
+      { name: "\u2602\uFE0F Chuva", value: `**${rain}**`, inline: true },
+      { name: "\u2691\uFE0F Vento", value: `**${wind}**`, inline: true }
+    )
+    .setFooter({
+      text: `${location || "Dados meteorol\u00f3gicos"} \u2022 Atualizado em ${updatedAtLabel(data)}`,
+    })
     .setTimestamp();
 }
 

@@ -6,14 +6,6 @@ const { getWeeklyVoiceLeaderboard } = require("../utils/voiceStats");
 const RANK_COLOR = 0x9b8cff;
 const RANK_LIMIT = 10;
 
-function emojiImageUrl(customEmoji) {
-  const match = customEmoji?.match(/^<a?:[^:]+:(\d+)>$/);
-  if (!match) return null;
-
-  const extension = customEmoji.startsWith("<a:") ? "gif" : "png";
-  return `https://cdn.discordapp.com/emojis/${match[1]}.${extension}?quality=lossless`;
-}
-
 function medal(position) {
   if (position === 1) return "\uD83E\uDD47";
   if (position === 2) return "\uD83E\uDD48";
@@ -43,11 +35,7 @@ function buildRankEmbed(interaction, rank) {
   return new EmbedBuilder()
     .setColor(RANK_COLOR)
     .setTitle("\uD83D\uDD0A \u00bb Ranking Semanal de Voz")
-    .setThumbnail(
-      emojiImageUrl(emoji.pepeReeeee) ||
-      emojiImageUrl(emoji.lorittaMegafone) ||
-      interaction.guild.iconURL({ size: 256 })
-    )
+    .setThumbnail(interaction.guild.iconURL({ size: 256, extension: "gif" }) || interaction.guild.iconURL({ size: 256 }))
     .setDescription(
       lines.length
         ? lines.join("\n")

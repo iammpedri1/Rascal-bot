@@ -12,10 +12,10 @@ const DEFAULT_TIMEOUTS = {
   mute: 60 * 60 * 1000,
   castigo: 24 * 60 * 60 * 1000,
 };
-const BAN_ART = "https://cdn.discordapp.com/emojis/1502348528159031418.gif?quality=lossless";
-const MUTE_ART = "https://cdn.discordapp.com/emojis/1501626669473992775.gif?quality=lossless";
-const CASTIGO_ART = "https://cdn.discordapp.com/emojis/1501637659305705516.gif?quality=lossless";
-const AVISO_ART = "https://cdn.discordapp.com/emojis/1499814138866700480.gif?quality=lossless";
+const BAN_ART = "https://cdn3.emoji.gg/emojis/5076-pepe-ban.gif";
+const MUTE_ART = "https://cdn3.emoji.gg/emojis/6454-peepotalk.gif";
+const CASTIGO_ART = "https://cdn3.emoji.gg/emojis/5599-peepo-jail.gif";
+const AVISO_ART = "https://cdn3.emoji.gg/emojis/6916-peepo-police.png";
 
 function emojiImageUrl(customEmoji) {
   const match = customEmoji?.match(/^<a?:[^:]+:(\d+)>$/);
@@ -260,6 +260,8 @@ module.exports = {
     }
 
     return interaction.editReply({
+      content: `${targetUser}`,
+      allowedMentions: { users: [targetUser.id] },
       embeds: [punishmentEmbed(interaction, targetUser, action, reason, durationMs)],
     });
   },
