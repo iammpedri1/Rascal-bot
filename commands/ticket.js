@@ -32,14 +32,17 @@ const icons = {
   no: emoji.crossed,
 };
 
-const MENU_COLOR = 0xff6a00;
 const COLORS = {
-  panel: MENU_COLOR,
+  panel: 0x2f3136,
   danger: 0xe74c3c,
   success: 0x2ecc71,
+  faq: 0x5865f2,
 };
 
 const PANEL_WEBHOOK_NAME = "Central de atendimentos";
+const PANEL_TITLE = "Central de atendimentos do Driscord Brasil\u2122";
+const DIVIDER = "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500";
+const ARROW = "\u00bb";
 
 const ticketTypes = {
   suporte: {
@@ -108,6 +111,35 @@ const ticketTypes = {
     ],
   },
 };
+
+Object.assign(ticketTypes, {
+  suporte: {
+    label: "Suporte",
+    emoji: icons.staff,
+    selectDescription: "D\u00favidas, ajuda geral e problemas no servidor.",
+    description: "D\u00favidas, ajuda geral e problemas no servidor.",
+    intro: "Conte o que aconteceu e o que voc\u00ea precisa resolver.",
+    color: 0x3498db,
+    tips: [
+      "Explique o problema com calma e em uma \u00fanica mensagem.",
+      "Envie prints, links ou IDs quando isso ajudar a equipe.",
+      "Evite abrir outro ticket para o mesmo assunto.",
+    ],
+  },
+  denuncia: {
+    label: "Den\u00fancia",
+    emoji: icons.police,
+    selectDescription: "Relatos sobre usu\u00e1rios, golpes ou situa\u00e7\u00f5es sens\u00edveis.",
+    description: "Relatos sobre usu\u00e1rios, golpes, abusos ou situa\u00e7\u00f5es sens\u00edveis.",
+    intro: "Envie provas e contexto para a equipe analisar com seguran\u00e7a.",
+    color: 0xe74c3c,
+    tips: [
+      "Envie ID do usu\u00e1rio, link da mensagem ou print completo.",
+      "Explique quando aconteceu e quem estava envolvido.",
+      "N\u00e3o exponha o caso em canais p\u00fablicos enquanto a equipe analisa.",
+    ],
+  },
+});
 
 function parseEmoji(value) {
   const match = value?.match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
@@ -190,6 +222,53 @@ function panelComponents() {
   ];
 }
 
+function panelEmbed(interaction) {
+  return new EmbedBuilder()
+    .setColor(COLORS.panel)
+    .setTitle(`${icons.staff} » ${PANEL_TITLE}`)
+    .setDescription(
+      [
+        "**Abra seu ticket clicando nos botões de acordo com sua categoria!**",
+        "",
+        DIVIDER,
+        `${ticketTypes.suporte.emoji} » **Ticket SUPORTE (Dúvidas e Informações)**`,
+        "",
+        DIVIDER,
+        `${ticketTypes.denuncia.emoji} » **Ticket REPORTE (Denúncias)**`,
+        "",
+        DIVIDER,
+        `${icons.question} » **Veja nossas Perguntas Frequentes aqui**`,
+        "",
+        DIVIDER,
+        `${icons.no} » Abrir tickets com perguntas fúteis e/ou sem respostas resultará em punição.`,
+      ].join("\n")
+    );
+}
+
+function panelComponents() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("ticket|start|suporte")
+        .setLabel("Suporte")
+        .setEmoji(parseEmoji(ticketTypes.suporte.emoji))
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("ticket|start|denuncia")
+        .setLabel("Reporte")
+        .setEmoji(parseEmoji(ticketTypes.denuncia.emoji))
+        .setStyle(ButtonStyle.Danger)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("ticket|faq")
+        .setLabel("Perguntas Frequentes")
+        .setEmoji(parseEmoji(icons.question))
+        .setStyle(ButtonStyle.Primary)
+    ),
+  ];
+}
+
 function faqEmbed(interaction) {
   return new EmbedBuilder()
     .setColor(0x5865f2)
@@ -229,22 +308,122 @@ async function getPanelWebhook(channel, client) {
   }).catch(() => null);
 }
 
+function panelLineEmbed(typeKey, text, color) {
+  const type = ticketTypes[typeKey];
+
+  return new EmbedBuilder()
+    .setColor(color)
+    .setDescription(`${type.emoji} **» ${text}**`);
+}
+
+function panelLineButton(typeKey, label, style) {
+  const type = ticketTypes[typeKey];
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ticket|start|${typeKey}`)
+      .setLabel(label)
+      .setEmoji(parseEmoji(type.emoji))
+      .setStyle(style)
+  );
+}
+
+function faqLineEmbed() {
+  return new EmbedBuilder()
+    .setColor(COLORS.faq)
+    .setDescription(`${icons.question} **» Veja nossas Perguntas Frequentes aqui**`);
+}
+
+function faqLineButton() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("ticket|faq")
+      .setLabel("Perguntas Frequentes")
+      .setEmoji(parseEmoji(icons.question))
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
 async function sendPanel(channel, interaction, config) {
-  const payload = {
-    embeds: [panelEmbed(interaction, config)],
-    components: panelComponents(),
-  };
   const webhook = await getPanelWebhook(channel, interaction.client);
+  const send = payload => webhook
+    ? webhook.send({
+        username: PANEL_WEBHOOK_NAME,
+        avatarURL: interaction.client.user.displayAvatarURL({ size: 256 }),
+        ...payload,
+      })
+    : channel.send(payload);
 
-  if (webhook) {
-    return webhook.send({
-      username: PANEL_WEBHOOK_NAME,
-      avatarURL: interaction.client.user.displayAvatarURL({ size: 256 }),
-      ...payload,
-    });
-  }
+  await send({
+    content: `## ${icons.ticket} » ${PANEL_TITLE}\n**Abra seu ticket clicando nos botões de acordo com sua categoria!**`,
+  });
 
-  return channel.send(payload);
+  await send({
+    embeds: [panelLineEmbed("suporte", "Ticket SUPORTE *(Dúvidas e Informações)*", 0x57f287)],
+    components: [panelLineButton("suporte", "Suporte", ButtonStyle.Success)],
+  });
+
+  await send({
+    embeds: [panelLineEmbed("denuncia", "Ticket REPORTE *(Denúncias)*", 0xed4245)],
+    components: [panelLineButton("denuncia", "Reporte", ButtonStyle.Danger)],
+  });
+
+  await send({
+    embeds: [faqLineEmbed()],
+    components: [faqLineButton()],
+  });
+
+  return send({
+    content: `${icons.no} **» Abrir tickets com perguntas fúteis e/ou sem respostas resultará em punição.**`,
+  });
+}
+
+function panelLineEmbed(typeKey, text, color) {
+  const type = ticketTypes[typeKey];
+
+  return new EmbedBuilder()
+    .setColor(color)
+    .setDescription(`${type.emoji} **${ARROW} ${text}**`);
+}
+
+function faqLineEmbed() {
+  return new EmbedBuilder()
+    .setColor(COLORS.faq)
+    .setDescription(`${icons.question} **${ARROW} Veja nossas Perguntas Frequentes aqui**`);
+}
+
+async function sendPanel(channel, interaction, config) {
+  const webhook = await getPanelWebhook(channel, interaction.client);
+  const send = payload => webhook
+    ? webhook.send({
+        username: PANEL_WEBHOOK_NAME,
+        avatarURL: interaction.client.user.displayAvatarURL({ size: 256 }),
+        ...payload,
+      })
+    : channel.send(payload);
+
+  await send({
+    content: `## ${icons.ticket} ${ARROW} ${PANEL_TITLE}\n**Abra seu ticket clicando nos bot\u00f5es de acordo com sua categoria!**`,
+  });
+
+  await send({
+    embeds: [panelLineEmbed("suporte", "Ticket SUPORTE *(D\u00favidas e Informa\u00e7\u00f5es)*", 0x57f287)],
+    components: [panelLineButton("suporte", "Suporte", ButtonStyle.Success)],
+  });
+
+  await send({
+    embeds: [panelLineEmbed("denuncia", "Ticket REPORTE *(Den\u00fancias)*", 0xed4245)],
+    components: [panelLineButton("denuncia", "Reporte", ButtonStyle.Danger)],
+  });
+
+  await send({
+    embeds: [faqLineEmbed()],
+    components: [faqLineButton()],
+  });
+
+  return send({
+    content: `${icons.no} **${ARROW} Abrir tickets com perguntas f\u00fateis e/ou sem respostas resultar\u00e1 em puni\u00e7\u00e3o.**`,
+  });
 }
 
 function ticketEmbed(interaction, ticket, note) {
@@ -546,18 +725,26 @@ module.exports = {
         })
       : config;
 
-    if (targetChannel) {
-      await sendPanel(targetChannel, interaction, nextConfig);
+    const publishChannel = targetChannel || interaction.channel;
 
+    if (!interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({
-        content: `${icons.like} Central de tickets publicada em ${targetChannel}.`,
+        content: "Use a central de tickets publicada pela equipe para abrir um atendimento.",
         flags: 64,
       });
     }
 
+    if (publishChannel?.isTextBased()) {
+      await interaction.deferReply({ flags: 64 });
+      await sendPanel(publishChannel, interaction, nextConfig);
+
+      return interaction.editReply({
+        content: `${icons.like} Central de tickets publicada em ${publishChannel}.`,
+      });
+    }
+
     return interaction.reply({
-      embeds: [panelEmbed(interaction, nextConfig)],
-      components: panelComponents(),
+      content: "N\u00e3o consegui publicar a central nesse canal.",
       flags: 64,
     });
   },
