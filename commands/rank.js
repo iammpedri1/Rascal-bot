@@ -12,6 +12,7 @@ const {
   getNetProfit,
   getRank,
 } = require("../utils/cookieEconomy");
+const { getXpLeaderboard } = require("../utils/xpSystem");
 
 const COOKIE_EMOJI = emoji.cookie;
 const PAGE_SIZE = 10;
@@ -85,6 +86,32 @@ function buildRankEmbed(interaction, rank, type, page) {
     .setTimestamp();
 }
 
+function buildXpRankEmbed(interaction, rank, page) {
+  const maxPage = Math.max(1, Math.ceil(rank.length / PAGE_SIZE));
+  const start = page * PAGE_SIZE;
+  const current = rank.slice(start, start + PAGE_SIZE);
+  const from = rank.length ? start + 1 : 0;
+  const to = start + current.length;
+  const lines = current.map((profile, index) => {
+    const position = start + index + 1;
+
+    return [
+      `${rankMedal(position)} \u00bb **${rankName(profile)}**`,
+      `\u2514 Level \`${profile.level}\` \u2022 \`${amount(profile.totalXp)} XP\` \u2022 \`${amount(profile.messagesCount)}\` mensagens`,
+    ].join("\n");
+  });
+
+  return new EmbedBuilder()
+    .setColor(0xff6a00)
+    .setTitle(`${emoji.likeLed} RANKING DE XP ${from}-${to}`)
+    .setDescription(lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguem apareceu por aqui ainda.`)
+    .setFooter({
+      text: interaction.client.user?.username || "Bot",
+      iconURL: interaction.client.user?.displayAvatarURL() || undefined,
+    })
+    .setTimestamp();
+}
+
 function buildRankButtons(page, maxPage) {
   if (maxPage <= 1) return [];
 
@@ -127,26 +154,35 @@ module.exports = {
               { name: "Lucro", value: "profit" }
             )
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName("xp")
+        .setDescription("Mostra o ranking global de XP")
     ),
 
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
 
-    if (subcommand !== "cookies") {
+    if (subcommand !== "cookies" && subcommand !== "xp") {
       return interaction.reply({
         content: "Subcomando desconhecido.",
         flags: 64,
       });
     }
 
-    const type = interaction.options.getString("tipo") || "balance";
-    const rank = getRank(1000, type);
+    const type = subcommand === "cookies" ? interaction.options.getString("tipo") || "balance" : "xp";
+    const rank = subcommand === "xp" ? getXpLeaderboard(1000) : getRank(1000, type);
     const maxPage = Math.max(1, Math.ceil(rank.length / PAGE_SIZE));
     let page = 0;
     const components = buildRankButtons(page, maxPage);
 
     await interaction.reply({
-      embeds: [buildRankEmbed(interaction, rank, type, page)],
+      embeds: [
+        subcommand === "xp"
+          ? buildXpRankEmbed(interaction, rank, page)
+          : buildRankEmbed(interaction, rank, type, page),
+      ],
       components,
     });
 
@@ -172,7 +208,11 @@ module.exports = {
       page = Math.max(0, Math.min(page, maxPage - 1));
 
       return buttonInteraction.update({
-        embeds: [buildRankEmbed(interaction, rank, type, page)],
+        embeds: [
+          subcommand === "xp"
+            ? buildXpRankEmbed(interaction, rank, page)
+            : buildRankEmbed(interaction, rank, type, page),
+        ],
         components: buildRankButtons(page, maxPage),
       });
     });
