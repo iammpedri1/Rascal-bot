@@ -30,6 +30,8 @@ module.exports = {
   js: "<:js:1501265152933232690>",
   shop: "<:loja:1501267230795497503>",
   ticket: "<:ticket:1501636986274971760>",
+  lorittaMegafone: "<:1015055154157977630:1502141996880629870>",
+  lorittaCafune: "<a:1209206680202510424:1502141971303763979>",
   staffLed: "<a:in_staffLed:1499799637702348902>",
   likeLed: "<a:in_likeLed:1499814130570363102>",
   dislikeLed: "<a:in_deslikeLed:1499814134890369195>",

@@ -24,15 +24,15 @@ function buildXpCard(user, xp) {
   const reward = levelReward(nextLevel);
 
   return new EmbedBuilder()
-    .setColor(0x57f287)
+    .setColor(0x5865f2)
     .setAuthor({
       name: `${user.username}#${user.discriminator}`,
       iconURL: user.displayAvatarURL({ size: 128 }),
     })
-    .setDescription(`${emoji.ticket} **Cartao de Perfil do Servidor**`)
+    .setDescription(`${emoji.lorittaMegafone} **Cartao de Perfil do Servidor**`)
     .addFields(
       {
-        name: `${emoji.staffLed} Nivel atual`,
+        name: `${emoji.lorittaCafune} Nivel atual`,
         value: `Nivel ${xp.level}`,
         inline: true,
       },
@@ -42,7 +42,7 @@ function buildXpCard(user, xp) {
         inline: true,
       },
       {
-        name: `${emoji.clap} Colocacao`,
+        name: `${emoji.lorittaMegafone} Colocacao`,
         value: `#${amount(xp.rank.position)}`,
         inline: true,
       },
@@ -52,12 +52,12 @@ function buildXpCard(user, xp) {
         inline: true,
       },
       {
-        name: `${emoji.gift} Proxima Recompensa`,
+        name: `${emoji.lorittaCafune} Proxima Recompensa`,
         value: `Ganhe +${amount(reward)} XP para ganhar **Level +1**!`,
         inline: true,
       },
       {
-        name: `${emoji.thinking} Dicas e Manhas do Driscord Brasil`,
+        name: `${emoji.lorittaMegafone} Dicas e Manhas do Driscord Brasil`,
         value: "Continue conversando para passar de nivel. Eu sei que voce vai conseguir!",
         inline: false,
       }

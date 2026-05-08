@@ -8,15 +8,26 @@ module.exports = {
 
   async execute(message) {
     const result = addMessageXp(message);
-    if (!result?.leveledUp) return;
+    if (!result) return;
+
+    if (!result.leveledUp) {
+      const notice = await message.channel.send({
+        content: `${emoji.lorittaMegafone} ${message.author} ganhou **+${result.gained} XP**!`,
+      }).catch(() => null);
+
+      if (notice?.deletable) {
+        setTimeout(() => notice.delete().catch(() => {}), 6000);
+      }
+      return;
+    }
 
     const embed = new EmbedBuilder()
       .setColor(0xff6a00)
-      .setTitle(`${emoji.likeLed} Level up!`)
+      .setTitle(`${emoji.lorittaCafune} Level up!`)
       .setDescription(
         [
           `${message.author} subiu para o **level ${result.after.level}**.`,
-          `XP: **${result.after.totalXp}**`,
+          `${emoji.lorittaMegafone} XP: **${result.after.totalXp}**`,
         ].join("\n")
       )
       .setThumbnail(message.author.displayAvatarURL({ size: 256 }));
