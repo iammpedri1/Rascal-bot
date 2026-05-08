@@ -5,20 +5,25 @@ const {
   buildContext,
   buildWorkCooldownEmbed,
   buildWorkEmbed,
+  pick,
+  workFailReasons,
 } = require("../utils/cookieViews");
 
 module.exports = {
   category: "economy",
 
   data: new SlashCommandBuilder()
-    .setName("work")
-    .setDescription("Trabalhe na firma e ganhe cookies a cada 3 horas"),
+    .setName("trabalhar")
+    .setDescription("Trabalhe na firma e tente ganhar cookies a cada 8 horas"),
 
   async execute(interaction) {
-    const result = work(interaction.user, buildContext(interaction));
+    const result = work(interaction.user, {
+      ...buildContext(interaction),
+      reason: pick(workFailReasons),
+    });
     const embed = result.worked
-      ? buildWorkEmbed(interaction.user, result)
-      : buildWorkCooldownEmbed(interaction.user, result);
+      ? buildWorkEmbed(interaction, result)
+      : buildWorkCooldownEmbed(interaction, result);
 
     return interaction.reply({ embeds: [embed] });
   },

@@ -8,5 +8,13 @@ services:
     environment:
       NODE_ENV: production
       RUNNING_IN_DOCKER: "true"
+      NODE_OPTIONS: "--max-old-space-size=256"
+    mem_limit: 384m
+    memswap_limit: 512m
     volumes:
       - ./data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

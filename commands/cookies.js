@@ -9,6 +9,9 @@ const {
   getProfile,
   transfer,
 } = require("../utils/cookieEconomy");
+const {
+  buildInlineErrorEmbed,
+} = require("../utils/cookieViews");
 
 const COOKIE_EMOJI = emoji.cookie;
 
@@ -21,6 +24,14 @@ function buildContext(interaction) {
     guildId: interaction.guild?.id,
     guildName: interaction.guild?.name,
   };
+}
+
+function emojiImageUrl(customEmoji) {
+  const match = customEmoji?.match(/^<a?:[^:]+:(\d+)>$/);
+  if (!match) return null;
+
+  const extension = customEmoji.startsWith("<a:") ? "gif" : "png";
+  return `https://cdn.discordapp.com/emojis/${match[1]}.${extension}?quality=lossless`;
 }
 
 module.exports = {
@@ -65,28 +76,62 @@ module.exports = {
     if (subcommand === "saldo") {
       const user = interaction.options.getUser("usuario") || interaction.user;
       const profile = getProfile(user);
+      const netProfit = getNetProfit(profile);
 
       const embed = new EmbedBuilder()
-        .setColor(0xfaa61a)
-        .setTitle(`${COOKIE_EMOJI} SALDO GLOBAL ${emoji.party}`)
+        .setColor(0xf5a623)
+        .setAuthor({
+          name: `Carteira de ${user.username}`,
+          iconURL: user.displayAvatarURL({ size: 64 }),
+        })
+        .setTitle(`${COOKIE_EMOJI} Saldo de Cookies`)
+        .setThumbnail(emojiImageUrl(emoji.cookie) || user.displayAvatarURL({ size: 256 }))
         .setDescription(
           [
-            `${emoji.online} Usuario: <@${user.id}>`,
-            `${COOKIE_EMOJI} Saldo: **${amount(profile.balance)} cookies**`,
-            "",
-            `${emoji.clap} Ganhos totais: ${COOKIE_EMOJI} **${amount(profile.totalEarned)}**`,
-            `${emoji.sad} Gastos/perdidos: ${COOKIE_EMOJI} **${amount(profile.totalSpent)}**`,
-            `${emoji.work} Lucro em apostas: ${COOKIE_EMOJI} **${amount(getNetProfit(profile))}**`,
-            "",
-            `Vitorias: **${amount(profile.betWins)}**`,
-            `Derrotas: **${amount(profile.betLosses)}**`,
-            `Empates: **${amount(profile.draws)}**`,
-            `Partidas: **${amount(profile.gamesPlayed)}**`,
-            "",
-            `Sequencia diaria: **${amount(profile.dailyStreak)}**`,
-            `Melhor sequencia: **${amount(profile.bestDailyStreak)}**`,
+            `${emoji.online} \u00bb Usuario: <@${user.id}>`,
+            `${COOKIE_EMOJI} \u00bb Saldo atual: **${amount(profile.balance)} cookies**`,
           ].join("\n")
-        );
+        )
+        .addFields(
+          {
+            name: `${emoji.clap} Movimentacao`,
+            value: [
+              `Ganhos totais: **${amount(profile.totalEarned)}**`,
+              `Gastos e perdas: **${amount(profile.totalSpent)}**`,
+              `Resultado em jogos: **${amount(netProfit)}**`,
+            ].join("\n"),
+            inline: false,
+          },
+          {
+            name: `${emoji.keyboardWumpus} Jogos`,
+            value: [
+              `Vitorias: **${amount(profile.betWins)}**`,
+              `Derrotas: **${amount(profile.betLosses)}**`,
+              `Empates: **${amount(profile.draws)}**`,
+              `Partidas: **${amount(profile.gamesPlayed)}**`,
+            ].join("\n"),
+            inline: true,
+          },
+          {
+            name: `${emoji.gift} Daily`,
+            value: [
+              `Sequencia: **${amount(profile.dailyStreak)}**`,
+              `Melhor: **${amount(profile.bestDailyStreak)}**`,
+              `Coletas: **${amount(profile.dailyClaims)}**`,
+            ].join("\n"),
+            inline: true,
+          },
+          {
+            name: `${emoji.booster} Taxa diaria`,
+            value: "1% ao dia apenas sobre saldo acima de **500 cookies**. Limite: **250 cookies/dia**.",
+            inline: false,
+          }
+        )
+        .setFooter({
+          text: interaction.client.user?.username || "Bot",
+          iconURL: interaction.client.user?.displayAvatarURL() || undefined,
+        })
+        .setTimestamp();
 
       return interaction.reply({ embeds: [embed] });
     }
@@ -98,21 +143,21 @@ module.exports = {
 
       if (!result.ok && result.reason === "self") {
         return interaction.reply({
-          content: "Voce nao pode enviar cookies para voce mesmo.",
+          embeds: [buildInlineErrorEmbed("Voce nao pode enviar cookies para voce mesmo!")],
           flags: 64,
         });
       }
 
       if (!result.ok && result.reason === "balance") {
         return interaction.reply({
-          content: `Voce nao tem ${COOKIE_EMOJI} **${amount(quantity)} cookies** para enviar.`,
+          embeds: [buildInlineErrorEmbed(`Voce nao tem ${COOKIE_EMOJI} **${amount(quantity)} cookies** para enviar!`)],
           flags: 64,
         });
       }
 
       const embed = new EmbedBuilder()
         .setColor(0x57f287)
-        .setTitle(`${emoji.clap} TRANSFERENCIA CONCLUIDA`)
+        .setTitle(`${emoji.greenTick} Transferencia concluida`)
         .setDescription(
           [
             `<@${interaction.user.id}> enviou ${COOKIE_EMOJI} **${amount(result.amount)} cookies** para <@${target.id}>.`,
@@ -120,7 +165,12 @@ module.exports = {
             `Seu saldo: ${COOKIE_EMOJI} **${amount(result.from.balance)}**`,
             `Saldo de ${target.username}: ${COOKIE_EMOJI} **${amount(result.to.balance)}**`,
           ].join("\n")
-        );
+        )
+        .setFooter({
+          text: interaction.client.user?.username || "Bot",
+          iconURL: interaction.client.user?.displayAvatarURL() || undefined,
+        })
+        .setTimestamp();
 
       return interaction.reply({ embeds: [embed] });
     }

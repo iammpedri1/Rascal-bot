@@ -13,6 +13,11 @@ const { getAnimeGif } = require("../utils/animeGifs");
 const COOKIE_EMOJI = "<a:cookiesemoji:1500946522118950943>";
 const ACCEPT_EMOJI = "<:greentick:1500896913627549969>";
 const DECLINE_EMOJI = "<:redtick:1500896911081603142>";
+const COIN_EMOJI = "🪙";
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function flipCoin() {
   return Math.random() < 0.5 ? "cara" : "coroa";
@@ -105,15 +110,21 @@ module.exports = {
 
     const inviteEmbed = new EmbedBuilder()
       .setColor(0xfaa61a)
-      .setTitle("Cara ou Coroa")
+      .setTitle(`${COIN_EMOJI} Cara ou Coroa`)
       .setDescription(
         [
-          `<@${interaction.user.id}> desafiou <@${opponent.id}>.`,
-          `<@${interaction.user.id}> ficou com **${choice}**.`,
-          `<@${opponent.id}> ficara com **${opponentChoice}** se aceitar.`,
-          `Aposta: ${COOKIE_EMOJI} **${amount} cookies**`,
+          `<@${interaction.user.id}> chamou <@${opponent.id}> para uma aposta.`,
+          "",
+          `**${interaction.user.username}** escolheu: **${choice.toUpperCase()}**`,
+          `**${opponent.username}** ficará com: **${opponentChoice.toUpperCase()}**`,
+          "",
+          `${COOKIE_EMOJI} **Aposta:** ${amount.toLocaleString("pt-BR")} cookies`,
+          "",
+          `<@${opponent.id}>, aceite ou recuse o desafio abaixo.`,
         ].join("\n")
-      );
+      )
+      .setThumbnail("https://cdn-icons-png.flaticon.com/512/272/272525.png")
+      .setFooter({ text: "O vencedor leva a aposta do adversário." });
 
     const message = await interaction.reply({
       embeds: [inviteEmbed],
@@ -175,23 +186,46 @@ module.exports = {
       finished = true;
       collector.stop("finished");
 
+      await buttonInteraction.update({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xfaa61a)
+            .setTitle(`${COIN_EMOJI} Girando a moeda...`)
+            .setDescription(
+              [
+                `${interaction.user} escolheu **${choice}**.`,
+                `${opponent} ficou com **${opponentChoice}**.`,
+                "",
+                "A moeda está no ar...",
+              ].join("\n")
+            ),
+        ],
+        components: [],
+      });
+
+      await wait(1800);
+
       const embed = new EmbedBuilder()
         .setColor(0x57f287)
-        .setTitle("Resultado do Cara ou Coroa")
+        .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
         .setDescription(
           [
-            `<@${challengerId}>: **${choice}**`,
-            `<@${opponentId}>: **${opponentChoice}**`,
-            `Resultado: **${coin}**`,
+            `A moeda caiu em: **${coin.toUpperCase()}**`,
             "",
-            `<@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${bet} cookies**!`,
-            `<@${winnerUser.id}> saldo: **${winner.balance}**`,
-            `<@${loserUser.id}> saldo: **${loser.balance}**`,
+            `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${bet.toLocaleString("pt-BR")} cookies**.`,
+            "",
+            `**Placar**`,
+            `<@${challengerId}>: **${choice.toUpperCase()}**`,
+            `<@${opponentId}>: **${opponentChoice.toUpperCase()}**`,
+            "",
+            `**Saldos**`,
+            `<@${winnerUser.id}>: **${winner.balance.toLocaleString("pt-BR")}**`,
+            `<@${loserUser.id}>: **${loser.balance.toLocaleString("pt-BR")}**`,
           ].join("\n")
         )
         .setImage(gif);
 
-      return buttonInteraction.update({
+      return message.edit({
         embeds: [embed],
         components: [],
       });

@@ -1,0 +1,28 @@
+{
+  "guilds": {
+    "1499777831654133931": {
+      "config": {
+        "staffRoleId": "1500209385543172176",
+        "categoryId": "1499777832115765329",
+        "logChannelId": "1499777832564428914"
+      },
+      "lastId": 1,
+      "tickets": [
+        {
+          "id": 1,
+          "channelId": "1501985467648835756",
+          "ownerId": "981317076046196786",
+          "type": "suporte",
+          "status": "closed",
+          "claimedBy": "981317076046196786",
+          "createdAt": 1778171639102,
+          "closedBy": "981317076046196786",
+          "closedAt": 1778172727508,
+          "reason": "resolvido",
+          "rating": "like",
+          "ratedAt": 1778172733664
+        }
+      ]
+    }
+  }
+}

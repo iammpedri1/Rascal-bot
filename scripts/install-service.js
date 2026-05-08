@@ -11,6 +11,14 @@ const svc = new Service({
       name: "SERVICE_HOST",
       value: "node-windows",
     },
+    {
+      name: "NODE_ENV",
+      value: "production",
+    },
+    {
+      name: "NODE_OPTIONS",
+      value: "--max-old-space-size=256",
+    },
   ],
 });
 

@@ -15,7 +15,7 @@ const {
 
 const COOKIE_EMOJI = emoji.cookie;
 const PAGE_SIZE = 10;
-const RANK_THUMBNAIL = emojiImageUrl(emoji.sad) || emojiImageUrl(emoji.party);
+const RANK_THUMBNAIL = emojiImageUrl(emoji.cookie) || emojiImageUrl(emoji.party);
 
 function amount(value) {
   return Number(value || 0).toLocaleString("pt-BR");
@@ -70,14 +70,19 @@ function buildRankEmbed(interaction, rank, type, page) {
   });
 
   return new EmbedBuilder()
-    .setColor(0xb7ff00)
+    .setColor(0xf5a623)
     .setTitle(`${COOKIE_EMOJI} RANKING DE COOKIES ${from}-${to} ${COOKIE_EMOJI}`)
     .setThumbnail(RANK_THUMBNAIL)
     .setDescription(
       [
-        lines.length ? lines.join("\n\n") : `${emoji.sad} Ninguem apareceu por aqui ainda.`,
+        lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguem apareceu por aqui ainda.`,
       ].join("\n")
-    );
+    )
+    .setFooter({
+      text: interaction.client.user?.username || "Bot",
+      iconURL: interaction.client.user?.displayAvatarURL() || undefined,
+    })
+    .setTimestamp();
 }
 
 function buildRankButtons(page, maxPage) {
