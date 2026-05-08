@@ -151,6 +151,25 @@ function addUserXp(user, amount) {
   };
 }
 
+function setUserXp(user, amount) {
+  ensureUser(user);
+  const nextXp = Math.max(0, integer(amount));
+  const beforeRow = db.prepare("SELECT xp FROM usuarios WHERE id = ?").get(String(user.id));
+  const before = progressFromXp(beforeRow?.xp || 0);
+
+  db.prepare("UPDATE usuarios SET xp = ?, updated_at = ? WHERE id = ?")
+    .run(nextXp, Date.now(), String(user.id));
+
+  const after = getXp(user.id);
+
+  return {
+    changedBy: after.totalXp - before.totalXp,
+    before,
+    after,
+    leveledUp: after.level > before.level,
+  };
+}
+
 function stateFor(key, now) {
   const state = activity.get(key) || {
     lastXpAt: 0,
@@ -267,5 +286,6 @@ module.exports = {
   getXpLeaderboard,
   levelFromXp,
   progressFromXp,
+  setUserXp,
   xpForLevel,
 };
