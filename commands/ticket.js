@@ -27,7 +27,7 @@ const icons = {
   dislike: emoji.dislikeLed,
   question: "<a:procurando:1502138545488531518>",
   bug: emoji.bugHunterLed,
-  police: emoji.police,
+  police: "<:panda_police:1502138488290676856>",
   ok: emoji.correct,
   no: emoji.crossed,
 };
