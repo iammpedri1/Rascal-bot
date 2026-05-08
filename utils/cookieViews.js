@@ -189,14 +189,14 @@ function buildWorkCooldownEmbed(source, result) {
 
 function buildBonusEmbed(source, result) {
   const embed = new EmbedBuilder()
-    .setColor(THEME_COLOR)
-    .setTitle(`${GIFT_EMOJI} BONUS DE COOKIES ${GIFT_EMOJI}`)
-    .setThumbnail(thumbnailFor(source, dailyThumbnails))
+    .setColor(0x57f287)
+    .setTitle(`${GIFT_EMOJI} B\u00f4nus semanal resgatado`)
+    .setThumbnail(thumbnailFor(source, [emojiImageUrl(emoji.gift), emojiImageUrl(emoji.cookie), emojiImageUrl(emoji.party)].filter(Boolean)))
     .setDescription(
       [
-        `${COOKIE_EMOJI} \u00bb Voce recebeu **${amount(result.reward)} cookies!**`,
-        `${COOKIE_EMOJI} \u00bb Agora voce possui: **${amount(result.profile.balance)} cookies.**`,
-        `${HAPPY_EMOJI} \u00bb **Dica:** ${pick(dailyTips)}`,
+        `${emoji.correct} \u00bb Voc\u00ea recebeu **${amount(result.reward)} cookies**.`,
+        `${COOKIE_EMOJI} \u00bb Saldo atual: **${amount(result.profile.balance)} cookies**.`,
+        `${CLOCK_EMOJI} \u00bb Pr\u00f3ximo resgate ${timestamp(result.nextAt)}.`,
       ].join("\n")
     );
 
@@ -204,7 +204,10 @@ function buildBonusEmbed(source, result) {
 }
 
 function buildBonusCooldownEmbed(source, result) {
-  return buildInlineCooldownEmbed(result, "/bonus");
+  return buildInlineErrorEmbed(
+    `Seu b\u00f4nus semanal ainda n\u00e3o est\u00e1 pronto.\n${CLOCK_EMOJI} \u00bb Tente novamente em **${timeLeft(result.remaining)}**.`,
+    GIFT_EMOJI
+  );
 }
 
 function currentTimeLabel() {
@@ -332,7 +335,7 @@ function buildRemindersEmbed(source, user, list) {
         "",
         cooldownLine("\uD83C\uDFAD", "Roubo", "roubar", list.rob.ready, list.rob.remaining),
         "",
-        cooldownLine("\uD83D\uDCB0", "Bonus", "bonus", list.bonus.ready, list.bonus.remaining),
+        cooldownLine(GIFT_EMOJI, "B\u00f4nus semanal", "bonus", list.bonus.ready, list.bonus.remaining),
         "",
         cooldownLine("\uD83C\uDF9F\uFE0F", "Rifa", "rifa", false, 8 * 30 * 24 * 60 * 60 * 1000),
         "",

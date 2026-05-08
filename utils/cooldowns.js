@@ -4,7 +4,7 @@ const DURATIONS = {
   daily: 24 * 60 * 60 * 1000,
   trabalhar: 8 * 60 * 60 * 1000,
   roubar: 60 * 60 * 1000,
-  bonus: 6 * 60 * 60 * 1000,
+  bonus: 7 * 24 * 60 * 60 * 1000,
   rep: 24 * 60 * 60 * 1000,
 };
 

@@ -4,7 +4,8 @@
       "config": {
         "staffRoleId": "1500209385543172176",
         "categoryId": "1499777832115765329",
-        "logChannelId": "1499777832564428914"
+        "logChannelId": "1499777832564428914",
+        "ratingChannelId": null
       },
       "lastId": 1,
       "tickets": [

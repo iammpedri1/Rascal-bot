@@ -32,6 +32,16 @@ function dayKey(now = Date.now()) {
   return new Date(now).toISOString().slice(0, 10);
 }
 
+function weekKey(now = Date.now()) {
+  const date = new Date(now);
+  const dayFromMonday = (date.getUTCDay() + 6) % 7;
+
+  date.setUTCDate(date.getUTCDate() - dayFromMonday);
+  date.setUTCHours(0, 0, 0, 0);
+
+  return date.toISOString().slice(0, 10);
+}
+
 function normalizeContent(content) {
   return String(content || "")
     .toLowerCase()
@@ -117,6 +127,25 @@ function getXpLeaderboard(limit = 100) {
     messagesCount: integer(row.messagesCount),
     position: index + 1,
     ...progressFromXp(row.xp),
+  }));
+}
+
+function getWeeklyMessageLeaderboard(guildId, limit = 10) {
+  return db.prepare(`
+    SELECT
+      stats.user_id AS id,
+      users.username AS username,
+      stats.messages AS messages
+    FROM message_weekly_stats stats
+    LEFT JOIN usuarios users ON users.id = stats.user_id
+    WHERE stats.guild_id = ? AND stats.week_key = ?
+    ORDER BY stats.messages DESC, users.username COLLATE NOCASE ASC
+    LIMIT ?
+  `).all(String(guildId), weekKey(), Math.max(1, integer(limit, 10))).map((row, index) => ({
+    id: row.id,
+    username: row.username || `usuario-${row.id}`,
+    messages: integer(row.messages),
+    position: index + 1,
   }));
 }
 
@@ -254,6 +283,14 @@ function addMessageXp(message) {
   ensureUser(message.author);
   db.prepare("UPDATE usuarios SET messages_count = messages_count + 1, updated_at = ? WHERE id = ?")
     .run(Date.now(), String(message.author.id));
+  db.prepare(`
+    INSERT INTO message_weekly_stats (guild_id, user_id, week_key, messages, updated_at)
+    VALUES (?, ?, ?, 1, ?)
+    ON CONFLICT(guild_id, user_id, week_key)
+    DO UPDATE SET
+      messages = messages + 1,
+      updated_at = excluded.updated_at
+  `).run(String(message.guild.id), String(message.author.id), weekKey(), Date.now());
 
   const key = `${message.guild.id}:${message.author.id}`;
   const now = Date.now();
@@ -282,6 +319,7 @@ module.exports = {
   XP_CONFIG,
   addMessageXp,
   addUserXp,
+  getWeeklyMessageLeaderboard,
   getXp,
   getXpLeaderboard,
   levelFromXp,

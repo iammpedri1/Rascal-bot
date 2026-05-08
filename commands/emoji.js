@@ -11,7 +11,8 @@ const emoji = require("../utils/emojis");
 const { buildInlineErrorEmbed } = require("../utils/cookieViews");
 
 const PAGE_SIZE = 25;
-const EMBED_COLOR = 0x5865f2;
+const COMMAND_NAME = "emoji";
+const EMBED_COLOR = 0xf5a623;
 
 async function getGuildEmojis(interaction) {
   const collection = await interaction.guild?.emojis.fetch().catch(() => interaction.guild?.emojis.cache);
@@ -41,65 +42,57 @@ function displayUrl(selected) {
 }
 
 function formatDate(date) {
-  if (!date) return "Nao encontrado";
+  if (!date) return "N\u00e3o encontrado";
   const timestamp = Math.floor(date.getTime() / 1000);
-  return `<t:${timestamp}:F>\n<t:${timestamp}:R>`;
+  return `<t:${timestamp}:F> (<t:${timestamp}:R>)`;
 }
 
-function buildEmojiEmbed(interaction, selected, page, maxPage, total) {
+function buildEmojiEmbed(selected, page, maxPage, total) {
   const mention = selected.toString();
   const createdAt = selected.createdAt || new Date(Number(BigInt(selected.id) >> 22n) + 1420070400000);
+  const extension = selected.animated ? "GIF" : "PNG";
+  const type = selected.animated ? "Animado" : "Est\u00e1tico";
 
   return new EmbedBuilder()
     .setColor(EMBED_COLOR)
-    .setAuthor({
-      name: "Emoji Info em tempo real",
-      iconURL: interaction.guild.iconURL({ size: 128 }) || interaction.client.user.displayAvatarURL({ size: 128 }),
-    })
-    .setDescription(`${emoji.lorittaMegafone} **Informacoes atualizadas do emoji selecionado**`)
+    .setTitle("\u2728 Sobre o emoji")
+    .setDescription(`${mention} **${selected.name}**`)
     .setThumbnail(displayUrl(selected))
     .addFields(
       {
-        name: `${emoji.lorittaCafune} Preview`,
-        value: `${mention}`,
-        inline: true,
-      },
-      {
-        name: `${emoji.ticket} Nome`,
+        name: "\uD83D\uDE00 Nome",
         value: `\`${selected.name}\``,
         inline: true,
       },
       {
-        name: `${emoji.channel} ID`,
+        name: "\uD83C\uDD94 ID",
         value: `\`${selected.id}\``,
         inline: true,
       },
       {
-        name: `${emoji.clock} Criado em`,
-        value: formatDate(createdAt),
-        inline: true,
-      },
-      {
-        name: `${emoji.staffLed} Tipo`,
-        value: selected.animated ? "Animado" : "Estatico",
-        inline: true,
-      },
-      {
-        name: `${emoji.lorittaMegafone} Mencao`,
+        name: "\uD83D\uDD34 Men\u00e7\u00e3o",
         value: `\`${mention}\``,
         inline: true,
       },
       {
-        name: `${emoji.roles} Arquivo`,
-        value: `[Abrir imagem](${displayUrl(selected)})`,
-        inline: false,
+        name: "\uD83D\uDCC5 Criado em",
+        value: formatDate(createdAt),
+        inline: true,
+      },
+      {
+        name: `${selected.animated ? "\uD83C\uDFA8" : "\uD83D\uDDBC\uFE0F"} Tipo`,
+        value: type,
+        inline: true,
+      },
+      {
+        name: "\uD83D\uDD17 Arquivo",
+        value: `[Abrir ${extension}](${displayUrl(selected)})`,
+        inline: true,
       }
     )
     .setFooter({
-      text: `Pagina ${page + 1}/${maxPage + 1} - ${total} emojis - Atualizado agora`,
-      iconURL: interaction.user.displayAvatarURL({ size: 128 }),
-    })
-    .setTimestamp();
+      text: `P\u00e1gina ${page + 1}/${maxPage + 1} \u2022 ${total} emojis no servidor`,
+    });
 }
 
 function buildSelect(interaction, emojis, selectedId, page) {
@@ -108,10 +101,11 @@ function buildSelect(interaction, emojis, selectedId, page) {
 
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`emoji|select|${interaction.user.id}|${safePage}`)
-      .setPlaceholder("Selecione um emoji")
+      .setCustomId(`${COMMAND_NAME}|select|${interaction.user.id}|${safePage}`)
+      .setPlaceholder(`Selecionado: ${selected.name}`)
       .addOptions(current.map(item => ({
         label: item.name.slice(0, 100),
+        description: item.animated ? "Emoji animado" : "Emoji est\u00e1tico",
         value: item.id,
         emoji: {
           id: item.id,
@@ -128,41 +122,26 @@ function buildButtons(interaction, emojis, selectedId, page) {
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`emoji|first|${interaction.user.id}|${safePage}|${selectedId}`)
+      .setCustomId(`${COMMAND_NAME}|first|${interaction.user.id}|${safePage}|${selectedId}`)
       .setEmoji("\u23ee\ufe0f")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage <= 0),
     new ButtonBuilder()
-      .setCustomId(`emoji|prev|${interaction.user.id}|${safePage}|${selectedId}`)
+      .setCustomId(`${COMMAND_NAME}|prev|${interaction.user.id}|${safePage}|${selectedId}`)
       .setEmoji("\u2b05\ufe0f")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage <= 0),
     new ButtonBuilder()
-      .setCustomId(`emoji|refresh|${interaction.user.id}|${safePage}|${selectedId}`)
-      .setEmoji(parseEmoji(emoji.lorittaMegafone))
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`emoji|next|${interaction.user.id}|${safePage}|${selectedId}`)
+      .setCustomId(`${COMMAND_NAME}|next|${interaction.user.id}|${safePage}|${selectedId}`)
       .setEmoji("\u27a1\ufe0f")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage >= maxPage),
     new ButtonBuilder()
-      .setCustomId(`emoji|last|${interaction.user.id}|${safePage}|${selectedId}`)
+      .setCustomId(`${COMMAND_NAME}|last|${interaction.user.id}|${safePage}|${selectedId}`)
       .setEmoji("\u23ed\ufe0f")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage >= maxPage)
   );
-}
-
-function parseEmoji(value) {
-  const match = value?.match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
-  if (!match) return value;
-
-  return {
-    name: match[1],
-    id: match[2],
-    animated: value.startsWith("<a:"),
-  };
 }
 
 function buildPayload(interaction, emojis, selectedId, page) {
@@ -170,7 +149,7 @@ function buildPayload(interaction, emojis, selectedId, page) {
   const selected = emojis.find(item => item.id === selectedId) || current[0];
 
   return {
-    embeds: [buildEmojiEmbed(interaction, selected, safePage, maxPage, emojis.length)],
+    embeds: [buildEmojiEmbed(selected, safePage, maxPage, emojis.length)],
     components: [
       buildSelect(interaction, emojis, selected.id, safePage),
       buildButtons(interaction, emojis, selected.id, safePage),
@@ -182,7 +161,7 @@ async function ensureOwner(interaction, ownerId) {
   if (interaction.user.id === ownerId) return true;
 
   await interaction.reply({
-    embeds: [buildInlineErrorEmbed("Esse painel pertence a outro usuario!")],
+    embeds: [buildInlineErrorEmbed("Esse painel pertence a outro usu\u00e1rio!")],
     flags: 64,
   });
   return false;
@@ -192,12 +171,12 @@ module.exports = {
   category: "utility",
 
   data: new SlashCommandBuilder()
-    .setName("emoji")
-    .setDescription("Ferramentas de emoji")
+    .setName(COMMAND_NAME)
+    .setDescription("Ferramentas para emojis")
     .addSubcommand(subcommand =>
       subcommand
         .setName("info")
-        .setDescription("Mostra informacoes de um emoji do servidor em tempo real")
+        .setDescription("Mostra informa\u00e7\u00f5es dos emojis do servidor")
     ),
 
   async execute(interaction) {
@@ -212,7 +191,7 @@ module.exports = {
     const emojis = await getGuildEmojis(interaction);
     if (!emojis.length) {
       return interaction.reply({
-        embeds: [buildInlineErrorEmbed("Este servidor nao possui emojis personalizados!")],
+        embeds: [buildInlineErrorEmbed("Este servidor n\u00e3o possui emojis personalizados!")],
         flags: 64,
       });
     }
@@ -222,13 +201,13 @@ module.exports = {
 
   async handleButton(interaction) {
     const [, action, ownerId, pageRaw, selectedId] = interaction.customId.split("|");
-    if (!["first", "prev", "refresh", "next", "last"].includes(action)) return;
+    if (!["first", "prev", "next", "last"].includes(action)) return;
     if (!(await ensureOwner(interaction, ownerId))) return;
 
     const emojis = await getGuildEmojis(interaction);
     if (!emojis.length) {
       return interaction.update({
-        embeds: [buildInlineErrorEmbed("Este servidor nao possui emojis personalizados!")],
+        embeds: [buildInlineErrorEmbed("Este servidor n\u00e3o possui emojis personalizados!")],
         components: [],
       });
     }
@@ -238,7 +217,6 @@ module.exports = {
     const nextPage = {
       first: 0,
       prev: page - 1,
-      refresh: page,
       next: page + 1,
       last: maxPage,
     }[action];

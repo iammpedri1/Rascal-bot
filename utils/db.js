@@ -59,6 +59,32 @@ db.exec(`
     PRIMARY KEY (user_id, comando)
   );
 
+  CREATE TABLE IF NOT EXISTS message_weekly_stats (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    week_key TEXT NOT NULL,
+    messages INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id, week_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS voice_weekly_stats (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    week_key TEXT NOT NULL,
+    seconds INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id, week_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS afk_status (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+  );
+
   CREATE TABLE IF NOT EXISTS transacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tipo TEXT NOT NULL,
@@ -167,7 +193,7 @@ function migrateLegacyCookies() {
           ["daily", integer(profile.lastDailyAt) + 24 * 60 * 60 * 1000],
           ["trabalhar", integer(profile.lastWorkAt) + 8 * 60 * 60 * 1000],
           ["roubar", integer(profile.lastRobAt) + 6 * 60 * 60 * 1000],
-          ["bonus", integer(profile.lastBonusAt) + 6 * 60 * 60 * 1000],
+          ["bonus", integer(profile.lastBonusAt) + 7 * 24 * 60 * 60 * 1000],
           ["rep", integer(profile.lastRepAt) + 24 * 60 * 60 * 1000],
         ];
 

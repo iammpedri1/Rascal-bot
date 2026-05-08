@@ -1,6 +1,7 @@
 const { ActivityType } = require("discord.js");
 
 const { startReminderScheduler } = require("../utils/reminders");
+const { seedActiveVoiceSessions } = require("../utils/voiceStats");
 const logger = require("../utils/logger");
 
 function startStatusRotation(client) {
@@ -38,5 +39,6 @@ module.exports = {
     logger.success(`Bot online como ${client.user.tag}`);
     startStatusRotation(client);
     startReminderScheduler(client);
+    seedActiveVoiceSessions(client);
   },
 };

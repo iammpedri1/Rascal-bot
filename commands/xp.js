@@ -1,4 +1,4 @@
-const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
 
 const emoji = require("../utils/emojis");
 const { getXp, setUserXp } = require("../utils/xpSystem");
@@ -11,12 +11,17 @@ function levelReward(level) {
   return Math.max(250, Math.floor((level + 1) * 275));
 }
 
-async function isXpAdmin(interaction) {
-  if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
+async function isXpOwner(interaction) {
   if (process.env.OWNER_ID && interaction.user.id === process.env.OWNER_ID) return true;
 
-  const owner = await interaction.guild?.fetchOwner().catch(() => null);
-  return owner?.id === interaction.user.id;
+  const application = await interaction.client.application.fetch().catch(() => null);
+  const owner = application?.owner;
+
+  if (!owner) return false;
+  if (owner.id === interaction.user.id) return true;
+  if (owner.members?.has?.(interaction.user.id)) return true;
+
+  return false;
 }
 
 function buildXpCard(user, xp) {
@@ -29,37 +34,32 @@ function buildXpCard(user, xp) {
       name: `${user.username}#${user.discriminator}`,
       iconURL: user.displayAvatarURL({ size: 128 }),
     })
-    .setDescription(`${emoji.lorittaMegafone} **Cartao de Perfil do Servidor**`)
+    .setDescription(`${emoji.lorittaMegafone} **Cart\u00e3o de perfil do servidor**`)
     .addFields(
       {
-        name: `${emoji.lorittaCafune} Nivel atual`,
-        value: `Nivel ${xp.level}`,
+        name: `${emoji.lorittaCafune} N\u00edvel atual`,
+        value: `N\u00edvel ${xp.level}`,
         inline: true,
       },
       {
-        name: `${emoji.cookie} XP Atual`,
+        name: `${emoji.cookie} XP atual`,
         value: `${amount(xp.totalXp)} XP`,
         inline: true,
       },
       {
-        name: `${emoji.lorittaMegafone} Colocacao`,
+        name: `${emoji.lorittaMegafone} Coloca\u00e7\u00e3o`,
         value: `#${amount(xp.rank.position)}`,
         inline: true,
       },
       {
-        name: `${emoji.clock} XP necessario para o proximo nivel\n(${amount(xp.progress)} / ${amount(xp.needed)} XP)`,
-        value: amount(xp.remaining),
+        name: `${emoji.clock} Progresso para o pr\u00f3ximo n\u00edvel`,
+        value: `${amount(xp.progress)} / ${amount(xp.needed)} XP\nFaltam ${amount(xp.remaining)} XP`,
         inline: true,
       },
       {
-        name: `${emoji.lorittaCafune} Proxima Recompensa`,
-        value: `Ganhe +${amount(reward)} XP para ganhar **Level +1**!`,
+        name: `${emoji.lorittaCafune} Pr\u00f3xima recompensa`,
+        value: `+${amount(reward)} XP ao chegar ao n\u00edvel ${nextLevel}`,
         inline: true,
-      },
-      {
-        name: `${emoji.lorittaMegafone} Dicas e Manhas do Driscord Brasil`,
-        value: "Continue conversando para passar de nivel. Eu sei que voce vai conseguir!",
-        inline: false,
       }
     )
     .setThumbnail(user.displayAvatarURL({ size: 256 }));
@@ -70,32 +70,32 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("xp")
-    .setDescription("Gerencia e mostra XP")
+    .setDescription("Gerencia e mostra o XP")
     .addSubcommand(subcommand =>
       subcommand
         .setName("ver")
-        .setDescription("Mostra o cartao de XP")
+        .setDescription("Mostra o cart\u00e3o de XP")
         .addUserOption(option =>
           option
-            .setName("user")
-            .setDescription("Usuario para consultar")
+            .setName("usuario")
+            .setDescription("Usu\u00e1rio para consultar")
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName("edit")
-        .setDescription("Edita XP de um usuario")
+        .setDescription("Edita o XP de um usu\u00e1rio")
         .addUserOption(option =>
           option
-            .setName("user")
-            .setDescription("Usuario para editar")
+            .setName("usuario")
+            .setDescription("Usu\u00e1rio para editar")
             .setRequired(true)
         )
         .addStringOption(option =>
           option
             .setName("acao")
-            .setDescription("Tipo de edicao")
+            .setDescription("Tipo de edi\u00e7\u00e3o")
             .setRequired(true)
             .addChoices(
               { name: "Adicionar", value: "add" },
@@ -116,7 +116,7 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === "ver") {
-      const user = interaction.options.getUser("user") || interaction.user;
+      const user = interaction.options.getUser("usuario") || interaction.user;
       return interaction.reply({ embeds: [buildXpCard(user, getXp(user.id))] });
     }
 
@@ -124,14 +124,14 @@ module.exports = {
       return interaction.reply({ content: "Subcomando desconhecido.", flags: 64 });
     }
 
-    if (!(await isXpAdmin(interaction))) {
+    if (!(await isXpOwner(interaction))) {
       return interaction.reply({
-        content: "Apenas o dono ou administradores do servidor podem editar XP.",
+        content: "Apenas o dono do bot pode editar XP.",
         flags: 64,
       });
     }
 
-    const user = interaction.options.getUser("user");
+    const user = interaction.options.getUser("usuario");
     const action = interaction.options.getString("acao");
     const amountValue = interaction.options.getInteger("quantidade");
     const current = getXp(user.id);

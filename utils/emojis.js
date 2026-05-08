@@ -37,4 +37,5 @@ module.exports = {
   dislikeLed: "<a:in_deslikeLed:1499814134890369195>",
   bugHunterLed: "<a:in_bugHunterLed:1499799348840628385>",
   police: "<a:545931639314841601:1500207574161817650>",
+  blobBan: "<a:blob_ban:1502348528159031418>",
 };
