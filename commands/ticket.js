@@ -38,6 +38,8 @@ const COLORS = {
   success: 0x2ecc71,
 };
 
+const PANEL_WEBHOOK_NAME = "Central de atendimentos";
+
 const ticketTypes = {
   suporte: {
     label: "Suporte",
@@ -136,14 +138,13 @@ function cleanName(value) {
 
 function panelEmbed(interaction) {
   const guildIcon = interaction.guild?.iconURL({ size: 256 });
-  const guildName = interaction.guild?.name || "Servidor";
 
   return new EmbedBuilder()
     .setColor(0x2f3136)
-    .setTitle(`${icons.staff} » Central de atendimentos do ${guildName}`)
+    .setTitle(`${icons.staff} » Central de atendimentos do Driscord Brasil™`)
     .setDescription(
       [
-        "**Abra seu ticket clicando no botão de acordo com sua categoria!**",
+        "**Abra seu ticket clicando nos botões de acordo com sua categoria!**",
         "",
         "────────────────────────────",
         `${ticketTypes.suporte.emoji} » **Ticket SUPORTE (Dúvidas e Informações)**`,
@@ -152,10 +153,10 @@ function panelEmbed(interaction) {
         `${ticketTypes.denuncia.emoji} » **Ticket REPORTE (Denúncias)**`,
         "",
         "────────────────────────────",
-        `${ticketTypes.bug.emoji} » **Reportar bugs do bot**`,
+        `${icons.ticket} » **Veja nossas Perguntas Frequentes aqui**`,
         "",
         "────────────────────────────",
-        `${icons.no} » Abrir tickets sem motivo ou com brincadeiras poderá resultar em punição.`,
+        `${icons.no} » Abrir tickets com perguntas fúteis e/ou sem respostas resultará em punição.`,
       ].join("\n")
     )
     .setThumbnail(guildIcon || interaction.client.user?.displayAvatarURL() || null)
@@ -180,12 +181,69 @@ function panelComponents() {
         .setEmoji(parseEmoji(ticketTypes.denuncia.emoji))
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId("ticket|start|bug")
-        .setLabel("Reportar Bugs")
-        .setEmoji(parseEmoji(ticketTypes.bug.emoji))
+        .setCustomId("ticket|faq")
+        .setLabel("Perguntas Frequentes")
+        .setEmoji(parseEmoji(icons.ticket))
         .setStyle(ButtonStyle.Primary)
     ),
   ];
+}
+
+function faqEmbed(interaction) {
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle(`${icons.ticket} Perguntas Frequentes`)
+    .setDescription(
+      [
+        "**Antes de abrir um ticket, confira:**",
+        "",
+        `${icons.ok} Leia os canais de regras e avisos do servidor.`,
+        `${icons.ok} Informe IDs, prints e links quando precisar de suporte.`,
+        `${icons.ok} Use tickets apenas para assuntos que exigem atendimento da equipe.`,
+        "",
+        `${icons.no} Tickets sem motivo, brincadeiras ou perguntas repetidas podem resultar em punição.`,
+      ].join("\n")
+    )
+    .setFooter({ text: interaction.guild?.name || "Driscord Brasil" })
+    .setTimestamp();
+}
+
+async function getPanelWebhook(channel, client) {
+  if (!channel?.isTextBased() || !channel?.fetchWebhooks || !channel?.createWebhook) return null;
+
+  const me = channel.guild?.members?.me;
+  if (!me?.permissionsIn(channel).has(PermissionFlagsBits.ManageWebhooks)) return null;
+
+  const webhooks = await channel.fetchWebhooks().catch(() => null);
+  const existing = webhooks?.find(item =>
+    item.name === PANEL_WEBHOOK_NAME && item.owner?.id === client.user.id
+  );
+
+  if (existing) return existing;
+
+  return channel.createWebhook({
+    name: PANEL_WEBHOOK_NAME,
+    avatar: client.user.displayAvatarURL({ size: 256 }),
+    reason: "Publicar central de tickets",
+  }).catch(() => null);
+}
+
+async function sendPanel(channel, interaction, config) {
+  const payload = {
+    embeds: [panelEmbed(interaction, config)],
+    components: panelComponents(),
+  };
+  const webhook = await getPanelWebhook(channel, interaction.client);
+
+  if (webhook) {
+    return webhook.send({
+      username: PANEL_WEBHOOK_NAME,
+      avatarURL: interaction.client.user.displayAvatarURL({ size: 256 }),
+      ...payload,
+    });
+  }
+
+  return channel.send(payload);
 }
 
 function ticketEmbed(interaction, ticket, note) {
@@ -364,6 +422,7 @@ async function createTicketChannel(interaction, typeKey, note) {
           PermissionFlagsBits.ViewChannel,
           PermissionFlagsBits.SendMessages,
           PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.ManageWebhooks,
           PermissionFlagsBits.ReadMessageHistory,
         ],
       },
@@ -487,10 +546,7 @@ module.exports = {
       : config;
 
     if (targetChannel) {
-      await targetChannel.send({
-        embeds: [panelEmbed(interaction, nextConfig)],
-        components: panelComponents(),
-      });
+      await sendPanel(targetChannel, interaction, nextConfig);
 
       return interaction.reply({
         content: `${icons.like} Central de tickets publicada em ${targetChannel}.`,
@@ -515,6 +571,13 @@ module.exports = {
 
     if (action === "start") {
       return interaction.showModal(openModal(typeKey));
+    }
+
+    if (action === "faq") {
+      return interaction.reply({
+        embeds: [faqEmbed(interaction)],
+        flags: 64,
+      });
     }
 
     const config = store.getGuildConfig(interaction.guildId);
