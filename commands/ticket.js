@@ -25,7 +25,7 @@ const icons = {
   staff: emoji.staffLed,
   like: emoji.likeLed,
   dislike: emoji.dislikeLed,
-  question: emoji.thinking,
+  question: "<a:procurando:1502138545488531518>",
   bug: emoji.bugHunterLed,
   police: emoji.police,
   ok: emoji.correct,
