@@ -25,6 +25,7 @@ const icons = {
   staff: emoji.staffLed,
   like: emoji.likeLed,
   dislike: emoji.dislikeLed,
+  question: emoji.thinking,
   bug: emoji.bugHunterLed,
   police: emoji.police,
   ok: emoji.correct,
@@ -153,7 +154,7 @@ function panelEmbed(interaction) {
         `${ticketTypes.denuncia.emoji} » **Ticket REPORTE (Denúncias)**`,
         "",
         "────────────────────────────",
-        `${icons.ticket} » **Veja nossas Perguntas Frequentes aqui**`,
+        `${icons.question} » **Veja nossas Perguntas Frequentes aqui**`,
         "",
         "────────────────────────────",
         `${icons.no} » Abrir tickets com perguntas fúteis e/ou sem respostas resultará em punição.`,
@@ -183,7 +184,7 @@ function panelComponents() {
       new ButtonBuilder()
         .setCustomId("ticket|faq")
         .setLabel("Perguntas Frequentes")
-        .setEmoji(parseEmoji(icons.ticket))
+        .setEmoji(parseEmoji(icons.question))
         .setStyle(ButtonStyle.Primary)
     ),
   ];
@@ -192,7 +193,7 @@ function panelComponents() {
 function faqEmbed(interaction) {
   return new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle(`${icons.ticket} Perguntas Frequentes`)
+    .setTitle(`${icons.question} Perguntas Frequentes`)
     .setDescription(
       [
         "**Antes de abrir um ticket, confira:**",
