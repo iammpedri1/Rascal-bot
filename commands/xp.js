@@ -1,16 +1,14 @@
 const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
 
 const emoji = require("../utils/emojis");
-const { XP_CONFIG, getXp, xpForLevel } = require("../utils/xpSystem");
+const { getXp } = require("../utils/xpSystem");
 
 function amount(value) {
   return Number(value || 0).toLocaleString("pt-BR");
 }
 
-function bar(percent) {
-  const total = 14;
-  const filled = Math.round((percent / 100) * total);
-  return "\u2588".repeat(filled) + "\u2591".repeat(Math.max(0, total - filled));
+function levelReward(level) {
+  return Math.max(250, Math.floor((level + 1) * 275));
 }
 
 module.exports = {
@@ -18,7 +16,7 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("xp")
-    .setDescription("Mostra seu XP e level")
+    .setDescription("Mostra seu cartão de XP")
     .addUserOption(option =>
       option
         .setName("user")
@@ -30,52 +28,48 @@ module.exports = {
     const user = interaction.options.getUser("user") || interaction.user;
     const xp = getXp(user.id);
     const nextLevel = xp.level + 1;
+    const reward = levelReward(nextLevel);
 
     const embed = new EmbedBuilder()
-      .setColor(0xff6a00)
+      .setColor(0x57f287)
       .setAuthor({
-        name: `Perfil de XP de ${user.username}`,
-        iconURL: user.displayAvatarURL({ size: 256 }),
+        name: `${user.username}#${user.discriminator}`,
+        iconURL: user.displayAvatarURL({ size: 128 }),
       })
-      .setDescription(
-        [
-          `${emoji.likeLed} **Level ${xp.level}**`,
-          `\`${bar(xp.percent)}\` **${xp.percent}%**`,
-          `${emoji.cookie} **${amount(xp.progress)} / ${amount(xp.needed)} XP** para o level ${nextLevel}`,
-        ].join("\n")
-      )
+      .setDescription(`${emoji.ticket} **Cartão de Perfil do Servidor**`)
       .addFields(
         {
-          name: "Resumo",
-          value: [
-            `XP total: \`${amount(xp.totalXp)}\``,
-            `Faltam: \`${amount(xp.remaining)}\` XP`,
-            `Ranking: \`#${amount(xp.rank.position)}\` de \`${amount(xp.rank.total)}\``,
-            `Mensagens: \`${amount(xp.messagesCount)}\``,
-          ].join("\n"),
+          name: `${emoji.staffLed} Nível atual`,
+          value: `Nível ${xp.level}`,
           inline: true,
         },
         {
-          name: "Ganho por mensagem",
-          value: [
-            `Base: \`${XP_CONFIG.baseMin}-${XP_CONFIG.baseMax} XP\``,
-            `Cooldown: \`${Math.floor(XP_CONFIG.cooldownMs / 1000)}s\``,
-            "Bonus: tamanho, palavras unicas, midia, respostas e sequencia ativa.",
-            "Anti-spam: repeticao, flood e mensagens curtas nao farmam XP.",
-          ].join("\n"),
-          inline: false,
+          name: `${emoji.cookie} XP Atual`,
+          value: `${amount(xp.totalXp)} XP`,
+          inline: true,
         },
         {
-          name: "Proximos marcos",
-          value: [
-            `Level ${nextLevel}: \`${amount(xpForLevel(nextLevel))} XP total\``,
-            `Level ${nextLevel + 1}: \`${amount(xpForLevel(nextLevel + 1))} XP total\``,
-          ].join("\n"),
+          name: `${emoji.clap} Colocação`,
+          value: `#${amount(xp.rank.position)}`,
+          inline: true,
+        },
+        {
+          name: `${emoji.clock} XP necessário para o próximo nível\n(${amount(xp.progress)} / ${amount(xp.needed)} XP)`,
+          value: amount(xp.remaining),
+          inline: true,
+        },
+        {
+          name: `${emoji.gift} Próxima Recompensa`,
+          value: `Ganhe +${amount(reward)} XP para ganhar **Level +1**!`,
+          inline: true,
+        },
+        {
+          name: `${emoji.thinking} Dicas e Manhas do Driscord Brasil`,
+          value: "Continue conversando para passar de nível. Eu sei que você vai conseguir!",
           inline: false,
         }
       )
-      .setThumbnail(user.displayAvatarURL({ size: 512 }))
-      .setTimestamp();
+      .setThumbnail(user.displayAvatarURL({ size: 256 }));
 
     return interaction.reply({ embeds: [embed] });
   },
