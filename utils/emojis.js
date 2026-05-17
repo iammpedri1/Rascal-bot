@@ -38,4 +38,11 @@ module.exports = {
   bugHunterLed: "<a:in_bugHunterLed:1499799348840628385>",
   police: "<a:545931639314841601:1500207574161817650>",
   blobBan: "<a:blob_ban:1502348528159031418>",
+  pandaCientista: "<:Panda_cientista:1502773603568193557>",
+  homeIcon: "<:icons_home:1500922691614675004>",
+  humanIcon: "<:icons_human:1500922689072926980>",
+  menuIcon: "<:icons_menu:1500922698111516842>",
+  settingsIcon: "<:icons_settings:1500922701512970304>",
+  gamesIcon: "<:icons_games:1500934580125962312>",
+  voice: "<:voice:1500936427373072394>",
 };

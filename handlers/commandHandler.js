@@ -12,6 +12,6 @@ module.exports = client => {
     if (!command?.data || !command?.execute) continue;
 
     client.commands.set(command.data.name, command);
-    logger.info(`Comando carregado: /${command.data.name}`);
+    logger.debug(`Comando carregado: /${command.data.name}`);
   }
 };

@@ -8,10 +8,6 @@ const icons = {
   created: "<:1000106075:1499822894077710497>",
   roles: emoji.roles,
   booster: emoji.booster,
-  online: emoji.online,
-  idle: emoji.idle,
-  dnd: emoji.dnd,
-  offline: emoji.offline,
   bot: emoji.botFlag,
 };
 
@@ -23,14 +19,6 @@ function formatDate(date) {
   if (!date) return "Indisponível";
   const timestamp = Math.floor(date.getTime() / 1000);
   return `<t:${timestamp}:F>\n<t:${timestamp}:R>`;
-}
-
-function formatStatus(presence) {
-  const status = presence?.status;
-  if (status === "online") return `${icons.online} Online`;
-  if (status === "idle") return `${icons.idle} Ausente`;
-  if (status === "dnd") return `${icons.dnd} Ocupado`;
-  return `${icons.offline} Offline`;
 }
 
 function topRoles(member) {
@@ -53,15 +41,15 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("user")
-    .setDescription("Comandos de usuario")
+    .setDescription("Comandos de usuário")
     .addSubcommand(subcommand =>
       subcommand
         .setName("info")
-        .setDescription("Mostra informacoes basicas de um usuario")
+        .setDescription("Mostra informações básicas de um usuário")
         .addUserOption(option =>
           option
             .setName("user")
-            .setDescription("Usuario")
+            .setDescription("Usuário")
             .setRequired(false)
         )
     ),
@@ -76,7 +64,6 @@ module.exports = {
 
     const user = interaction.options.getUser("user") || interaction.user;
     const member = await interaction.guild.members.fetch({ user: user.id, force: true });
-    const presence = interaction.guild.presences.cache.get(user.id);
     const fetchedUser = await user.fetch({ force: true });
     const banner = fetchedUser.bannerURL({ size: 1024 });
 
@@ -94,7 +81,6 @@ module.exports = {
             `Nome: ${code(user.username)}`,
             `Tag: ${code(user.tag)}`,
             `Bot: ${code(user.bot ? "Sim" : "Não")}`,
-            `Status: ${formatStatus(presence)}`,
           ].join("\n"),
           inline: true,
         },

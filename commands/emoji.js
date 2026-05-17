@@ -41,6 +41,35 @@ function displayUrl(selected) {
   return selected.animated ? emojiUrl(selected, "gif") : emojiUrl(selected, "png");
 }
 
+function normalize(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function emojiIdFromQuery(query) {
+  const match = String(query || "").match(/<?a?:?[\w-]*:?(?<id>\d{15,25})>?/);
+  return match?.groups?.id || null;
+}
+
+function findEmoji(emojis, query) {
+  if (!query) return emojis[0];
+
+  const id = emojiIdFromQuery(query);
+  if (id) {
+    const byId = emojis.find(item => item.id === id);
+    if (byId) return byId;
+  }
+
+  const term = normalize(query).replace(/^:/, "").replace(/:$/, "");
+
+  return emojis.find(item => normalize(item.name) === term) ||
+    emojis.find(item => normalize(item.name).includes(term)) ||
+    emojis[0];
+}
+
 function formatDate(date) {
   if (!date) return "N\u00e3o encontrado";
   const timestamp = Math.floor(date.getTime() / 1000);
@@ -51,41 +80,45 @@ function buildEmojiEmbed(selected, page, maxPage, total) {
   const mention = selected.toString();
   const createdAt = selected.createdAt || new Date(Number(BigInt(selected.id) >> 22n) + 1420070400000);
   const extension = selected.animated ? "GIF" : "PNG";
-  const type = selected.animated ? "Animado" : "Est\u00e1tico";
+  const type = selected.animated ? "Animado" : "Estático";
 
   return new EmbedBuilder()
     .setColor(EMBED_COLOR)
-    .setTitle("\u2728 Sobre o emoji")
-    .setDescription(`${mention} **${selected.name}**`)
+    .setTitle(`${emoji.pandaCientista} Informações do emoji`)
+    .setDescription([
+      `${mention} **:${selected.name}:**`,
+      "",
+      `${emoji.sino} Use a menção abaixo para mandar esse emoji em mensagens ou embeds.`,
+    ].join("\n"))
     .setThumbnail(displayUrl(selected))
     .addFields(
       {
-        name: "\uD83D\uDE00 Nome",
+        name: `${emoji.menuIcon} Nome`,
         value: `\`${selected.name}\``,
         inline: true,
       },
       {
-        name: "\uD83C\uDD94 ID",
+        name: `${emoji.botFlag} ID`,
         value: `\`${selected.id}\``,
         inline: true,
       },
       {
-        name: "\uD83D\uDD34 Men\u00e7\u00e3o",
+        name: `${emoji.lorittaMegafone} Menção`,
         value: `\`${mention}\``,
         inline: true,
       },
       {
-        name: "\uD83D\uDCC5 Criado em",
+        name: `${emoji.clock} Criado em`,
         value: formatDate(createdAt),
         inline: true,
       },
       {
-        name: `${selected.animated ? "\uD83C\uDFA8" : "\uD83D\uDDBC\uFE0F"} Tipo`,
+        name: `${selected.animated ? emoji.party : emoji.correct} Tipo`,
         value: type,
         inline: true,
       },
       {
-        name: "\uD83D\uDD17 Arquivo",
+        name: `${emoji.channel} Arquivo`,
         value: `[Abrir ${extension}](${displayUrl(selected)})`,
         inline: true,
       }
@@ -141,15 +174,44 @@ function buildButtons(interaction, emojis, selectedId, page) {
       .setEmoji("\u23ed\ufe0f")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage >= maxPage)
+    ,
+    new ButtonBuilder()
+      .setCustomId(`${COMMAND_NAME}|mention|${interaction.user.id}|${safePage}|${selectedId}`)
+      .setEmoji(parseEmoji(emoji.lorittaMegafone))
+      .setStyle(ButtonStyle.Primary)
   );
+}
+
+function parseEmoji(value) {
+  const match = String(value || "").match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
+  if (!match) return value;
+
+  return {
+    name: match[1],
+    id: match[2],
+    animated: value.startsWith("<a:"),
+  };
 }
 
 function buildPayload(interaction, emojis, selectedId, page) {
   const { current, maxPage, page: safePage } = getEmojiPage(emojis, page);
   const selected = emojis.find(item => item.id === selectedId) || current[0];
+  const animated = emojis.filter(item => item.animated).length;
+  const staticCount = emojis.length - animated;
 
   return {
-    embeds: [buildEmojiEmbed(selected, safePage, maxPage, emojis.length)],
+    embeds: [
+      buildEmojiEmbed(selected, safePage, maxPage, emojis.length)
+        .addFields({
+          name: `${emoji.settingsIcon} Resumo do servidor`,
+          value: [
+            `${emoji.correct} Estáticos: **${staticCount}**`,
+            `${emoji.party} Animados: **${animated}**`,
+            `${emoji.menuIcon} Total: **${emojis.length}**`,
+          ].join("\n"),
+          inline: false,
+        }),
+    ],
     components: [
       buildSelect(interaction, emojis, selected.id, safePage),
       buildButtons(interaction, emojis, selected.id, safePage),
@@ -176,7 +238,13 @@ module.exports = {
     .addSubcommand(subcommand =>
       subcommand
         .setName("info")
-        .setDescription("Mostra informa\u00e7\u00f5es dos emojis do servidor")
+        .setDescription("Mostra informações dos emojis do servidor")
+        .addStringOption(option =>
+          option
+            .setName("emoji")
+            .setDescription("Nome, ID ou menção do emoji para consultar")
+            .setRequired(false)
+        )
     ),
 
   async execute(interaction) {
@@ -196,12 +264,15 @@ module.exports = {
       });
     }
 
-    return interaction.reply(buildPayload(interaction, emojis, emojis[0].id, 0));
+    const selected = findEmoji(emojis, interaction.options.getString("emoji"));
+    const page = Math.floor(emojis.findIndex(item => item.id === selected.id) / PAGE_SIZE);
+
+    return interaction.reply(buildPayload(interaction, emojis, selected.id, page));
   },
 
   async handleButton(interaction) {
     const [, action, ownerId, pageRaw, selectedId] = interaction.customId.split("|");
-    if (!["first", "prev", "next", "last"].includes(action)) return;
+    if (!["first", "prev", "next", "last", "mention"].includes(action)) return;
     if (!(await ensureOwner(interaction, ownerId))) return;
 
     const emojis = await getGuildEmojis(interaction);
@@ -209,6 +280,18 @@ module.exports = {
       return interaction.update({
         embeds: [buildInlineErrorEmbed("Este servidor n\u00e3o possui emojis personalizados!")],
         components: [],
+      });
+    }
+
+    if (action === "mention") {
+      const selected = emojis.find(item => item.id === selectedId) || emojis[0];
+
+      return interaction.reply({
+        content: [
+          `${emoji.lorittaMegafone} Menção do emoji **:${selected.name}:**`,
+          `\`${selected.toString()}\``,
+        ].join("\n"),
+        flags: 64,
       });
     }
 

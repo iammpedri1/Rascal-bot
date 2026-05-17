@@ -10,7 +10,7 @@ module.exports = {
       if (!command) return;
 
       try {
-        logger.info("Comando usado", {
+        logger.debug("Comando usado", {
           command: interaction.commandName,
           user: interaction.user.id,
           guild: interaction.guildId,

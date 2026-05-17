@@ -2,10 +2,10 @@ const db = require("./db");
 
 const DURATIONS = {
   daily: 24 * 60 * 60 * 1000,
-  trabalhar: 8 * 60 * 60 * 1000,
+  trabalhar: 3 * 60 * 60 * 1000,
   roubar: 60 * 60 * 1000,
   bonus: 7 * 24 * 60 * 60 * 1000,
-  rep: 24 * 60 * 60 * 1000,
+  rep: 12 * 60 * 60 * 1000,
 };
 
 function formatDuration(ms) {
@@ -31,7 +31,17 @@ function get(userId, command) {
 
   if (!row) return { ready: true, remaining: 0, expiresAt: 0 };
 
-  const remaining = row.expiresAt - Date.now();
+  const now = Date.now();
+  const maxDuration = DURATIONS[command];
+  let expiresAt = row.expiresAt;
+
+  if (maxDuration && expiresAt > now + maxDuration) {
+    expiresAt = now + maxDuration;
+    db.prepare("UPDATE cooldowns SET expira_em = ? WHERE user_id = ? AND comando = ?")
+      .run(expiresAt, String(userId), command);
+  }
+
+  const remaining = expiresAt - now;
   if (remaining <= 0) {
     clear(userId, command);
     return { ready: true, remaining: 0, expiresAt: 0 };
@@ -40,7 +50,7 @@ function get(userId, command) {
   return {
     ready: false,
     remaining,
-    expiresAt: row.expiresAt,
+    expiresAt,
   };
 }
 

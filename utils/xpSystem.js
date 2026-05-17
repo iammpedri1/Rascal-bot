@@ -13,6 +13,31 @@ const XP_CONFIG = {
   dailyHardCap: 1400,
 };
 
+const ensureUserStmt = db.prepare(`
+  INSERT INTO usuarios (id, username, cookies, xp, created_at, updated_at)
+  VALUES (?, ?, 100, 0, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    username = excluded.username,
+    updated_at = excluded.updated_at
+`);
+const selectUserXpStmt = db.prepare("SELECT xp FROM usuarios WHERE id = ?");
+const selectUserXpMessagesStmt = db.prepare("SELECT xp, messages_count AS messagesCount FROM usuarios WHERE id = ?");
+const countUsersStmt = db.prepare("SELECT COUNT(*) AS total FROM usuarios");
+const countHigherXpStmt = db.prepare("SELECT COUNT(*) + 1 AS position FROM usuarios WHERE xp > ?");
+const updateUserXpStmt = db.prepare("UPDATE usuarios SET xp = xp + ?, updated_at = ? WHERE id = ?");
+const setUserXpStmt = db.prepare("UPDATE usuarios SET xp = ?, updated_at = ? WHERE id = ?");
+const incrementMessagesStmt = db.prepare(
+  "UPDATE usuarios SET messages_count = messages_count + 1, updated_at = ? WHERE id = ?"
+);
+const upsertWeeklyMessageStmt = db.prepare(`
+  INSERT INTO message_weekly_stats (guild_id, user_id, week_key, messages, updated_at)
+  VALUES (?, ?, ?, 1, ?)
+  ON CONFLICT(guild_id, user_id, week_key)
+  DO UPDATE SET
+    messages = messages + 1,
+    updated_at = excluded.updated_at
+`);
+
 const activity = new Map();
 
 function integer(value, fallback = 0) {
@@ -95,18 +120,12 @@ function progressFromXp(xp) {
 function ensureUser(user) {
   const now = Date.now();
 
-  db.prepare(`
-    INSERT INTO usuarios (id, username, cookies, xp, created_at, updated_at)
-    VALUES (?, ?, 100, 0, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      username = excluded.username,
-      updated_at = excluded.updated_at
-  `).run(String(user.id), user.username || "Usuario", now, now);
+  ensureUserStmt.run(String(user.id), user.username || "Usuario", now, now);
 }
 
 function getXpRank(userId, totalXp) {
-  const row = db.prepare("SELECT COUNT(*) + 1 AS position FROM usuarios WHERE xp > ?").get(integer(totalXp));
-  const total = db.prepare("SELECT COUNT(*) AS total FROM usuarios").get();
+  const row = countHigherXpStmt.get(integer(totalXp));
+  const total = countUsersStmt.get();
 
   return {
     position: integer(row?.position, 1),
@@ -150,8 +169,7 @@ function getWeeklyMessageLeaderboard(guildId, limit = 10) {
 }
 
 function getXp(userId) {
-  const row = db.prepare("SELECT xp, messages_count AS messagesCount FROM usuarios WHERE id = ?")
-    .get(String(userId));
+  const row = selectUserXpMessagesStmt.get(String(userId));
   const progress = progressFromXp(row?.xp || 0);
 
   return {
@@ -164,11 +182,10 @@ function getXp(userId) {
 function addUserXp(user, amount) {
   ensureUser(user);
   const gained = Math.max(0, integer(amount));
-  const beforeRow = db.prepare("SELECT xp FROM usuarios WHERE id = ?").get(String(user.id));
+  const beforeRow = selectUserXpStmt.get(String(user.id));
   const before = progressFromXp(beforeRow?.xp || 0);
 
-  db.prepare("UPDATE usuarios SET xp = xp + ?, updated_at = ? WHERE id = ?")
-    .run(gained, Date.now(), String(user.id));
+  updateUserXpStmt.run(gained, Date.now(), String(user.id));
 
   const after = getXp(user.id);
 
@@ -183,11 +200,10 @@ function addUserXp(user, amount) {
 function setUserXp(user, amount) {
   ensureUser(user);
   const nextXp = Math.max(0, integer(amount));
-  const beforeRow = db.prepare("SELECT xp FROM usuarios WHERE id = ?").get(String(user.id));
+  const beforeRow = selectUserXpStmt.get(String(user.id));
   const before = progressFromXp(beforeRow?.xp || 0);
 
-  db.prepare("UPDATE usuarios SET xp = ?, updated_at = ? WHERE id = ?")
-    .run(nextXp, Date.now(), String(user.id));
+  setUserXpStmt.run(nextXp, Date.now(), String(user.id));
 
   const after = getXp(user.id);
 
@@ -281,19 +297,11 @@ function addMessageXp(message) {
   if (message.content?.startsWith("/") || message.content?.startsWith("!")) return null;
 
   ensureUser(message.author);
-  db.prepare("UPDATE usuarios SET messages_count = messages_count + 1, updated_at = ? WHERE id = ?")
-    .run(Date.now(), String(message.author.id));
-  db.prepare(`
-    INSERT INTO message_weekly_stats (guild_id, user_id, week_key, messages, updated_at)
-    VALUES (?, ?, ?, 1, ?)
-    ON CONFLICT(guild_id, user_id, week_key)
-    DO UPDATE SET
-      messages = messages + 1,
-      updated_at = excluded.updated_at
-  `).run(String(message.guild.id), String(message.author.id), weekKey(), Date.now());
+  const now = Date.now();
+  incrementMessagesStmt.run(now, String(message.author.id));
+  upsertWeeklyMessageStmt.run(String(message.guild.id), String(message.author.id), weekKey(now), now);
 
   const key = `${message.guild.id}:${message.author.id}`;
-  const now = Date.now();
   const state = stateFor(key, now);
   const reward = calculateMessageXp(message, state, now);
   const normalized = normalizeContent(message.content);

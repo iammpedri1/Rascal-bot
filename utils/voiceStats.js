@@ -1,6 +1,23 @@
 const db = require("./db");
 
 const activeSessions = new Map();
+const addVoiceSecondsStmt = db.prepare(`
+  INSERT INTO voice_weekly_stats (guild_id, user_id, week_key, seconds, updated_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(guild_id, user_id, week_key)
+  DO UPDATE SET
+    seconds = seconds + excluded.seconds,
+    updated_at = excluded.updated_at
+`);
+const weeklyVoiceLeaderboardStmt = db.prepare(`
+  SELECT
+    voice.user_id AS id,
+    users.username AS username,
+    voice.seconds AS seconds
+  FROM voice_weekly_stats voice
+  LEFT JOIN usuarios users ON users.id = voice.user_id
+  WHERE voice.guild_id = ? AND voice.week_key = ?
+`);
 
 function integer(value, fallback = 0) {
   const parsed = Number(value);
@@ -33,14 +50,7 @@ function addVoiceSeconds(guildId, userId, seconds, now = Date.now()) {
   const safeSeconds = Math.max(0, integer(seconds));
   if (!safeSeconds) return;
 
-  db.prepare(`
-    INSERT INTO voice_weekly_stats (guild_id, user_id, week_key, seconds, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(guild_id, user_id, week_key)
-    DO UPDATE SET
-      seconds = seconds + excluded.seconds,
-      updated_at = excluded.updated_at
-  `).run(String(guildId), String(userId), weekKey(now), safeSeconds, now);
+  addVoiceSecondsStmt.run(String(guildId), String(userId), weekKey(now), safeSeconds, now);
 }
 
 function addVoiceRange(guildId, userId, startedAt, endedAt = Date.now()) {
@@ -99,13 +109,41 @@ function seedActiveVoiceSessions(client) {
   const now = Date.now();
 
   for (const guild of client.guilds.cache.values()) {
-    for (const channel of guild.channels.cache.values()) {
-      if (!channel.members) continue;
+    syncActiveVoiceSessions(guild, now);
+  }
+}
 
-      for (const member of channel.members.values()) {
-        startVoiceSession(member, channel.id, now);
+function syncActiveVoiceSessions(guild, now = Date.now()) {
+  if (!guild?.id) return;
+
+  const liveKeys = new Set();
+
+  for (const channel of guild.channels.cache.values()) {
+    if (!channel.members) continue;
+
+    for (const member of channel.members.values()) {
+      if (member.user?.bot) continue;
+
+      const key = sessionKey(guild.id, member.id);
+      const session = activeSessions.get(key);
+
+      liveKeys.add(key);
+
+      if (session) {
+        session.channelId = channel.id;
+        session.username = member.user.username;
+        continue;
       }
+
+      startVoiceSession(member, channel.id, now);
     }
+  }
+
+  for (const [key, session] of activeSessions.entries()) {
+    if (session.guildId !== String(guild.id) || liveKeys.has(key)) continue;
+
+    activeSessions.delete(key);
+    addVoiceRange(session.guildId, session.userId, session.startedAt, now);
   }
 }
 
@@ -116,15 +154,7 @@ function activeSecondsForCurrentWeek(session, now = Date.now()) {
 
 function getWeeklyVoiceLeaderboard(guildId, limit = 10) {
   const now = Date.now();
-  const rows = db.prepare(`
-    SELECT
-      voice.user_id AS id,
-      users.username AS username,
-      voice.seconds AS seconds
-    FROM voice_weekly_stats voice
-    LEFT JOIN usuarios users ON users.id = voice.user_id
-    WHERE voice.guild_id = ? AND voice.week_key = ?
-  `).all(String(guildId), weekKey(now));
+  const rows = weeklyVoiceLeaderboardStmt.all(String(guildId), weekKey(now));
   const byUser = new Map(rows.map(row => [row.id, {
     id: row.id,
     username: row.username || `usuario-${row.id}`,
@@ -161,4 +191,5 @@ module.exports = {
   seedActiveVoiceSessions,
   startVoiceSession,
   stopVoiceSession,
+  syncActiveVoiceSessions,
 };

@@ -32,7 +32,7 @@ module.exports = {
         embeds: [buildErrorEmbed(
           interaction,
           "\uD83C\uDF9F\uFE0F RIFA BLOQUEADA",
-          `Voce nao tem ${COOKIE_EMOJI} **${amount(result.amount)} cookies** para apostar.`
+          `Você não tem ${COOKIE_EMOJI} **${amount(result.amount)} cookies** para apostar.`
         )],
         flags: 64,
       });

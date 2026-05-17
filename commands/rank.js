@@ -31,7 +31,7 @@ function metricValue(profile, type) {
 }
 
 function metric(profile, type) {
-  if (type === "wins") return `\`${amount(metricValue(profile, type))}\` vitorias`;
+  if (type === "wins") return `\`${amount(metricValue(profile, type))}\` vitórias`;
   if (type === "played") return `\`${amount(metricValue(profile, type))}\` partidas`;
   return `\`${amount(metricValue(profile, type))}\` cookies`;
 }
@@ -76,7 +76,7 @@ function buildRankEmbed(interaction, rank, type, page) {
     .setThumbnail(RANK_THUMBNAIL)
     .setDescription(
       [
-        lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguem apareceu por aqui ainda.`,
+        lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguém apareceu por aqui ainda.`,
       ].join("\n")
     )
     .setFooter({
@@ -104,7 +104,7 @@ function buildXpRankEmbed(interaction, rank, page) {
   return new EmbedBuilder()
     .setColor(0xff6a00)
     .setTitle(`${emoji.likeLed} RANKING DE XP ${from}-${to}`)
-    .setDescription(lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguem apareceu por aqui ainda.`)
+    .setDescription(lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguém apareceu por aqui ainda.`)
     .setFooter({
       text: interaction.client.user?.username || "Bot",
       iconURL: interaction.client.user?.displayAvatarURL() || undefined,
@@ -149,7 +149,7 @@ module.exports = {
             .addChoices(
               { name: "Saldo", value: "balance" },
               { name: "Ganhos", value: "earned" },
-              { name: "Vitorias", value: "wins" },
+              { name: "Vitórias", value: "wins" },
               { name: "Partidas", value: "played" },
               { name: "Lucro", value: "profit" }
             )

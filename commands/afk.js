@@ -3,6 +3,8 @@ const { SlashCommandBuilder } = require("discord.js");
 const emoji = require("../utils/emojis");
 const { removeAfk, setAfk } = require("../utils/afkStore");
 
+const REASON_EMOJI = "<:1000106078:1499822832757113024>";
+
 module.exports = {
   category: "utility",
 
@@ -41,7 +43,7 @@ module.exports = {
       return interaction.reply({
         content: [
           `${emoji.clock} ${interaction.user}, seu AFK foi ativado.`,
-          `${emoji.ticket} Motivo: **${afk.reason}**`,
+          `${REASON_EMOJI} Motivo: **${afk.reason}**`,
           `${emoji.sino} Desde: <t:${Math.floor(afk.createdAt / 1000)}:R>`,
         ].join("\n"),
       });

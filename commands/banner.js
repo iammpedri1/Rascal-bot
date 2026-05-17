@@ -9,11 +9,11 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("banner")
-    .setDescription("Mostra o banner de um usuario")
+    .setDescription("Mostra o banner de um usuário")
     .addUserOption(option =>
       option
         .setName("user")
-        .setDescription("Usuario")
+        .setDescription("Usuário")
         .setRequired(true)
     ),
 
@@ -24,7 +24,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(randomColor())
-      .setDescription(banner ? `Banner do ${user}` : `${user} nao possui banner`);
+      .setDescription(banner ? `Banner do ${user}` : `${user} não possui banner`);
 
     if (banner) embed.setImage(banner);
 

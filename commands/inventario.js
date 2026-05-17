@@ -23,11 +23,11 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("inventario")
-    .setDescription("Mostra seu inventario de cookies")
+        .setDescription("Mostra seu inventário de cookies")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuario para consultar")
+        .setDescription("Usuário para consultar")
         .setRequired(false)
     ),
 
@@ -53,7 +53,7 @@ module.exports = {
           `${emoji.ticket} \u00bb Lucro em jogos: **${amount(getNetProfit(profile))} cookies**`,
           "",
           `${emoji.work} \u00bb Trabalhos feitos: **${amount(profile.workCount)}**`,
-          `${emoji.gift} \u00bb Recompensas diarias: **${amount(profile.dailyClaims)}**`,
+          `${emoji.gift} \u00bb Recompensas diárias: **${amount(profile.dailyClaims)}**`,
         ].join("\n")
       )
       .setFooter({

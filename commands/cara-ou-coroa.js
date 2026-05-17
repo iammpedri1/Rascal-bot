@@ -9,10 +9,9 @@ const {
 
 const { canBet, settleDuel } = require("../utils/cookieEconomy");
 const { getAnimeGif } = require("../utils/animeGifs");
+const logger = require("../utils/logger");
 
-const COOKIE_EMOJI = "<a:cookiesemoji:1500946522118950943>";
-const ACCEPT_EMOJI = "<:greentick:1500896913627549969>";
-const DECLINE_EMOJI = "<:redtick:1500896911081603142>";
+const COOKIE_EMOJI = "\u{1F36A}";
 const COIN_EMOJI = "🪙";
 
 function wait(ms) {
@@ -23,15 +22,32 @@ function flipCoin() {
   return Math.random() < 0.5 ? "cara" : "coroa";
 }
 
-function parseEmoji(emoji) {
-  const match = emoji?.match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
-  if (!match) return emoji;
+function randomSides() {
+  const challengerChoice = flipCoin();
+  const opponentChoice = challengerChoice === "cara" ? "coroa" : "cara";
 
   return {
-    name: match[1],
-    id: match[2],
-    animated: emoji.startsWith("<a:"),
+    challengerChoice,
+    opponentChoice,
   };
+}
+
+function isHouseBot(interaction, user) {
+  return user?.bot && user.id === interaction.client.user?.id;
+}
+
+function balanceText(user, profile, houseId) {
+  return user.id === houseId ? "infinito" : profile.balance.toLocaleString("pt-BR");
+}
+
+function buildRematchRow(challengerId, opponentId, amount) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`cara-ou-coroa|rematch|${challengerId}|${opponentId}|${amount}`)
+      .setLabel("Revanche")
+      .setEmoji("🔁")
+      .setStyle(ButtonStyle.Secondary)
+  );
 }
 
 module.exports = {
@@ -39,21 +55,11 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("cara-ou-coroa")
-    .setDescription("Aposte cookies em cara ou coroa")
-    .addStringOption(option =>
-      option
-        .setName("escolha")
-        .setDescription("Escolha o lado da moeda")
-        .setRequired(true)
-        .addChoices(
-          { name: "Cara", value: "cara" },
-          { name: "Coroa", value: "coroa" }
-        )
-    )
+    .setDescription("Aposte cookies em um cara ou coroa aleatório")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuario que voce quer desafiar")
+        .setDescription("Usuário que você quer desafiar")
         .setRequired(true)
     )
     .addIntegerOption(option =>
@@ -65,10 +71,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const choice = interaction.options.getString("escolha");
     const opponent = interaction.options.getUser("usuario");
     const amount = interaction.options.getInteger("aposta");
-    const opponentChoice = choice === "cara" ? "coroa" : "cara";
+    const houseBot = isHouseBot(interaction, opponent);
+    const houseId = interaction.client.user?.id;
     const economyContext = {
       guildId: interaction.guild?.id,
       guildName: interaction.guild?.name,
@@ -76,22 +82,77 @@ module.exports = {
 
     if (opponent.id === interaction.user.id) {
       return interaction.reply({
-        content: "Voce nao pode desafiar voce mesmo.",
+        content: "Você não pode desafiar você mesmo.",
         flags: 64,
       });
     }
 
-    if (opponent.bot) {
+    if (opponent.bot && !houseBot) {
       return interaction.reply({
-        content: "Escolha uma pessoa para jogar, nao um bot.",
+        content: "Escolha uma pessoa ou aposte contra mim.",
         flags: 64,
       });
     }
 
     if (!canBet(interaction.user, amount)) {
       return interaction.reply({
-        content: `Voce nao tem ${COOKIE_EMOJI} cookies suficientes para apostar ${amount}. Use /cookies saldo.`,
+        content: `Você não tem ${COOKIE_EMOJI} cookies suficientes para apostar ${amount}. Use /cookies saldo.`,
         flags: 64,
+      });
+    }
+
+    if (houseBot) {
+      const { challengerChoice, opponentChoice } = randomSides();
+      const coin = flipCoin();
+      const challengerWon = challengerChoice === coin;
+      const winnerUser = challengerWon ? interaction.user : opponent;
+      const loserUser = challengerWon ? opponent : interaction.user;
+
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xfaa61a)
+            .setTitle(`${COIN_EMOJI} Girando a moeda...`)
+            .setDescription(
+              [
+                `${interaction.user} ficou com **${challengerChoice}**.`,
+                `${opponent} ficou com **${opponentChoice}**.`,
+                "",
+                "A moeda está no ar...",
+              ].join("\n")
+            ),
+        ],
+      });
+
+      const message = await interaction.fetchReply();
+      const { winner, loser } = settleDuel(winnerUser, loserUser, amount, economyContext);
+      const gif = await getAnimeGif("win");
+
+      await wait(1800);
+
+      return message.edit({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x57f287)
+            .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
+            .setDescription(
+              [
+                `A moeda caiu em: **${coin.toUpperCase()}**`,
+                "",
+                `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${amount.toLocaleString("pt-BR")} cookies**.`,
+                "",
+                `**Placar**`,
+                `<@${interaction.user.id}>: **${challengerChoice.toUpperCase()}**`,
+                `<@${opponent.id}>: **${opponentChoice.toUpperCase()}**`,
+                "",
+                `**Saldos**`,
+                `<@${winnerUser.id}>: **${balanceText(winnerUser, winner, houseId)}**`,
+                `<@${loserUser.id}>: **${balanceText(loserUser, loser, houseId)}**`,
+              ].join("\n")
+            )
+            .setImage(gif),
+        ],
+        components: [buildRematchRow(interaction.user.id, opponent.id, amount)],
       });
     }
 
@@ -99,12 +160,10 @@ module.exports = {
       new ButtonBuilder()
         .setCustomId(`coin_accept|${interaction.user.id}|${opponent.id}|${amount}`)
         .setLabel("Aceitar")
-        .setEmoji(parseEmoji(ACCEPT_EMOJI))
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`coin_decline|${interaction.user.id}|${opponent.id}|${amount}`)
         .setLabel("Recusar")
-        .setEmoji(parseEmoji(DECLINE_EMOJI))
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -115,8 +174,7 @@ module.exports = {
         [
           `<@${interaction.user.id}> chamou <@${opponent.id}> para uma aposta.`,
           "",
-          `**${interaction.user.username}** escolheu: **${choice.toUpperCase()}**`,
-          `**${opponent.username}** ficará com: **${opponentChoice.toUpperCase()}**`,
+              "Os lados serão sorteados quando o desafio for aceito.",
           "",
           `${COOKIE_EMOJI} **Aposta:** ${amount.toLocaleString("pt-BR")} cookies`,
           "",
@@ -126,11 +184,11 @@ module.exports = {
       .setThumbnail("https://cdn-icons-png.flaticon.com/512/272/272525.png")
       .setFooter({ text: "O vencedor leva a aposta do adversário." });
 
-    const message = await interaction.reply({
+    await interaction.reply({
       embeds: [inviteEmbed],
       components: [row],
-      fetchReply: true,
     });
+    const message = await interaction.fetchReply();
 
     const collector = message.createMessageComponentCollector({
       componentType: ComponentType.Button,
@@ -140,95 +198,118 @@ module.exports = {
     let finished = false;
 
     collector.on("collect", async buttonInteraction => {
-      const [action, challengerId, opponentId, betValue] = buttonInteraction.customId.split("|");
-      const bet = Number(betValue);
+      try {
+        const [action, challengerId, opponentId, betValue] = buttonInteraction.customId.split("|");
+        const bet = Number(betValue);
 
-      if (buttonInteraction.user.id !== opponentId) {
-        return buttonInteraction.reply({
-          content: "So quem foi desafiado pode aceitar ou recusar.",
-          flags: 64,
-        });
-      }
+        if (buttonInteraction.user.id !== opponentId) {
+          return buttonInteraction.reply({
+            content: "Só quem foi desafiado pode aceitar ou recusar.",
+            flags: 64,
+          });
+        }
 
-      if (action === "coin_decline") {
+        if (action === "coin_decline") {
+          finished = true;
+          collector.stop("declined");
+
+          return buttonInteraction.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xed4245)
+                .setTitle("Desafio recusado")
+                .setDescription(`<@${opponentId}> recusou a aposta de ${COOKIE_EMOJI} **${bet} cookies**.`),
+            ],
+            components: [],
+          });
+        }
+
+        if (!canBet(interaction.user, bet) || (!isHouseBot(interaction, opponent) && !canBet(opponent, bet))) {
+          finished = true;
+          collector.stop("no_balance");
+
+          return buttonInteraction.update({
+            content: "Um dos jogadores não tem cookies suficientes para essa aposta.",
+            embeds: [],
+            components: [],
+          });
+        }
+
+        const { challengerChoice, opponentChoice } = randomSides();
+        const coin = flipCoin();
+        const challengerWon = challengerChoice === coin;
+        const winnerUser = challengerWon ? interaction.user : opponent;
+        const loserUser = challengerWon ? opponent : interaction.user;
+
         finished = true;
-        collector.stop("declined");
+        collector.stop("finished");
 
-        return buttonInteraction.update({
+        await buttonInteraction.update({
           embeds: [
             new EmbedBuilder()
-              .setColor(0xed4245)
-              .setTitle("Desafio recusado")
-              .setDescription(`<@${opponentId}> recusou a aposta de ${COOKIE_EMOJI} **${bet} cookies**.`),
+              .setColor(0xfaa61a)
+              .setTitle(`${COIN_EMOJI} Girando a moeda...`)
+              .setDescription(
+                [
+                  `${interaction.user} ficou com **${challengerChoice}**.`,
+                  `${opponent} ficou com **${opponentChoice}**.`,
+                  "",
+                  "A moeda está no ar...",
+                ].join("\n")
+              ),
           ],
           components: [],
         });
-      }
 
-      if (!canBet(interaction.user, bet) || !canBet(opponent, bet)) {
+        const { winner, loser } = settleDuel(winnerUser, loserUser, bet, economyContext);
+        const gif = await getAnimeGif("win");
+
+        await wait(1800);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x57f287)
+          .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
+          .setDescription(
+            [
+              `A moeda caiu em: **${coin.toUpperCase()}**`,
+              "",
+              `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${bet.toLocaleString("pt-BR")} cookies**.`,
+              "",
+              `**Placar**`,
+              `<@${challengerId}>: **${challengerChoice.toUpperCase()}**`,
+              `<@${opponentId}>: **${opponentChoice.toUpperCase()}**`,
+              "",
+              `**Saldos**`,
+              `<@${winnerUser.id}>: **${balanceText(winnerUser, winner, houseId)}**`,
+              `<@${loserUser.id}>: **${balanceText(loserUser, loser, houseId)}**`,
+            ].join("\n")
+          )
+          .setImage(gif);
+
+        return message.edit({
+          embeds: [embed],
+          components: [buildRematchRow(challengerId, opponentId, bet)],
+        });
+      } catch (error) {
         finished = true;
-        collector.stop("no_balance");
+        collector.stop("error");
+        logger.error("Erro ao processar aceite do /cara-ou-coroa", error, {
+          user: buttonInteraction.user.id,
+          guild: buttonInteraction.guildId,
+        });
 
-        return buttonInteraction.update({
-          content: "Um dos jogadores nao tem cookies suficientes para essa aposta.",
+        const payload = {
+          content: "Não consegui finalizar essa aposta. Tente novamente em alguns instantes.",
           embeds: [],
           components: [],
-        });
+        };
+
+        if (buttonInteraction.deferred || buttonInteraction.replied) {
+          return message.edit(payload).catch(() => {});
+        }
+
+        return buttonInteraction.update(payload).catch(() => {});
       }
-
-      const coin = flipCoin();
-      const challengerWon = choice === coin;
-      const winnerUser = challengerWon ? interaction.user : opponent;
-      const loserUser = challengerWon ? opponent : interaction.user;
-      const { winner, loser } = settleDuel(winnerUser, loserUser, bet, economyContext);
-      const gif = await getAnimeGif("win");
-
-      finished = true;
-      collector.stop("finished");
-
-      await buttonInteraction.update({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xfaa61a)
-            .setTitle(`${COIN_EMOJI} Girando a moeda...`)
-            .setDescription(
-              [
-                `${interaction.user} escolheu **${choice}**.`,
-                `${opponent} ficou com **${opponentChoice}**.`,
-                "",
-                "A moeda está no ar...",
-              ].join("\n")
-            ),
-        ],
-        components: [],
-      });
-
-      await wait(1800);
-
-      const embed = new EmbedBuilder()
-        .setColor(0x57f287)
-        .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
-        .setDescription(
-          [
-            `A moeda caiu em: **${coin.toUpperCase()}**`,
-            "",
-            `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${bet.toLocaleString("pt-BR")} cookies**.`,
-            "",
-            `**Placar**`,
-            `<@${challengerId}>: **${choice.toUpperCase()}**`,
-            `<@${opponentId}>: **${opponentChoice.toUpperCase()}**`,
-            "",
-            `**Saldos**`,
-            `<@${winnerUser.id}>: **${winner.balance.toLocaleString("pt-BR")}**`,
-            `<@${loserUser.id}>: **${loser.balance.toLocaleString("pt-BR")}**`,
-          ].join("\n")
-        )
-        .setImage(gif);
-
-      return message.edit({
-        embeds: [embed],
-        components: [],
-      });
     });
 
     collector.on("end", () => {
@@ -239,5 +320,36 @@ module.exports = {
         components: [],
       }).catch(() => {});
     });
+  },
+
+  async handleButton(interaction) {
+    const [command, action, challengerId, opponentId, amountRaw] = interaction.customId.split("|");
+    if (command !== "cara-ou-coroa" || action !== "rematch") return;
+
+    if (![challengerId, opponentId].includes(interaction.user.id)) {
+      return interaction.reply({
+        content: "Essa revanche pertence a outros jogadores.",
+        flags: 64,
+      });
+    }
+
+    const nextOpponentId = interaction.user.id === challengerId ? opponentId : challengerId;
+    const opponent = await interaction.client.users.fetch(nextOpponentId).catch(() => null);
+    const amount = Number(amountRaw);
+
+    if (!opponent || !Number.isFinite(amount) || amount < 1) {
+      return interaction.reply({
+        content: "Não consegui iniciar a revanche.",
+        flags: 64,
+      });
+    }
+
+    const rematchInteraction = Object.create(interaction);
+    rematchInteraction.options = {
+      getUser: () => opponent,
+      getInteger: () => amount,
+    };
+
+    return module.exports.execute(rematchInteraction);
   },
 };

@@ -1,0 +1,19 @@
+node_modules/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/*.sqlite
+data/*.sqlite-*
+data/*.json
+data/.sqlite-migrated
+!data/.gitkeep
+
+# Logs and local process output
+*.log
+bot.out.log
+bot.err.log
+npm-debug.log*

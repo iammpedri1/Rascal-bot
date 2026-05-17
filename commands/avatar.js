@@ -9,11 +9,11 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("avatar")
-    .setDescription("Mostra o avatar de um usuario")
+    .setDescription("Mostra o avatar de um usuário")
     .addUserOption(option =>
       option
         .setName("user")
-        .setDescription("Usuario")
+        .setDescription("Usuário")
         .setRequired(true)
     ),
 

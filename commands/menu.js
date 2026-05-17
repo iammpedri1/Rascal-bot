@@ -1,88 +1,109 @@
 const {
-  SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
   ComponentType,
+  EmbedBuilder,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+  StringSelectMenuBuilder,
 } = require("discord.js");
 
-const { loadCommands } = require("../utils/commandLoader");
 const emoji = require("../utils/emojis");
+const { loadCommands } = require("../utils/commandLoader");
 
-const icons = {
-  home: "<:icons_home:1500922691614675004>",
-  human: "<:icons_human:1500922689072926980>",
-  menu: "<:icons_menu:1500922698111516842>",
-  settings: "<:icons_settings:1500922701512970304>",
-  games: "<:icons_games:1500934580125962312>",
-  work: emoji.shop,
-  clock: "<:icons_settings:1500922701512970304>",
-  cookie: emoji.shop,
-  roles: emoji.roles,
-  bot: emoji.botFlag,
-  party: emoji.shop,
+const MENU_COLOR = 0x5865f2;
+const PAGE_SIZE = 7;
+const DEFAULT_STAFF_ROLE_NAMES = [
+  "admin",
+  "administrador",
+  "equipe",
+  "helper",
+  "mod",
+  "moderador",
+  "staff",
+  "suporte",
+];
+
+const categoryMeta = {
+  economy: {
+    name: "Economia",
+    emoji: emoji.cookie,
+    description: "Cookies, recompensas, apostas e progresso.",
+  },
+  games: {
+    name: "Jogos",
+    emoji: emoji.gamesIcon,
+    description: "Minigames e desafios sociais.",
+  },
+  action: {
+    name: "Interacoes",
+    emoji: emoji.humanIcon,
+    description: "Comandos sociais para usar com outros membros.",
+  },
+  utility: {
+    name: "Utilidades",
+    emoji: emoji.settingsIcon,
+    description: "Ferramentas do dia a dia do servidor.",
+  },
+  user: {
+    name: "Usuario",
+    emoji: emoji.humanIcon,
+    description: "Perfil, avatar, banner e informacoes pessoais.",
+  },
+  info: {
+    name: "Informacoes",
+    emoji: emoji.botFlag,
+    description: "Dados do bot e do servidor.",
+  },
+  system: {
+    name: "Sistema",
+    emoji: emoji.menuIcon,
+    description: "Comandos gerais do bot.",
+  },
+  staff: {
+    name: "Equipe",
+    emoji: emoji.staffLed,
+    description: "Moderacao, administracao e suporte.",
+  },
+  outros: {
+    name: "Outros",
+    emoji: emoji.menuIcon,
+    description: "Comandos diversos.",
+  },
 };
 
-const MENU_EMOJI = icons.menu;
-const MENU_COLOR = 0xff6a00;
-const PAGE_SIZE = 10;
+function metaFor(category) {
+  return categoryMeta[category] || {
+    name: category.replace(/[-_]/g, " ").replace(/\b\w/g, char => char.toUpperCase()),
+    emoji: emoji.menuIcon,
+    description: "Comandos diversos.",
+  };
+}
 
-const categoryEmojis = {
-  home: icons.home,
-  info: icons.human,
-  staff: icons.settings,
-  system: icons.bot,
-  perf: icons.settings,
-  mod: icons.settings,
-  action: icons.human,
-  fun: icons.human,
-  games: icons.games,
-  economy: emoji.shop,
-  minigames: icons.games,
-  utility: icons.clock,
-  user: icons.human,
-  commands: icons.menu,
-  outros: icons.menu,
-};
-
-const categoryNames = {
-  home: "Home",
-  info: "Info",
-  staff: "Staff",
-  system: "System",
-  perf: "Performance",
-  mod: "Moderacao",
-  action: "Action",
-  fun: "Fun",
-  games: "Games",
-  economy: "Economia",
-  minigames: "Minigames",
-  utility: "Utility",
-  user: "User",
-  commands: "Commands",
-  outros: "Outros",
-};
-
-function parseEmoji(emoji) {
-  const match = emoji?.match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
-  if (!match) return emoji;
+function parseEmoji(value) {
+  const match = String(value || "").match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
+  if (!match) return value;
 
   return {
     name: match[1],
     id: match[2],
-    animated: emoji.startsWith("<a:"),
+    animated: value.startsWith("<a:"),
   };
 }
 
-function formatCategoryName(category) {
-  return (
-    categoryNames[category] ||
-    category
-      .replace(/[-_]/g, " ")
-      .replace(/\b\w/g, char => char.toUpperCase())
-  );
+function listFromEnv(name) {
+  return String(process.env[name] || "")
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeRoleName(name) {
+  return String(name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 function commandUsages(command) {
@@ -109,24 +130,37 @@ function commandUsages(command) {
     }));
   }
 
-  return [
-    {
-      name: `/${data.name}`,
-      description: data.description || "Sem descricao.",
-    },
-  ];
+  return [{
+    name: `/${data.name}`,
+    description: data.description || "Sem descricao.",
+  }];
 }
 
-function commandTag(command) {
-  return commandUsages(command)
-    .map(usage => `\`${usage.name}\``)
-    .join(", ");
+function commandCount(commands) {
+  return commands.reduce((total, command) => total + commandUsages(command).length, 0);
 }
 
-function commandDetails(command) {
-  return commandUsages(command)
-    .map(usage => `**${usage.name}** - ${usage.description}`)
-    .join("\n");
+function hasStaffRole(interaction) {
+  const roleIds = new Set(listFromEnv("STAFF_ROLE_IDS"));
+  const configuredNames = listFromEnv("STAFF_ROLE_NAMES").map(normalizeRoleName);
+  const allowedNames = new Set([...DEFAULT_STAFF_ROLE_NAMES, ...configuredNames]);
+
+  return interaction.member?.roles?.cache?.some(role => {
+    const roleName = normalizeRoleName(role.name);
+
+    return roleIds.has(role.id) ||
+      allowedNames.has(roleName) ||
+      [...allowedNames].some(name => roleName.includes(name));
+  });
+}
+
+function canSeeStaff(interaction) {
+  const permissions = interaction.memberPermissions;
+
+  return permissions?.has(PermissionFlagsBits.Administrator) ||
+    permissions?.has(PermissionFlagsBits.ManageMessages) ||
+    permissions?.has(PermissionFlagsBits.ModerateMembers) ||
+    hasStaffRole(interaction);
 }
 
 module.exports = {
@@ -134,138 +168,103 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("menu")
-    .setDescription("Menu completo de comandos"),
+    .setDescription("Abre o painel de comandos do bot"),
 
   async execute(interaction) {
-    const commands = loadCommands();
-    const memberRoles = interaction.member.roles.cache.map(role => role.name);
+    const commands = [...loadCommands().values()]
+      .filter(command => command.data?.name !== "menu")
+      .filter(command => command.category !== "staff" || canSeeStaff(interaction))
+      .sort((a, b) => a.data.name.localeCompare(b.data.name, "pt-BR"));
 
-    const filtered = [...commands.values()].filter(command => {
-      if (command.category === "staff") {
-        return memberRoles.includes("Admin") || memberRoles.includes("Mod");
-      }
-
-      return true;
-    });
-
-    const categories = {};
-
-    for (const command of filtered) {
+    const categories = commands.reduce((map, command) => {
       const category = command.category || "outros";
+      if (!map.has(category)) map.set(category, []);
+      map.get(category).push(command);
+      return map;
+    }, new Map());
 
-      if (!categories[category]) categories[category] = [];
-      categories[category].push(command);
-    }
-
-    const categoryList = Object.keys(categories).sort((a, b) =>
-      formatCategoryName(a).localeCompare(formatCategoryName(b))
+    const categoryList = [...categories.keys()].sort((a, b) =>
+      metaFor(a).name.localeCompare(metaFor(b).name, "pt-BR")
     );
 
-    if (categoryList.length === 0) {
+    if (!categoryList.length) {
       return interaction.reply({
         content: "Nenhum comando encontrado.",
         flags: 64,
       });
     }
 
-    const botName = interaction.client.user?.username || "Kuraminha";
+    const bot = interaction.client.user;
     let currentCategory = "home";
     let page = 0;
 
-    const getCurrentCommands = () =>
-      currentCategory === "home" ? [] : categories[currentCategory] || [];
-
-    const getMaxPage = () => {
-      const total = getCurrentCommands().length;
-      return Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const currentCommands = () =>
+      currentCategory === "home" ? [] : categories.get(currentCategory) || [];
+    const maxPage = () => Math.max(1, Math.ceil(currentCommands().length / PAGE_SIZE));
+    const clampPage = () => {
+      page = Math.max(0, Math.min(page, maxPage() - 1));
     };
 
-    const buildTitle = () =>
-      `${MENU_EMOJI} | ${botName} Commands | ${formatCategoryName(currentCategory)}`;
-
     const buildHomeEmbed = () => {
-      const categoryLines = categoryList
-        .map(category => {
-          const emoji = categoryEmojis[category] || categoryEmojis.outros;
-          const name = formatCategoryName(category);
-          const total = categories[category].length;
-
-          return `${emoji} **${name}** - ${total} comandos`;
-        })
-        .join("\n");
+      const totalCommands = commandCount(commands);
+      const categorySummary = categoryList.map(category => {
+        const meta = metaFor(category);
+        return {
+          name: `${meta.emoji} ${meta.name}`,
+          value: `${commandCount(categories.get(category))} comandos\n${meta.description}`,
+          inline: true,
+        };
+      });
 
       return new EmbedBuilder()
         .setColor(MENU_COLOR)
-        .setTitle(buildTitle())
+        .setAuthor({
+          name: `${bot.username} - central de comandos`,
+          iconURL: bot.displayAvatarURL({ size: 128 }),
+        })
+        .setThumbnail(bot.displayAvatarURL({ size: 256 }))
         .setDescription(
           [
-            "\u2139\uFE0F Escolha uma categoria no menu abaixo para ver os comandos disponiveis.",
+            `Use o menu abaixo para navegar por **${categoryList.length} categorias** e **${totalCommands} comandos**.`,
             "",
-            "**Atalhos uteis**",
-            `${icons.work} **/work** - ganhe cookies a cada 3 horas`,
-            `${icons.cookie} **/daily** - recompensa a cada 12 horas`,
-            `${icons.roles} **/inventario** - veja suas informacoes da economia`,
-            `${icons.clock} **/lembrete** - receba um aviso na hora marcada`,
-            `${icons.party} **/rank cookies** - veja o ranking global`,
-            "",
-            `**Categorias (${categoryList.length})**`,
-            categoryLines,
+            `${emoji.ticket} Suporte: \`/ticket\``,
+            `${emoji.voice} Musica: \`/play lofi\``,
+            `${emoji.cookie} Economia: \`/daily\`, \`/trabalhar\`, \`/rank\``,
           ].join("\n")
         )
-        .setThumbnail(interaction.client.user?.displayAvatarURL() || null)
-        .setFooter({
-          text: `${botName} - ${filtered.length} Commands`,
-          iconURL: interaction.client.user?.displayAvatarURL() || undefined,
-        });
+        .addFields(categorySummary.slice(0, 12))
+        .setFooter({ text: `Solicitado por ${interaction.user.username}` })
+        .setTimestamp();
     };
 
     const buildCategoryEmbed = () => {
-      const commandsInCategory = getCurrentCommands();
-      const maxPage = getMaxPage();
+      clampPage();
 
-      if (page > maxPage - 1) page = maxPage - 1;
-      if (page < 0) page = 0;
-
+      const meta = metaFor(currentCategory);
+      const list = currentCommands();
       const start = page * PAGE_SIZE;
-      const currentPageCommands = commandsInCategory.slice(start, start + PAGE_SIZE);
-      const emoji = categoryEmojis[currentCategory] || categoryEmojis.outros;
-      const categoryName = formatCategoryName(currentCategory);
-      const commandList = currentPageCommands.length
-        ? currentPageCommands.map(commandTag).join(", ")
-        : "Nenhum comando nesta categoria.";
-      const categoryTips = {
-        economy: [
-          `${icons.work} Use **/work** para trabalhar na firma.`,
-          `${icons.cookie} Use **/daily** para coletar sua recompensa.`,
-          `${icons.roles} Use **/inventario** para ver suas informacoes.`,
-          `${icons.party} Use **/rank cookies** para ver o ranking global.`,
-          `${icons.clock} Use **/lembrete** para nao perder cooldowns.`,
-        ],
-        utility: [
-          `${icons.clock} Use **/lembrete** para agendar avisos pessoais.`,
-        ],
-      };
+      const visible = list.slice(start, start + PAGE_SIZE);
 
       return new EmbedBuilder()
         .setColor(MENU_COLOR)
-        .setTitle(buildTitle())
-        .setDescription(
-          [
-            "\u2139\uFE0F Para usar um comando, digite o nome dele no chat com `/`.",
-            `**${emoji} Commands (${commandsInCategory.length})**`,
-            commandList,
-            "",
-            currentPageCommands.map(commandDetails).join("\n"),
-            "",
-            ...(categoryTips[currentCategory] || []),
-          ]
-            .filter(Boolean)
-            .join("\n")
+        .setAuthor({
+          name: `${bot.username} - ${meta.name}`,
+          iconURL: bot.displayAvatarURL({ size: 128 }),
+        })
+        .setDescription(meta.description)
+        .addFields(
+          visible.flatMap(command =>
+            commandUsages(command).map(usage => ({
+              name: usage.name,
+              value: usage.description || "Sem descricao.",
+              inline: false,
+            }))
+          )
         )
         .setFooter({
-          text: `Pagina ${page + 1}/${maxPage} - ${categoryName} - ${filtered.length} Commands`,
-          iconURL: interaction.client.user?.displayAvatarURL() || undefined,
-        });
+          text: `Pagina ${page + 1}/${maxPage()} - ${commandCount(list)} comandos`,
+        })
+        .setTimestamp();
     };
 
     const buildEmbed = () =>
@@ -278,35 +277,48 @@ module.exports = {
           .setPlaceholder("Escolha uma categoria")
           .addOptions([
             {
-              label: "Home",
+              label: "Inicio",
+              description: "Resumo do menu",
               value: "home",
-              emoji: parseEmoji(categoryEmojis.home),
+              emoji: parseEmoji(emoji.homeIcon),
               default: currentCategory === "home",
             },
-            ...categoryList.slice(0, 24).map(category => ({
-              label: formatCategoryName(category),
-              value: category,
-              emoji: parseEmoji(categoryEmojis[category] || categoryEmojis.outros),
-              default: currentCategory === category,
-            })),
+            ...categoryList.slice(0, 24).map(category => {
+              const meta = metaFor(category);
+              return {
+                label: meta.name,
+                description: `${commandCount(categories.get(category))} comandos`,
+                value: category,
+                emoji: parseEmoji(meta.emoji),
+                default: currentCategory === category,
+              };
+            }),
           ])
       );
 
     const buildButtons = () => {
-      const maxPage = getMaxPage();
       const isHome = currentCategory === "home";
 
       return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("back")
-          .setEmoji("\u2B05\uFE0F")
+          .setCustomId("menu_home")
+          .setEmoji(parseEmoji(emoji.homeIcon))
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(isHome),
+        new ButtonBuilder()
+          .setCustomId("menu_prev")
+          .setEmoji("⬅️")
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(isHome || page <= 0),
         new ButtonBuilder()
-          .setCustomId("next")
-          .setEmoji("\u27A1\uFE0F")
+          .setCustomId("menu_next")
+          .setEmoji("➡️")
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(isHome || page >= maxPage - 1)
+          .setDisabled(isHome || page >= maxPage() - 1),
+        new ButtonBuilder()
+          .setCustomId("menu_close")
+          .setEmoji(parseEmoji(emoji.crossed))
+          .setStyle(ButtonStyle.Danger)
       );
     };
 
@@ -318,7 +330,7 @@ module.exports = {
     });
 
     const collector = message.createMessageComponentCollector({
-      time: 120000,
+      time: 180000,
     });
 
     collector.on("collect", async componentInteraction => {
@@ -335,11 +347,21 @@ module.exports = {
       }
 
       if (componentInteraction.componentType === ComponentType.Button) {
-        if (componentInteraction.customId === "next") page++;
-        if (componentInteraction.customId === "back") page--;
+        if (componentInteraction.customId === "menu_home") {
+          currentCategory = "home";
+          page = 0;
+        }
+
+        if (componentInteraction.customId === "menu_prev") page -= 1;
+        if (componentInteraction.customId === "menu_next") page += 1;
+
+        if (componentInteraction.customId === "menu_close") {
+          collector.stop("closed");
+          return componentInteraction.update({ components: [] });
+        }
       }
 
-      await componentInteraction.update({
+      return componentInteraction.update({
         embeds: [buildEmbed()],
         components: [buildSelect(), buildButtons()],
       });

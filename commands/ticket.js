@@ -11,40 +11,42 @@ const {
 
 const emoji = require("../utils/emojis");
 const store = require("../utils/ticketStore");
+const logger = require("../utils/logger");
 
-const SUPPORT_CATEGORY_NAME = "Suporte";
+const SUPPORT_CATEGORY_NAME = "Atendimento";
 const PANEL_CHANNEL_NAME = "tickets";
-const PANEL_COLOR = 0x111827;
+const PANEL_COLOR = 0x2b2d31;
 const CLOSE_EMOJI = emoji.crossed;
 const CLAIM_EMOJI = emoji.correct;
 const QUESTION_EMOJI = "<a:procurando:1502138545488531518>";
 const POLICE_EMOJI = "<:panda_police:1502138488290676856>";
-const DIVIDER = "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500";
 
-// Categorias exibidas no menu select do painel.
 const ticketTypes = {
   suporte: {
     label: "Suporte",
     emoji: QUESTION_EMOJI,
     color: 0x5865f2,
-    description: "D\u00favidas, orienta\u00e7\u00f5es e ajuda geral.",
+    description: "Duvidas, orientacoes e ajuda geral.",
+    prompt: "Explique o que voce precisa, envie prints se tiver e aguarde a equipe.",
   },
   denuncia: {
-    label: "Den\u00fancia",
+    label: "Denuncia",
     emoji: POLICE_EMOJI,
     color: 0xed4245,
-    description: "Relate membros que quebraram regras.",
+    description: "Relatos sobre membros, regras ou situacoes sensiveis.",
+    prompt: "Envie o motivo, envolvidos, provas e contexto. A equipe tratara com cuidado.",
   },
   bug: {
     label: "Reportar bug",
     emoji: emoji.bugHunterLed,
     color: 0xf5a623,
-    description: "Informe erros encontrados no bot.",
+    description: "Falhas, erros ou comportamentos estranhos do bot.",
+    prompt: "Descreva o comando, o erro, o horario aproximado e o que voce esperava.",
   },
 };
 
 function parseEmoji(value) {
-  const match = value?.match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
+  const match = String(value || "").match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
   if (!match) return value;
 
   return {
@@ -62,10 +64,20 @@ function cleanName(value) {
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
-    .slice(0, 24) || "usuario";
+    .slice(0, 18) || "usuario";
 }
 
-// Considera staff por permiss\u00e3o ou por cargos comuns de equipe.
+function ticketNumber(id) {
+  return String(id).padStart(4, "0");
+}
+
+function normalizeRoleName(name) {
+  return String(name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function isTicketStaff(member) {
   if (!member) return false;
   if (member.permissions?.has(PermissionFlagsBits.Administrator)) return true;
@@ -74,23 +86,21 @@ function isTicketStaff(member) {
 
   return member.roles.cache.some(role =>
     ["admin", "administrador", "mod", "moderador", "staff", "equipe", "suporte"]
-      .includes(role.name.toLowerCase())
+      .includes(normalizeRoleName(role.name))
   );
 }
 
-// Cargos que poder\u00e3o visualizar os canais privados de ticket.
 function staffRoles(guild) {
   return guild.roles.cache.filter(role =>
     ["admin", "administrador", "mod", "moderador", "staff", "equipe", "suporte"]
-      .includes(role.name.toLowerCase())
+      .includes(normalizeRoleName(role.name))
   );
 }
 
-// Garante que a categoria Suporte exista.
 async function ensureSupportCategory(guild) {
   const existing = guild.channels.cache.find(channel =>
     channel.type === ChannelType.GuildCategory &&
-    channel.name.toLowerCase() === SUPPORT_CATEGORY_NAME.toLowerCase()
+    normalizeRoleName(channel.name) === normalizeRoleName(SUPPORT_CATEGORY_NAME)
   );
 
   if (existing) return existing;
@@ -98,11 +108,10 @@ async function ensureSupportCategory(guild) {
   return guild.channels.create({
     name: SUPPORT_CATEGORY_NAME,
     type: ChannelType.GuildCategory,
-    reason: "Criar categoria de suporte para tickets",
+    reason: "Criar categoria de atendimento",
   });
 }
 
-// Garante que o painel seja publicado no canal #tickets.
 async function ensurePanelChannel(guild, category) {
   const existing = guild.channels.cache.find(channel =>
     channel.type === ChannelType.GuildText &&
@@ -113,6 +122,8 @@ async function ensurePanelChannel(guild, category) {
     if (existing.parentId !== category.id) {
       await existing.setParent(category.id).catch(() => {});
     }
+
+    await existing.setTopic("Abra tickets de suporte pelo painel fixado.").catch(() => {});
     return existing;
   }
 
@@ -120,46 +131,49 @@ async function ensurePanelChannel(guild, category) {
     name: PANEL_CHANNEL_NAME,
     type: ChannelType.GuildText,
     parent: category.id,
-    topic: "Painel oficial para abertura de tickets.",
+    topic: "Abra tickets de suporte pelo painel fixado.",
     reason: "Criar canal do painel de tickets",
   });
 }
 
-// Embed principal que fica fixo no canal #tickets.
 function panelEmbed(guild) {
   return new EmbedBuilder()
     .setColor(PANEL_COLOR)
     .setAuthor({
-      name: `${guild.name} \u2022 Atendimento`,
+      name: `${guild.name} - central de atendimento`,
       iconURL: guild.iconURL({ size: 128 }) || undefined,
     })
-    .setTitle(`${emoji.ticket} Central de suporte`)
+    .setTitle(`${emoji.ticket} Abrir ticket`)
     .setDescription(
       [
-        `${emoji.lorittaMegafone} Precisa de ajuda? Abra um ticket e fale diretamente com a equipe.`,
+        "Selecione a categoria correta no menu abaixo. Um canal privado sera criado para voce e a equipe.",
         "",
-        DIVIDER,
-        `${QUESTION_EMOJI} **Suporte**\nD\u00favidas, orienta\u00e7\u00f5es e ajuda geral.`,
-        "",
-        `${POLICE_EMOJI} **Den\u00fancia**\nRelatos de quebra de regras ou situa\u00e7\u00f5es sens\u00edveis.`,
-        "",
-        `${emoji.bugHunterLed} **Reportar bug**\nFalhas, erros ou comportamentos estranhos no bot.`,
-        DIVIDER,
-        `${emoji.clock} Escolha uma categoria no menu abaixo e aguarde o atendimento.`,
+        `${QUESTION_EMOJI} **Suporte** - duvidas e orientacoes gerais.`,
+        `${POLICE_EMOJI} **Denuncia** - relatos que precisam de analise da equipe.`,
+        `${emoji.bugHunterLed} **Reportar bug** - erros do bot ou comandos quebrados.`,
       ].join("\n")
     )
+    .addFields(
+      {
+        name: "Boas praticas",
+        value: "Explique o assunto com detalhes, evite marcar a equipe repetidas vezes e abra apenas um ticket por assunto.",
+      },
+      {
+        name: "Privacidade",
+        value: "Somente voce, a equipe e o bot conseguem visualizar o canal criado.",
+      }
+    )
     .setThumbnail(guild.iconURL({ size: 256 }) || null)
-    .setFooter({ text: "Abra apenas um ticket por assunto." })
+    .setFooter({ text: "Atendimento organizado, direto e privado." })
     .setTimestamp();
 }
 
-// Menu select com os tipos de atendimento.
 function panelComponents() {
   return [
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("ticket|open")
-        .setPlaceholder("Selecione o tipo de atendimento")
+        .setPlaceholder("Selecione a categoria do atendimento")
         .addOptions(
           Object.entries(ticketTypes).map(([value, type]) => ({
             label: type.label,
@@ -201,19 +215,18 @@ async function publishTicketPanel(channel) {
   });
 }
 
-// Bot\u00f5es de gerenciamento dentro do canal privado.
 function ticketButtons(disabled = false) {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("ticket|claim")
-        .setLabel("Assumir Ticket")
+        .setLabel("Assumir")
         .setEmoji(parseEmoji(CLAIM_EMOJI))
         .setStyle(ButtonStyle.Primary)
         .setDisabled(disabled),
       new ButtonBuilder()
         .setCustomId("ticket|close")
-        .setLabel("Fechar Ticket")
+        .setLabel("Fechar")
         .setEmoji(parseEmoji(CLOSE_EMOJI))
         .setStyle(ButtonStyle.Danger)
         .setDisabled(disabled)
@@ -221,35 +234,31 @@ function ticketButtons(disabled = false) {
   ];
 }
 
-// Embed enviado dentro do ticket rec\u00e9m-criado.
 function ticketEmbed(interaction, ticket, type) {
   const openedAt = Math.floor(ticket.createdAt / 1000);
 
   return new EmbedBuilder()
     .setColor(type.color)
     .setAuthor({
-      name: `${interaction.user.username} \u2022 Ticket #${ticket.id}`,
+      name: `${interaction.user.username} - Ticket #${ticketNumber(ticket.id)}`,
       iconURL: interaction.user.displayAvatarURL({ size: 128 }),
     })
-    .setTitle(`${type.emoji} Atendimento iniciado`)
-    .setDescription(
-      [
-        `${emoji.correct} Seu ticket foi criado com sucesso.`,
-        `${emoji.clock} Descreva sua solicita\u00e7\u00e3o com o m\u00e1ximo de detalhes e aguarde a equipe.`,
-      ].join("\n")
-    )
+    .setTitle(`${type.emoji} ${type.label}`)
+    .setDescription(type.prompt)
     .addFields(
-      { name: `${type.emoji} Categoria`, value: `**${type.label}**`, inline: true },
-      { name: `${emoji.staffLed} Aberto por`, value: `${interaction.user}`, inline: true },
-      { name: `${emoji.lorittaMegafone} Respons\u00e1vel`, value: "Aguardando equipe", inline: true },
-      { name: `${emoji.clock} Aberto em`, value: `<t:${openedAt}:F>\n<t:${openedAt}:R>`, inline: false }
+      { name: "Solicitante", value: `${interaction.user}\n\`${interaction.user.id}\``, inline: true },
+      { name: "Responsavel", value: "Aguardando equipe", inline: true },
+      { name: "Aberto em", value: `<t:${openedAt}:F>\n<t:${openedAt}:R>`, inline: false },
+      {
+        name: "Como agilizar",
+        value: "Envie contexto, prints, links ou IDs relevantes. Quanto mais claro, mais rapido o atendimento.",
+      }
     )
     .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
-    .setFooter({ text: "Use os bot\u00f5es abaixo para assumir ou fechar o atendimento." })
+    .setFooter({ text: "Use os botoes abaixo para assumir ou fechar o atendimento." })
     .setTimestamp();
 }
 
-// Cria um canal privado e impede tickets duplicados do mesmo usu\u00e1rio.
 async function createTicket(interaction, typeKey) {
   await interaction.deferReply({ flags: 64 });
 
@@ -261,7 +270,7 @@ async function createTicket(interaction, typeKey) {
 
     if (channel) {
       return interaction.editReply({
-        content: `${emoji.clock} Voc\u00ea j\u00e1 possui um ticket aberto: ${channel}.`,
+        content: `${emoji.clock} Voce ja possui um ticket aberto: ${channel}.`,
       });
     }
 
@@ -271,7 +280,7 @@ async function createTicket(interaction, typeKey) {
   const category = await ensureSupportCategory(interaction.guild);
   const id = store.nextTicketId(interaction.guildId);
   const roles = staffRoles(interaction.guild);
-  const channelName = `ticket-${cleanName(interaction.user.username)}`;
+  const channelName = `ticket-${ticketNumber(id)}-${cleanName(interaction.user.username)}`;
 
   const permissionOverwrites = [
     {
@@ -295,6 +304,7 @@ async function createTicket(interaction, typeKey) {
         PermissionFlagsBits.SendMessages,
         PermissionFlagsBits.ManageChannels,
         PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.EmbedLinks,
       ],
     },
     ...roles.map(role => ({
@@ -312,7 +322,7 @@ async function createTicket(interaction, typeKey) {
     name: channelName,
     type: ChannelType.GuildText,
     parent: category.id,
-    topic: `Ticket #${id} | ${type.label} | ${interaction.user.tag} (${interaction.user.id})`,
+    topic: `Ticket #${ticketNumber(id)} | ${type.label} | ${interaction.user.tag} (${interaction.user.id})`,
     permissionOverwrites,
     reason: `Ticket aberto por ${interaction.user.tag}`,
   });
@@ -334,11 +344,12 @@ async function createTicket(interaction, typeKey) {
   });
 
   await interaction.editReply({
-    content: `${emoji.correct} Ticket criado com sucesso: ${channel}`,
+    content: `${emoji.correct} Ticket criado: ${channel}`,
   });
 
+  if (interaction.channel?.id === channel.id) return;
   await publishTicketPanel(interaction.channel).catch(error => {
-    console.error("Erro ao limpar/republicar painel de tickets:", error);
+    logger.warn("Nao foi possivel republicar painel de tickets", { error: error.message });
   });
 }
 
@@ -357,7 +368,7 @@ module.exports = {
 
     if (!isTicketStaff(interaction.member)) {
       return interaction.reply({
-        content: "Apenas a staff pode publicar o painel de tickets.",
+        content: "Apenas a equipe pode publicar o painel de tickets.",
         flags: 64,
       });
     }
@@ -385,7 +396,7 @@ module.exports = {
 
     if (!ticket || ticket.status !== "open") {
       return interaction.reply({
-        content: "Este canal n\u00e3o parece ser um ticket aberto.",
+        content: "Este canal nao parece ser um ticket aberto.",
         flags: 64,
       });
     }
@@ -393,7 +404,7 @@ module.exports = {
     if (action === "claim") {
       if (!isTicketStaff(interaction.member)) {
         return interaction.reply({
-          content: "Apenas a staff pode assumir tickets.",
+          content: "Apenas a equipe pode assumir tickets.",
           flags: 64,
         });
       }
@@ -406,8 +417,8 @@ module.exports = {
         embeds: [
           new EmbedBuilder()
             .setColor(0x57f287)
-            .setTitle(`${CLAIM_EMOJI} Ticket assumido`)
-            .setDescription(`${interaction.user} assumiu este atendimento e ser\u00e1 respons\u00e1vel pelo suporte.`)
+            .setTitle(`${CLAIM_EMOJI} Atendimento assumido`)
+            .setDescription(`${interaction.user} assumiu este ticket e sera responsavel pelo acompanhamento.`)
             .setTimestamp(),
         ],
       });
@@ -418,7 +429,7 @@ module.exports = {
 
       if (!isOwner && !isTicketStaff(interaction.member)) {
         return interaction.reply({
-          content: "Apenas o autor ou a staff podem fechar este ticket.",
+          content: "Apenas o autor ou a equipe podem fechar este ticket.",
           flags: 64,
         });
       }
@@ -433,11 +444,11 @@ module.exports = {
         embeds: [
           new EmbedBuilder()
             .setColor(0xed4245)
-            .setTitle(`${CLOSE_EMOJI} Ticket fechado`)
+            .setTitle(`${CLOSE_EMOJI} Ticket encerrado`)
             .setDescription(
               [
-                `Ticket fechado por ${interaction.user}.`,
-                `${emoji.clock} Este canal ser\u00e1 apagado em alguns segundos.`,
+                `Encerrado por ${interaction.user}.`,
+                `${emoji.clock} Este canal sera removido em 10 segundos.`,
               ].join("\n")
             )
             .setTimestamp(),
@@ -447,7 +458,7 @@ module.exports = {
 
       setTimeout(() => {
         interaction.channel.delete(`Ticket fechado por ${interaction.user.tag}`).catch(() => {});
-      }, 5000);
+      }, 10000);
     }
   },
 };

@@ -1,8 +1,8 @@
 const { SlashCommandBuilder } = require("discord.js");
 
 const { giveRep } = require("../utils/cookieEconomy");
+const emoji = require("../utils/emojis");
 const {
-  buildErrorEmbed,
   buildContext,
   buildRepEmbed,
   buildSimpleCooldownEmbed,
@@ -13,11 +13,11 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("rep")
-    .setDescription("Envie reputacao para outro usuario a cada 24 horas")
+    .setDescription("Envie reputação para outro usuário a cada 12 horas")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuario que vai receber reputacao")
+        .setDescription("Usuário que vai receber reputação")
         .setRequired(true)
     ),
 
@@ -26,7 +26,7 @@ module.exports = {
 
     if (target.bot) {
       return interaction.reply({
-        embeds: [buildErrorEmbed(interaction, "\u2764\uFE0F REP BLOQUEADO", "Voce nao pode enviar reputacao para bots.")],
+        content: `${emoji.crossed} | **Você não pode dar rep para bots.**`,
         flags: 64,
       });
     }
@@ -35,14 +35,14 @@ module.exports = {
 
     if (!result.ok && result.reason === "self") {
       return interaction.reply({
-        embeds: [buildErrorEmbed(interaction, "\u2764\uFE0F REP BLOQUEADO", "Voce nao pode dar rep para voce mesmo.")],
+        content: `${emoji.crossed} | **Você não pode dar rep para si mesmo.**`,
         flags: 64,
       });
     }
 
     if (!result.ok && result.reason === "cooldown") {
       return interaction.reply({
-        embeds: [buildSimpleCooldownEmbed(interaction, "\u2764\uFE0F REP EM COOLDOWN", result)],
+        embeds: [buildSimpleCooldownEmbed(interaction, "💌 Rep em cooldown", result)],
         flags: 64,
       });
     }

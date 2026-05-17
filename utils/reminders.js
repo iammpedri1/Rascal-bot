@@ -100,7 +100,7 @@ function buildScheduledEmbed(user, reminder) {
     .setDescription(
       [
         `${emoji.cookie} \u00bb **Lembrete** • ${timestamp(reminder.dueAt)}`,
-        `${emoji.channel} \u00bb **${reminder.message}** esta salvo.`,
+        `${emoji.channel} \u00bb **${reminder.message}** está salvo.`,
         `\u21B3 Eu vou te chamar quando chegar a hora. \uD83D\uDD14`,
         "",
         `${CLOCK_EMOJI} \u00bb Marcado para ${absoluteTimestamp(reminder.dueAt)}.`,
@@ -115,7 +115,7 @@ function buildReminderEmbed(reminder) {
     .setTitle(`${CLOCK_EMOJI} Seus Lembretes`)
     .setDescription(
       [
-        `${emoji.cookie} \u00bb **Lembrete** esta pronto! \uD83D\uDD14`,
+        `${emoji.cookie} \u00bb **Lembrete** está pronto! \uD83D\uDD14`,
         `\u21B3 ${reminder.message}`,
         "",
         `${CLOCK_EMOJI} \u00bb Criado ${timestamp(reminder.createdAt)}.`,

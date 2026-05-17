@@ -47,18 +47,18 @@ module.exports = {
         .addUserOption(option =>
           option
             .setName("usuario")
-            .setDescription("Usuario para consultar")
+            .setDescription("Usuário para consultar")
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName("pagar")
-        .setDescription("Envia cookies para outro usuario")
+        .setDescription("Envia cookies para outro usuário")
         .addUserOption(option =>
           option
             .setName("usuario")
-            .setDescription("Usuario que vai receber os cookies")
+            .setDescription("Usuário que vai receber os cookies")
             .setRequired(true)
         )
         .addIntegerOption(option =>
@@ -88,7 +88,7 @@ module.exports = {
         .setThumbnail(emojiImageUrl(emoji.cookie) || user.displayAvatarURL({ size: 256 }))
         .setDescription(
           [
-            `${emoji.online} \u00bb Usuario: <@${user.id}>`,
+            `${emoji.online} \u00bb Usuário: <@${user.id}>`,
             `${COOKIE_EMOJI} \u00bb Saldo atual: **${amount(profile.balance)} cookies**`,
           ].join("\n")
         )
@@ -122,7 +122,7 @@ module.exports = {
             inline: true,
           },
           {
-            name: `${emoji.booster} Taxa diaria`,
+            name: `${emoji.booster} Taxa diária`,
             value: "1% ao dia apenas sobre saldo acima de **500 cookies**. Limite: **250 cookies/dia**.",
             inline: false,
           }
@@ -143,14 +143,14 @@ module.exports = {
 
       if (!result.ok && result.reason === "self") {
         return interaction.reply({
-          embeds: [buildInlineErrorEmbed("Voce nao pode enviar cookies para voce mesmo!")],
+          embeds: [buildInlineErrorEmbed("Você não pode enviar cookies para você mesmo!")],
           flags: 64,
         });
       }
 
       if (!result.ok && result.reason === "balance") {
         return interaction.reply({
-          embeds: [buildInlineErrorEmbed(`Voce nao tem ${COOKIE_EMOJI} **${amount(quantity)} cookies** para enviar!`)],
+          embeds: [buildInlineErrorEmbed(`Você não tem ${COOKIE_EMOJI} **${amount(quantity)} cookies** para enviar!`)],
           flags: 64,
         });
       }

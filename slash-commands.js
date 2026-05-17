@@ -1,25 +1,22 @@
 require("dotenv").config();
-const { REST, Routes } = require("discord.js");
+
 const fs = require("fs");
 const path = require("path");
+const { REST, Routes } = require("discord.js");
 
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
-(async () => {
+async function main() {
   const commands = [];
-
-  const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
+  const commandsPath = path.join(__dirname, "commands");
+  const files = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
   for (const file of files) {
-    const cmd = require(`./commands/${file}`);
-
-    if (!cmd?.data) continue;
-
-    commands.push(cmd.data.toJSON());
+    const command = require(path.join(commandsPath, file));
+    if (command?.data) commands.push(command.data.toJSON());
   }
 
-  // DEBUG IMPORTANTE
-  console.log("📦 comandos finais:", commands.map(c => c.name));
+  console.log("Comandos finais:", commands.map(command => command.name));
 
   await rest.put(
     Routes.applicationGuildCommands(
@@ -29,5 +26,19 @@ const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
     { body: commands }
   );
 
-  console.log("✅ registrado limpo");
-})();
+  console.log("Comandos registrados com sucesso.");
+}
+
+main().catch(error => {
+  const status = error.status ? `Status ${error.status}` : "Erro";
+  const code = error.code ? ` codigo ${error.code}` : "";
+  const message = error.rawError?.message || error.message || "Falha desconhecida";
+
+  console.error(`${status}${code}: ${message}`);
+
+  if (error.status === 401) {
+    console.error("Confira DISCORD_TOKEN no .env. O token atual nao foi aceito pela API do Discord.");
+  }
+
+  process.exitCode = 1;
+});

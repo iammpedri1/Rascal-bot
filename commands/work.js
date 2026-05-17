@@ -14,7 +14,7 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("trabalhar")
-    .setDescription("Trabalhe na firma e tente ganhar cookies a cada 8 horas"),
+    .setDescription("Trabalhe na firma e tente ganhar cookies a cada 3 horas"),
 
   async execute(interaction) {
     const result = work(interaction.user, {

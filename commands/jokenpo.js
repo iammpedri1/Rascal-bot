@@ -5,16 +5,12 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  ChannelType,
 } = require("discord.js");
 
 const { canBet, settleDraw, settleDuel } = require("../utils/cookieEconomy");
-const emoji = require("../utils/emojis");
 
-const COOKIE_EMOJI = emoji.cookie;
-const ACCEPT_EMOJI = "<:greentick:1500896913627549969>";
-const DECLINE_EMOJI = "<:redtick:1500896911081603142>";
-const DRUM_EMOJI = emoji.party;
+const COOKIE_EMOJI = "\u{1F36A}";
+const DRUM_EMOJI = "\u{1F389}";
 
 const choices = {
   pedra: {
@@ -45,15 +41,22 @@ function getWinner(choiceA, choiceB) {
   return choices[choiceA].beats === choiceB ? "challenger" : "opponent";
 }
 
-function parseEmoji(emoji) {
-  const match = emoji?.match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
-  if (!match) return emoji;
+function isHouseBot(interaction, user) {
+  return user?.bot && user.id === interaction.client.user?.id;
+}
 
-  return {
-    name: match[1],
-    id: match[2],
-    animated: emoji.startsWith("<a:"),
-  };
+function balanceText(user, profile, houseId) {
+  return user.id === houseId ? "infinito" : profile.balance.toLocaleString("pt-BR");
+}
+
+function buildRematchRow(challengerId, opponentId, amount) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`jokenpo|rematch|${challengerId}|${opponentId}|${amount}`)
+      .setLabel("Revanche")
+      .setEmoji("🔁")
+      .setStyle(ButtonStyle.Secondary)
+  );
 }
 
 module.exports = {
@@ -61,11 +64,11 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("jokenpo")
-    .setDescription("Desafie alguem em um Jokenpo aleatorio valendo cookies")
+    .setDescription("Desafie alguém em um Jokenpo aleatório valendo cookies")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuario que voce quer desafiar")
+        .setDescription("Usuário que você quer desafiar")
         .setRequired(true)
     )
     .addIntegerOption(option =>
@@ -74,13 +77,6 @@ module.exports = {
         .setDescription("Quantidade de cookies para apostar")
         .setRequired(true)
         .setMinValue(1)
-    )
-    .addChannelOption(option =>
-      option
-        .setName("canal")
-        .setDescription("Canal onde o desafio sera enviado")
-        .setRequired(true)
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
     )
     .addIntegerOption(option =>
       option
@@ -98,15 +94,16 @@ module.exports = {
   async execute(interaction) {
     if (!interaction.guild) {
       return interaction.reply({
-        content: "Esse comando so pode ser usado em um servidor.",
+        content: "Esse comando só pode ser usado em um servidor.",
         flags: 64,
       });
     }
 
     const opponent = interaction.options.getUser("usuario");
     const amount = interaction.options.getInteger("aposta");
-    const channel = interaction.options.getChannel("canal");
     const duration = interaction.options.getInteger("duracao");
+    const houseBot = isHouseBot(interaction, opponent);
+    const houseId = interaction.client.user?.id;
     const economyContext = {
       guildId: interaction.guild.id,
       guildName: interaction.guild.name,
@@ -114,29 +111,78 @@ module.exports = {
 
     if (opponent.id === interaction.user.id) {
       return interaction.reply({
-        content: "Voce nao pode desafiar voce mesmo.",
+        content: "Você não pode desafiar você mesmo.",
         flags: 64,
       });
     }
 
-    if (opponent.bot) {
+    if (opponent.bot && !houseBot) {
       return interaction.reply({
-        content: "Escolha uma pessoa para jogar, nao um bot.",
-        flags: 64,
-      });
-    }
-
-    if (!channel?.isTextBased()) {
-      return interaction.reply({
-        content: "Escolha um canal de texto valido para enviar o desafio.",
+        content: "Escolha uma pessoa ou aposte contra mim.",
         flags: 64,
       });
     }
 
     if (!canBet(interaction.user, amount)) {
       return interaction.reply({
-        content: `Voce nao tem ${COOKIE_EMOJI} cookies suficientes para apostar ${amount}. Use /cookies saldo.`,
+        content: `Você não tem ${COOKIE_EMOJI} cookies suficientes para apostar ${amount}. Use /cookies saldo.`,
         flags: 64,
+      });
+    }
+
+    if (houseBot) {
+      const challengerChoice = randomChoice();
+      const opponentChoice = randomChoice();
+      const winner = getWinner(challengerChoice, opponentChoice);
+      const challengerPlay = choices[challengerChoice];
+      const opponentPlay = choices[opponentChoice];
+      const resultLines = [];
+
+      if (winner === "draw") {
+        const { profileA, profileB } = settleDraw(interaction.user, opponent, economyContext);
+
+        resultLines.push(
+          `${DRUM_EMOJI} | \uD83E\uDD1D | <@${interaction.user.id}> escolheu ${challengerPlay.emoji}, <@${opponent.id}> escolheu ${opponentPlay.emoji}`,
+          "Empate! Ninguém perdeu cookies.",
+          "",
+          `${COOKIE_EMOJI} | Aposta cancelada: **${amount.toLocaleString("pt-BR")} cookies**`,
+          `\uD83D\uDCCA | <@${interaction.user.id}> saldo: ${COOKIE_EMOJI} **${balanceText(interaction.user, profileA, houseId)}**`,
+          `\uD83D\uDCCA | <@${opponent.id}> saldo: ${COOKIE_EMOJI} **${balanceText(opponent, profileB, houseId)}**`
+        );
+      } else {
+        const winnerUser = winner === "challenger" ? interaction.user : opponent;
+        const loserUser = winner === "challenger" ? opponent : interaction.user;
+        const winnerChoice = winner === "challenger" ? challengerPlay : opponentPlay;
+        const loserChoice = winner === "challenger" ? opponentPlay : challengerPlay;
+        const { winner: winnerProfile, loser: loserProfile } = settleDuel(winnerUser, loserUser, amount, economyContext);
+
+        resultLines.push(
+          `${DRUM_EMOJI} | \uD83C\uDF89 | <@${winnerUser.id}> escolheu ${winnerChoice.emoji}, <@${loserUser.id}> escolheu ${loserChoice.emoji}`,
+          `Parabéns, <@${winnerUser.id}>, você ganhou!`,
+          "",
+          `\uD83C\uDFC6 | Vencedor: <@${winnerUser.id}>`,
+          `${COOKIE_EMOJI} | Prêmio: **${amount.toLocaleString("pt-BR")} cookies**`,
+          `\uD83D\uDCCA | <@${winnerUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(winnerUser, winnerProfile, houseId)}**`,
+          `\uD83D\uDCCA | <@${loserUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(loserUser, loserProfile, houseId)}**`
+        );
+      }
+
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(winner === "draw" ? 0xfaa61a : 0x57f287)
+            .setTitle(`${DRUM_EMOJI} Resultado do Jokenpo`)
+            .setDescription(
+              [
+                `\uD83E\uDEA8 \u2022 \uD83D\uDCC4 \u2022 \u2702\uFE0F`,
+                `<@${interaction.user.id}>: ${challengerPlay.emoji} **${challengerPlay.label}**`,
+                `<@${opponent.id}>: ${opponentPlay.emoji} **${opponentPlay.label}**`,
+                "",
+                ...resultLines,
+              ].join("\n")
+            ),
+        ],
+        components: [buildRematchRow(interaction.user.id, opponent.id, amount)],
       });
     }
 
@@ -146,12 +192,10 @@ module.exports = {
       new ButtonBuilder()
         .setCustomId(`jkp_accept|${interaction.user.id}|${opponent.id}|${amount}`)
         .setLabel("Aceitar")
-        .setEmoji(parseEmoji(ACCEPT_EMOJI))
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`jkp_decline|${interaction.user.id}|${opponent.id}|${amount}`)
         .setLabel("Recusar")
-        .setEmoji(parseEmoji(DECLINE_EMOJI))
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -160,34 +204,21 @@ module.exports = {
       .setTitle("Jokenpo")
       .setDescription(
         [
-          `${emoji.clap} <@${interaction.user.id}> desafiou <@${opponent.id}>.`,
+          `<@${interaction.user.id}> desafiou <@${opponent.id}>.`,
           `Aposta: ${COOKIE_EMOJI} **${amount} cookies**`,
-          `${emoji.clock} Expira: <t:${endsAt}:R>`,
+          `Expira: <t:${endsAt}:R>`,
           "",
           "\uD83E\uDEA8 Pedra  \u2022  \uD83D\uDCC4 Papel  \u2022  \u2702\uFE0F Tesoura",
           `<@${opponent.id}>, aceite para o bot sortear as jogadas.`,
         ].join("\n")
       );
 
-    await interaction.deferReply({ flags: 64 });
-
-    let message;
-
-    try {
-      message = await channel.send({
-        content: `<@${opponent.id}>`,
-        embeds: [inviteEmbed],
-        components: [row],
-      });
-    } catch {
-      return interaction.editReply({
-        content: "Nao consegui enviar o desafio nesse canal. Veja se tenho permissao para enviar mensagens la.",
-      });
-    }
-
-    await interaction.editReply({
-      content: `Desafio de Jokenpo enviado em ${channel}.`,
+    await interaction.reply({
+      content: `<@${opponent.id}>`,
+      embeds: [inviteEmbed],
+      components: [row],
     });
+    const message = await interaction.fetchReply();
 
     const collector = message.createMessageComponentCollector({
       componentType: ComponentType.Button,
@@ -209,7 +240,7 @@ module.exports = {
 
       if (buttonInteraction.user.id !== opponentId) {
         return buttonInteraction.reply({
-          content: "So quem foi desafiado pode aceitar ou recusar.",
+          content: "Só quem foi desafiado pode aceitar ou recusar.",
           flags: 64,
         });
       }
@@ -223,7 +254,7 @@ module.exports = {
           embeds: [
             new EmbedBuilder()
               .setColor(0xed4245)
-              .setTitle(`${emoji.sad} Jokenpo recusado`)
+              .setTitle("Jokenpo recusado")
               .setDescription(`<@${opponentId}> recusou a aposta de ${COOKIE_EMOJI} **${bet} cookies**.`),
           ],
           components: [],
@@ -239,8 +270,8 @@ module.exports = {
           embeds: [
             new EmbedBuilder()
               .setColor(0xed4245)
-              .setTitle(`${emoji.sad} Aposta cancelada`)
-              .setDescription("Um dos jogadores nao tem cookies suficientes para essa aposta."),
+              .setTitle("Aposta cancelada")
+              .setDescription("Um dos jogadores não tem cookies suficientes para essa aposta."),
           ],
           components: [],
         });
@@ -258,11 +289,11 @@ module.exports = {
 
         resultLines.push(
           `${DRUM_EMOJI} | \uD83E\uDD1D | <@${challengerId}> escolheu ${challengerPlay.emoji}, <@${opponentId}> escolheu ${opponentPlay.emoji}`,
-          `${emoji.sad} | Deu empate! Ninguem perdeu cookies.`,
+          `Empate! Ninguém perdeu cookies.`,
           "",
           `${COOKIE_EMOJI} | Aposta cancelada: **${bet} cookies**`,
-          `\uD83D\uDCCA | <@${challengerId}> saldo: ${COOKIE_EMOJI} **${profileA.balance}**`,
-          `\uD83D\uDCCA | <@${opponentId}> saldo: ${COOKIE_EMOJI} **${profileB.balance}**`
+          `\uD83D\uDCCA | <@${challengerId}> saldo: ${COOKIE_EMOJI} **${balanceText(interaction.user, profileA, houseId)}**`,
+          `\uD83D\uDCCA | <@${opponentId}> saldo: ${COOKIE_EMOJI} **${balanceText(opponent, profileB, houseId)}**`
         );
       } else {
         const winnerUser = winner === "challenger" ? interaction.user : opponent;
@@ -273,12 +304,12 @@ module.exports = {
 
         resultLines.push(
           `${DRUM_EMOJI} | \uD83C\uDF89 | <@${winnerUser.id}> escolheu ${winnerChoice.emoji}, <@${loserUser.id}> escolheu ${loserChoice.emoji}`,
-          `${emoji.clap} | Parabens, <@${winnerUser.id}>, voce ganhou!`,
+          `Parabéns, <@${winnerUser.id}>, você ganhou!`,
           "",
           `\uD83C\uDFC6 | Vencedor: <@${winnerUser.id}>`,
-          `${COOKIE_EMOJI} | Premio: **${bet} cookies**`,
-          `\uD83D\uDCCA | <@${winnerUser.id}> saldo: ${COOKIE_EMOJI} **${winnerProfile.balance}**`,
-          `\uD83D\uDCCA | <@${loserUser.id}> saldo: ${COOKIE_EMOJI} **${loserProfile.balance}**`
+          `${COOKIE_EMOJI} | Prêmio: **${bet} cookies**`,
+          `\uD83D\uDCCA | <@${winnerUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(winnerUser, winnerProfile, houseId)}**`,
+          `\uD83D\uDCCA | <@${loserUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(loserUser, loserProfile, houseId)}**`
         );
       }
 
@@ -290,7 +321,7 @@ module.exports = {
         embeds: [
           new EmbedBuilder()
             .setColor(winner === "draw" ? 0xfaa61a : 0x57f287)
-            .setTitle(`${emoji.party} Resultado do Jokenpo`)
+            .setTitle(`${DRUM_EMOJI} Resultado do Jokenpo`)
             .setDescription(
               [
                 `\uD83E\uDEA8 \u2022 \uD83D\uDCC4 \u2022 \u2702\uFE0F`,
@@ -301,7 +332,7 @@ module.exports = {
               ].join("\n")
             ),
         ],
-        components: [],
+        components: [buildRematchRow(challengerId, opponentId, bet)],
       });
     });
 
@@ -313,11 +344,42 @@ module.exports = {
         embeds: [
           new EmbedBuilder()
             .setColor(0x747f8d)
-            .setTitle(`${emoji.clock} Jokenpo expirado`)
+            .setTitle("Jokenpo expirado")
             .setDescription(`Tempo esgotado. A aposta de ${COOKIE_EMOJI} **${amount} cookies** foi cancelada.`),
         ],
         components: [],
       }).catch(() => {});
     });
+  },
+
+  async handleButton(interaction) {
+    const [command, action, challengerId, opponentId, amountRaw] = interaction.customId.split("|");
+    if (command !== "jokenpo" || action !== "rematch") return;
+
+    if (![challengerId, opponentId].includes(interaction.user.id)) {
+      return interaction.reply({
+        content: "Essa revanche pertence a outros jogadores.",
+        flags: 64,
+      });
+    }
+
+    const nextOpponentId = interaction.user.id === challengerId ? opponentId : challengerId;
+    const opponent = await interaction.client.users.fetch(nextOpponentId).catch(() => null);
+    const amount = Number(amountRaw);
+
+    if (!opponent || !Number.isFinite(amount) || amount < 1) {
+      return interaction.reply({
+        content: "Não consegui iniciar a revanche.",
+        flags: 64,
+      });
+    }
+
+    const rematchInteraction = Object.create(interaction);
+    rematchInteraction.options = {
+      getUser: () => opponent,
+      getInteger: name => (name === "duracao" ? 60 : amount),
+    };
+
+    return module.exports.execute(rematchInteraction);
   },
 };

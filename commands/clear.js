@@ -1,4 +1,9 @@
-const { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+const {
+  ChannelType,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+} = require("discord.js");
 
 const emoji = require("../utils/emojis");
 
@@ -9,22 +14,27 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("clear")
-    .setDescription("Limpa mensagens do canal")
+    .setDescription("Ferramentas de limpeza da staff")
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .addIntegerOption(option =>
-      option
-        .setName("quantidade")
-        .setDescription("Quantidade de mensagens para apagar, de 1 a 100")
-        .setRequired(true)
-        .setMinValue(1)
-        .setMaxValue(MAX_DELETE)
-    )
-    .addUserOption(option =>
-      option
-        .setName("usuario")
-        .setDescription("Apaga apenas mensagens desse usuário")
-        .setRequired(false)
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName("chat")
+        .setDescription("Apaga mensagens do canal atual")
+        .addIntegerOption(option =>
+          option
+            .setName("quantidade")
+            .setDescription("Quantidade de mensagens para apagar, de 1 a 100")
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(MAX_DELETE)
+        )
+        .addUserOption(option =>
+          option
+            .setName("usuario")
+            .setDescription("Apaga apenas mensagens desse usuário")
+            .setRequired(false)
+        )
     ),
 
   async execute(interaction) {
@@ -60,7 +70,7 @@ module.exports = {
     const amount = interaction.options.getInteger("quantidade", true);
     const target = interaction.options.getUser("usuario");
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.deferReply();
 
     try {
       const fetched = await interaction.channel.messages.fetch({ limit: MAX_DELETE });
@@ -69,7 +79,9 @@ module.exports = {
         : fetched.first(amount);
 
       if (!messages.length) {
-        return interaction.editReply(`${emoji.peepSad} Não encontrei mensagens para apagar.`);
+        const reply = await interaction.editReply(`${emoji.peepSad} Não encontrei mensagens para apagar.`);
+        setTimeout(() => reply.delete().catch(() => interaction.deleteReply().catch(() => {})), 5000);
+        return;
       }
 
       const deleted = await interaction.channel.bulkDelete(messages, true);
@@ -78,13 +90,15 @@ module.exports = {
       const skippedText = skipped
         ? `\n${emoji.sino} ${skipped} mensagem(ns) não puderam ser apagadas por serem antigas demais.`
         : "";
-
-      return interaction.editReply(
+      const reply = await interaction.editReply(
         `${emoji.correct} Apaguei **${deleted.size}** mensagem(ns)${targetText}.${skippedText}`
       );
+
+      setTimeout(() => reply.delete().catch(() => interaction.deleteReply().catch(() => {})), 5000);
     } catch (error) {
-      console.error("Erro no /clear:", error);
-      return interaction.editReply(`${emoji.crossed} Não consegui limpar as mensagens desse canal.`);
+      console.error("Erro no /clear chat:", error);
+      const reply = await interaction.editReply(`${emoji.crossed} Não consegui limpar as mensagens desse canal.`);
+      setTimeout(() => reply.delete().catch(() => interaction.deleteReply().catch(() => {})), 5000);
     }
   },
 };

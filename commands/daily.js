@@ -12,7 +12,7 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("daily")
-    .setDescription("Colete sua recompensa diaria de cookies a cada 24 horas"),
+    .setDescription("Colete sua recompensa diária de cookies a cada 24 horas"),
 
   async execute(interaction) {
     const result = claimDaily(interaction.user, buildContext(interaction));

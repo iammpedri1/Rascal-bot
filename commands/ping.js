@@ -1,45 +1,48 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require("discord.js");
+
+const emoji = require("../utils/emojis");
+
+function formatUptime(uptimeMs) {
+  const secondsTotal = Math.floor((uptimeMs ?? 0) / 1000);
+  const days = Math.floor(secondsTotal / 86400);
+  const hours = Math.floor((secondsTotal % 86400) / 3600);
+  const minutes = Math.floor((secondsTotal % 3600) / 60);
+  const seconds = secondsTotal % 60;
+  const parts = [];
+
+  if (days) parts.push(`${days} dia${days === 1 ? "" : "s"}`);
+  if (hours) parts.push(`${hours} hora${hours === 1 ? "" : "s"}`);
+  if (minutes) parts.push(`${minutes} minuto${minutes === 1 ? "" : "s"}`);
+  parts.push(`${seconds} segundo${seconds === 1 ? "" : "s"}`);
+
+  return parts.join(", ");
+}
 
 module.exports = {
-  category: 'system',
+  category: "system",
 
   data: new SlashCommandBuilder()
-    .setName('ping')
-    .setDescription('Mostra a latência do bot'),
+    .setName("ping")
+    .setDescription("Mostra a latência do bot"),
 
   async execute(interaction) {
     const client = interaction.client;
 
-    const sent = await interaction.reply({
-      content: '🏓 Calculando ping...',
-      fetchReply: true,
+    await interaction.reply({
+      content: `${emoji.clock} Calculando ping...`,
     });
 
+    const sent = await interaction.fetchReply();
     const latency = sent.createdTimestamp - interaction.createdTimestamp;
     const apiPing = Math.round(client.ws.ping);
-    const emoji = client.emojis.cache.get('1499799778328838286') || '💠';
-    const emoji2 = client.emojis.cache.get('1499799730585207038') || '🤖';
-    const emoji3 = client.emojis.cache.get('1499814035728629962') || '📅';
-
-    const uptimeMs = client.uptime ?? 0;
-    const secondsTotal = Math.floor(uptimeMs / 1000);
-    const months = Math.floor(secondsTotal / 2592000);
-    const days = Math.floor((secondsTotal % 2592000) / 86400);
-    const hours = Math.floor((secondsTotal % 86400) / 3600);
-    const minutes = Math.floor((secondsTotal % 3600) / 60);
-    const seconds = secondsTotal % 60;
-
-    const uptimeText = [];
-    if (months) uptimeText.push(`${months} month${months === 1 ? '' : 's'}`);
-    if (days) uptimeText.push(`${days} day${days === 1 ? '' : 's'}`);
-    if (hours) uptimeText.push(`${hours} hour${hours === 1 ? '' : 's'}`);
-    if (minutes) uptimeText.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
-    uptimeText.push(`${seconds} second${seconds === 1 ? '' : 's'}`);
-
-    const response = `🏓 **Pong!**\n${emoji3} | **Uptime:** ${uptimeText.join(', ')}\n${emoji2} | **API Ping:** \`${apiPing}ms\`\n${emoji} | **BOT Ping:** \`${latency}ms\``;
 
     await interaction.editReply({
-      content: response,
+      content: [
+        `${emoji.correct} **Pong!**`,
+        `${emoji.clock} **Online há:** ${formatUptime(client.uptime)}`,
+        `${emoji.online} **Ping da API:** \`${apiPing}ms\``,
+        `${emoji.pandaCientista} **Ping do bot:** \`${latency}ms\``,
+      ].join("\n"),
     });
   },
 };

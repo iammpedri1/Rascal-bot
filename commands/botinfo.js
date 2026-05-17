@@ -1,10 +1,13 @@
 const {
-  SlashCommandBuilder,
   EmbedBuilder,
+  SlashCommandBuilder,
 } = require("discord.js");
 
 const emoji = require("../utils/emojis");
 const pkg = require("../package.json");
+
+const ARTIST_EMOJI = process.env.ARTIST_EMOJI || "🎨";
+const ARTIST_NAME = process.env.BOT_ARTIST || "leobrissxx";
 
 function formatUptime(totalSeconds) {
   const days = Math.floor(totalSeconds / 86400);
@@ -21,9 +24,8 @@ function codeLine(value) {
 }
 
 function getHostLabel() {
-  if (process.env.RUNNING_IN_DOCKER === "true") return "Docker";
   if (process.env.SERVICE_HOST === "node-windows") return "node-windows";
-  return "Node.js Local";
+  return "Node.js local";
 }
 
 module.exports = {
@@ -46,29 +48,59 @@ module.exports = {
     const createdTimestamp = Math.floor(botUser.createdAt.getTime() / 1000);
     const uptimeStr = formatUptime(process.uptime());
     const memory = process.memoryUsage();
-    const memoryStr = `${(memory.heapUsed / 1024 / 1024).toFixed(2)} MB`;
+    const memoryStr = `${(memory.rss / 1024 / 1024).toFixed(1)} MB`;
+    const heapStr = `${(memory.heapUsed / 1024 / 1024).toFixed(1)} MB`;
     const nodeVersion = process.version.replace("v", "");
     const djsVersion = require("discord.js").version;
     const ping = client.ws.ping;
-    const host = getHostLabel();
+    const banner = botUser.bannerURL({ size: 2048, extension: "png" });
 
     const embed = new EmbedBuilder()
-      .setColor(0x2b2d31)
-      .setTitle(`${emoji.botFlag} INFORMACOES DO BOT`)
+      .setColor(0x5865f2)
+      .setAuthor({
+        name: `${botUser.username} - painel tecnico`,
+        iconURL: botUser.displayAvatarURL({ size: 128 }),
+      })
       .setThumbnail(botUser.displayAvatarURL({ size: 256 }))
       .setDescription(
         [
-          `${emoji.devs} \u00bb **Criador:** amillenium`,
-          `${emoji.js} \u00bb **Linguagem:** JavaScript & Node.js ${codeLine(nodeVersion)}`,
-          `${emoji.clock} \u00bb **Online:** ${codeLine(uptimeStr)}`,
-          `${emoji.online} \u00bb **Ping:** ${codeLine(`${ping}ms`)}`,
-          `${emoji.channel} \u00bb **Host:** ${codeLine(host)}`,
-          `${emoji.botFlag} \u00bb **Versao:** ${codeLine(pkg.version)}`,
-          "",
-          `${emoji.work} \u00bb **Runtime:** Discord.js ${codeLine(djsVersion)} \u2022 RAM ${codeLine(memoryStr)}`,
-          `${emoji.clock} \u00bb **Criado em:** <t:${createdTimestamp}:d> \u2022 <t:${createdTimestamp}:R>`,
+          `${emoji.devs} **Criador:** amillenium`,
+          `${ARTIST_EMOJI} **Artista colaborador:** ${ARTIST_NAME}`,
+          `${emoji.botFlag} **Versao:** ${codeLine(pkg.version)}`,
         ].join("\n")
-      );
+      )
+      .addFields(
+        {
+          name: "Runtime",
+          value: [
+            `${emoji.js} Node.js ${codeLine(nodeVersion)}`,
+            `${emoji.work} Discord.js ${codeLine(djsVersion)}`,
+            `${emoji.channel} Host ${codeLine(getHostLabel())}`,
+          ].join("\n"),
+          inline: true,
+        },
+        {
+          name: "Status",
+          value: [
+            `${emoji.online} Ping ${codeLine(`${ping}ms`)}`,
+            `${emoji.clock} Online ${codeLine(uptimeStr)}`,
+            `${emoji.clock} Criado <t:${createdTimestamp}:R>`,
+          ].join("\n"),
+          inline: true,
+        },
+        {
+          name: "Memoria",
+          value: [
+            `RSS ${codeLine(memoryStr)}`,
+            `Heap ${codeLine(heapStr)}`,
+          ].join("\n"),
+          inline: true,
+        }
+      )
+      .setFooter({ text: interaction.guild?.name || "Discord bot" })
+      .setTimestamp();
+
+    if (banner) embed.setImage(banner);
 
     return interaction.editReply({ embeds: [embed] });
   },

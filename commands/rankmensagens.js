@@ -1,4 +1,11 @@
-const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
+  EmbedBuilder,
+  SlashCommandBuilder,
+} = require("discord.js");
 
 const emoji = require("../utils/emojis");
 const { getWeeklyMessageLeaderboard } = require("../utils/xpSystem");
@@ -43,6 +50,28 @@ function buildRankEmbed(interaction, rank) {
     .setTimestamp();
 }
 
+function buildRefreshRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("rankmensagens_refresh")
+      .setLabel("Atualizar")
+      .setEmoji("\uD83D\uDD04")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+async function getLiveRank(interaction) {
+  const rank = getWeeklyMessageLeaderboard(interaction.guildId, RANK_LIMIT);
+
+  await Promise.all(rank.map(async profile => {
+    const member = interaction.guild.members.cache.get(profile.id) ||
+      await interaction.guild.members.fetch(profile.id).catch(() => null);
+    if (member?.user?.username) profile.username = member.user.username;
+  }));
+
+  return rank;
+}
+
 module.exports = {
   category: "utility",
 
@@ -58,10 +87,42 @@ module.exports = {
       });
     }
 
-    const rank = getWeeklyMessageLeaderboard(interaction.guildId, RANK_LIMIT);
+    const rank = await getLiveRank(interaction);
 
-    return interaction.reply({
+    await interaction.reply({
       embeds: [buildRankEmbed(interaction, rank)],
+      components: [buildRefreshRow()],
+    });
+    const response = await interaction.fetchReply();
+
+    const refreshMessage = async () => {
+      const nextRank = await getLiveRank(interaction);
+
+      return response.edit({
+        embeds: [buildRankEmbed(interaction, nextRank)],
+        components: [buildRefreshRow()],
+      });
+    };
+
+    const collector = response.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 120000,
+    });
+
+    collector.on("collect", async buttonInteraction => {
+      if (buttonInteraction.user.id !== interaction.user.id) {
+        return buttonInteraction.reply({
+          content: "Esse ranking pertence a outra pessoa.",
+          flags: 64,
+        });
+      }
+
+      await buttonInteraction.deferUpdate();
+      return refreshMessage();
+    });
+
+    collector.on("end", () => {
+      response.edit({ components: [] }).catch(() => {});
     });
   },
 };

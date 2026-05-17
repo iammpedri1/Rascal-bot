@@ -77,11 +77,31 @@ db.exec(`
     PRIMARY KEY (guild_id, user_id, week_key)
   );
 
+  CREATE TABLE IF NOT EXISTS rank_reward_claims (
+    guild_id TEXT NOT NULL,
+    week_key TEXT NOT NULL,
+    rank_type TEXT NOT NULL,
+    awarded_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, week_key, rank_type)
+  );
+
   CREATE TABLE IF NOT EXISTS afk_status (
     guild_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     reason TEXT NOT NULL,
     created_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS birthdays (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    day INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    last_sent_year INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
     PRIMARY KEY (guild_id, user_id)
   );
 
@@ -96,6 +116,12 @@ db.exec(`
     note TEXT,
     created_at INTEGER NOT NULL
   );
+
+  CREATE INDEX IF NOT EXISTS idx_usuarios_xp ON usuarios (xp DESC, messages_count DESC);
+  CREATE INDEX IF NOT EXISTS idx_message_weekly_rank ON message_weekly_stats (guild_id, week_key, messages DESC);
+  CREATE INDEX IF NOT EXISTS idx_voice_weekly_rank ON voice_weekly_stats (guild_id, week_key, seconds DESC);
+  CREATE INDEX IF NOT EXISTS idx_birthdays_due ON birthdays (day, month, last_sent_year);
+  CREATE INDEX IF NOT EXISTS idx_cooldowns_expira_em ON cooldowns (expira_em);
 `);
 
 const userColumns = db.prepare("PRAGMA table_info(usuarios)").all().map(column => column.name);
@@ -191,7 +217,7 @@ function migrateLegacyCookies() {
 
         const cooldowns = [
           ["daily", integer(profile.lastDailyAt) + 24 * 60 * 60 * 1000],
-          ["trabalhar", integer(profile.lastWorkAt) + 8 * 60 * 60 * 1000],
+          ["trabalhar", integer(profile.lastWorkAt) + 3 * 60 * 60 * 1000],
           ["roubar", integer(profile.lastRobAt) + 6 * 60 * 60 * 1000],
           ["bonus", integer(profile.lastBonusAt) + 7 * 24 * 60 * 60 * 1000],
           ["rep", integer(profile.lastRepAt) + 24 * 60 * 60 * 1000],

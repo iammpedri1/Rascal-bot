@@ -55,11 +55,11 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("roubar")
-    .setDescription("Tente roubar cookies de outro usuario a cada 1 hora")
+    .setDescription("Tente roubar cookies de outro usuário a cada 1 hora")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuario que voce quer roubar")
+        .setDescription("Usuário que você quer roubar")
         .setRequired(true)
     ),
 
@@ -67,17 +67,17 @@ module.exports = {
     const target = interaction.options.getUser("usuario");
 
     if (target.bot) {
-      return interaction.reply(blocked("Voce nao pode roubar bots!"));
+      return interaction.reply(blocked("Você não pode roubar bots!"));
     }
 
     const result = rob(interaction.user, target, buildContext(interaction));
 
     if (!result.ok && result.reason === "self") {
-      return interaction.reply(blocked("Voce nao pode roubar voce mesmo!"));
+      return interaction.reply(blocked("Você não pode roubar você mesmo!"));
     }
 
     if (!result.ok && result.reason === "target_balance") {
-      return interaction.reply(blocked("O membro escolhido nao tem saldo suficiente para ser roubado!"));
+      return interaction.reply(blocked("O membro escolhido não tem saldo suficiente para ser roubado!"));
     }
 
     if (!result.ok && result.reason === "cooldown") {
@@ -103,11 +103,11 @@ module.exports = {
     }
 
     if (!result.ok && result.reason === "target_balance") {
-      return interaction.reply(blocked("O membro escolhido nao tem saldo suficiente para ser roubado!"));
+      return interaction.reply(blocked("O membro escolhido não tem saldo suficiente para ser roubado!"));
     }
 
     if (!result.ok) {
-      return interaction.reply(blocked("Nao foi possivel roubar agora!"));
+      return interaction.reply(blocked("Não foi possível roubar agora!"));
     }
 
     return interaction.reply(replyPayload(interaction, target, result));

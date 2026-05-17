@@ -9,6 +9,7 @@ const GIFT_EMOJI = emoji.gift || "\uD83C\uDF81";
 const CLOCK_EMOJI = emoji.clock || "\u23F0";
 const ERROR_EMOJI = emoji.redTick || "\u274C";
 const HAPPY_EMOJI = "\uD83D\uDE42";
+const REP_EMOJI = "\uD83D\uDC8C";
 const SAD_EMOJI = emoji.peepSad || "\u2639\uFE0F";
 const CALM_EMOJI = "\uD83D\uDECC";
 const BELL_EMOJI = emoji.sino || "\uD83D\uDD14";
@@ -40,14 +41,40 @@ const dailyThumbnails = [
 ].filter(Boolean);
 
 const workThumbnails = [
-  emojiImageUrl(emoji.peepSad),
   emojiImageUrl(emoji.work),
   emojiImageUrl(emoji.party),
+  emojiImageUrl(emoji.cookie),
 ].filter(Boolean);
 
 const sadThumbnails = [
   emojiImageUrl(emoji.peepSad),
 ].filter(Boolean);
+
+// ─── GIFs aleatórios para o /roubar ───────────────────────────────────────────
+
+// Roubo bem-sucedido — ladrão escapando, comemorando
+const ROB_SUCCESS_GIFS = [
+  "https://media.tenor.com/vPyMBbLAiW0AAAAM/monkey-puppet.gif",
+  "https://media.tenor.com/4qnszGNryp4AAAAM/i-steal-thief.gif",
+  "https://media.tenor.com/2YUoRpg5XWQAAAAM/stealing-minions.gif",
+  "https://media.tenor.com/oZ9JYfDFRNMAAAAM/money-heist.gif",
+  "https://media.tenor.com/rqDjFHGSSFwAAAAM/running-away.gif",
+  "https://media.tenor.com/c0CaLAqHDQsAAAAM/escape-run.gif",
+  "https://media.tenor.com/X_9BKz6Z0DIAAAAM/thief-running.gif",
+];
+
+// Roubo fracassado — sendo pego, preso, punido
+const ROB_FAIL_GIFS = [
+  "https://media.tenor.com/h7YBZQB6P-IAAAAM/caught-caught-red-handed.gif",
+  "https://media.tenor.com/Oxy3XORQAZEAAAAM/pepe-police.gif",
+  "https://media.tenor.com/QpCtyMxTFeoAAAAM/police-arrest.gif",
+  "https://media.tenor.com/rnSJJB7IBOUAAAAM/caught-you.gif",
+  "https://media.tenor.com/iJKBMtUDYzsAAAAM/busted-caught.gif",
+  "https://media.tenor.com/r0CerORUfksAAAAM/arrested-handcuffs.gif",
+  "https://media.tenor.com/0_cOFi87HXMAAAAM/jail-prison.gif",
+];
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 const dailyTips = [
   "Ganhe cookies ao votar no servidor.",
@@ -131,9 +158,9 @@ function buildDailyEmbed(source, result) {
     .setThumbnail(thumbnailFor(source, dailyThumbnails))
     .setDescription(
       [
-        `${COOKIE_EMOJI} \u00bb Hoje voce coletou **${amount(result.reward)} cookies!**`,
+        `${COOKIE_EMOJI} \u00bb Hoje você coletou **${amount(result.reward)} cookies!**`,
         "",
-        `${COOKIE_EMOJI} \u00bb Agora voce possui: **${amount(result.profile.balance)} cookies.**`,
+        `${COOKIE_EMOJI} \u00bb Agora você possui: **${amount(result.profile.balance)} cookies.**`,
         "",
         `${HAPPY_EMOJI} \u00bb **Dica:** ${pick(dailyTips)}`,
       ].join("\n")
@@ -224,12 +251,13 @@ function buildRobEmbed(source, target, result) {
   if (result.success) {
     return new EmbedBuilder()
       .setColor(0xa855f7)
-      .setThumbnail(thumbnailFor(source, availableThumbnails))
+      // GIF aleatório de ladrão escapando
+      .setThumbnail(pick(ROB_SUCCESS_GIFS))
       .setDescription(
         [
-          `\uD83C\uDFAD \u00bb <@${user.id}> **roubou ${amount(result.stolen)} cookies** de <@${target.id}>!`,
+          `🎭 » <@${user.id}> **roubou ${amount(result.stolen)} cookies** de <@${target.id}>!`,
           "",
-          `\uD83D\uDE08 \u00bb **Vai deixar isso acontecer? Roube ele(a) também e se vingue!**`,
+          `😈 » **Vai deixar isso acontecer? Roube ele(a) também e se vingue!**`,
           "",
           `Hoje às ${currentTimeLabel()}`,
         ].join("\n")
@@ -238,12 +266,13 @@ function buildRobEmbed(source, target, result) {
 
   return new EmbedBuilder()
     .setColor(ERROR_COLOR)
-    .setThumbnail(thumbnailFor(source, sadThumbnails))
+    // GIF aleatório de ladrão sendo pego
+    .setThumbnail(pick(ROB_FAIL_GIFS))
     .setDescription(
       [
-        `${SAD_EMOJI} \u00bb <@${user.id}> tentou roubar <@${target.id}>, mas foi pego(a)!`,
+        `${SAD_EMOJI} » <@${user.id}> tentou roubar <@${target.id}>, mas foi pego(a)!`,
         "",
-        `${COOKIE_EMOJI} \u00bb Perdeu **${amount(result.penalty)} cookies** como penalidade.`,
+        `${COOKIE_EMOJI} » Perdeu **${amount(result.penalty)} cookies** como penalidade.`,
         "",
         `Hoje às ${currentTimeLabel()}`,
       ].join("\n")
@@ -258,13 +287,13 @@ function buildRifaEmbed(source, result) {
     .setDescription(
       result.won
         ? [
-          `${COOKIE_EMOJI} \u00bb Voce apostou **${amount(result.amount)} cookies** e ganhou o dobro!`,
+          `${COOKIE_EMOJI} \u00bb Você apostou **${amount(result.amount)} cookies** e ganhou o dobro!`,
           `${emoji.party} \u00bb Premio recebido: **${amount(result.prize)} cookies.**`,
-          `${COOKIE_EMOJI} \u00bb Agora voce possui: **${amount(result.profile.balance)} cookies.**`,
+          `${COOKIE_EMOJI} \u00bb Agora você possui: **${amount(result.profile.balance)} cookies.**`,
         ].join("\n")
         : [
-          `${SAD_EMOJI} \u00bb Voce apostou **${amount(result.amount)} cookies** e perdeu tudo.`,
-          `${COOKIE_EMOJI} \u00bb Agora voce possui: **${amount(result.profile.balance)} cookies.**`,
+          `${SAD_EMOJI} \u00bb Você apostou **${amount(result.amount)} cookies** e perdeu tudo.`,
+          `${COOKIE_EMOJI} \u00bb Agora você possui: **${amount(result.profile.balance)} cookies.**`,
         ].join("\n")
     );
 
@@ -274,13 +303,15 @@ function buildRifaEmbed(source, result) {
 function buildRepEmbed(source, target, result) {
   const user = sourceUser(source);
   const embed = new EmbedBuilder()
-    .setColor(THEME_COLOR)
-    .setTitle("\u2764\uFE0F REPUTACAO ENVIADA")
+    .setColor(0xff6b9a)
+    .setTitle(`${REP_EMOJI} Reputação enviada`)
     .setThumbnail(target.displayAvatarURL({ size: 256 }))
     .setDescription(
       [
-        `${HAPPY_EMOJI} \u00bb <@${user.id}> deu reputacao para <@${target.id}>.`,
-        `${emoji.clap} \u00bb ${target.username} agora possui **${amount(result.to.repsReceived)} reps**.`,
+        `${emoji.correct} \u00bb <@${user.id}> enviou reputação para <@${target.id}>.`,
+        `${emoji.clap} \u00bb <@${target.id}> agora possui **${amount(result.to.repsReceived)} rep(s)**.`,
+        "",
+        `${CLOCK_EMOJI} \u00bb Você poderá enviar outro rep <t:${Math.floor(result.nextAt / 1000)}:R>.`,
       ].join("\n")
     );
 
@@ -311,12 +342,25 @@ function buildInlineCooldownEmbed(result, commandLabel = "esse comando") {
 }
 
 function buildSimpleCooldownEmbed(source, title, result) {
-  return buildInlineCooldownEmbed(result);
+  const embed = new EmbedBuilder()
+    .setColor(ERROR_COLOR)
+    .setTitle(title || `${CLOCK_EMOJI} Aguarde um pouco`)
+    .setThumbnail(thumbnailFor(source, sadThumbnails))
+    .setDescription(
+      [
+        `${CLOCK_EMOJI} \u00bb Você já enviou reputação recentemente.`,
+        `\u21B3 Tente novamente em **${timeLeft(result.remaining)}**.`,
+        "",
+        `${REP_EMOJI} \u00bb Próximo rep liberado <t:${Math.floor(result.nextAt / 1000)}:R>.`,
+      ].join("\n")
+    );
+
+  return finish(embed, source);
 }
 
 function cooldownLine(icon, label, command, ready, remaining) {
   if (ready) {
-    return `${icon} \u00bb **${label}** esta pronto! ${BELL_EMOJI}\n\u21B3 Use \`/${command}\``;
+    return `${icon} \u00bb **${label}** está pronto! ${BELL_EMOJI}\n\u21B3 Use \`/${command}\``;
   }
 
   return `${icon} \u00bb **${label}** \u2022 ha ${timeLeft(remaining)}`;
