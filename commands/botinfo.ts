@@ -2,9 +2,10 @@ const {
   EmbedBuilder,
   SlashCommandBuilder,
 } = require("discord.js");
+const path = require("path");
 
 const emoji = require("../utils/emojis");
-const pkg = require("../package.json");
+const pkg = require(path.join(process.cwd(), "package.json"));
 
 const ARTIST_EMOJI = process.env.ARTIST_EMOJI || "🎨";
 const ARTIST_NAME = process.env.BOT_ARTIST || "leobrissxx";
