@@ -1,5 +1,6 @@
 const { execFileSync } = require("child_process");
 const fs = require("fs");
+const path = require("path");
 
 const forbiddenPaths = [
   /^\.env(?:\..*)?$/,
@@ -16,9 +17,33 @@ const secretPatterns = [
 ];
 
 function trackedFiles() {
-  return execFileSync("git", ["ls-files"], { encoding: "utf8" })
-    .split(/\r?\n/)
-    .filter(Boolean);
+  try {
+    return execFileSync("git", ["ls-files"], { encoding: "utf8" })
+      .split(/\r?\n/)
+      .filter(Boolean);
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+
+    console.warn("git nao esta disponivel; executando verificacao em todos os arquivos do projeto.");
+    const files = [];
+    const ignoredDirectories = new Set([".git", "node_modules"]);
+
+    function walk(directory) {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue;
+
+        const fullPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else {
+          files.push(path.relative(process.cwd(), fullPath));
+        }
+      }
+    }
+
+    walk(process.cwd());
+    return files;
+  }
 }
 
 function isForbiddenPath(file) {

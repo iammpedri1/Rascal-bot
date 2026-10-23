@@ -1,7 +1,9 @@
 const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+const { ACCESS_LEVELS } = require("../utils/permissions");
 
 module.exports = {
   category: "staff",
+  access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageChannels },
 
   data: new SlashCommandBuilder()
     .setName("slowmode")

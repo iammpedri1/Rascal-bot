@@ -6,11 +6,13 @@ const {
 } = require("discord.js");
 
 const emoji = require("../utils/emojis");
+const { ACCESS_LEVELS } = require("../utils/permissions");
 
 const MAX_DELETE = 100;
 
 module.exports = {
   category: "staff",
+  access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageMessages },
 
   data: new SlashCommandBuilder()
     .setName("clear")

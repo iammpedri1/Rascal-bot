@@ -1,8 +1,8 @@
-const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
 const emoji = require("./emojis");
+const { readJson, writeJson } = require("./jsonStore");
 
 const dataDir = path.join(__dirname, "../data");
 const dataFile = path.join(dataDir, "reminders.json");
@@ -14,31 +14,14 @@ const DELIVERY_LOCK_MS = 2 * 60 * 1000;
 let schedulerStarted = false;
 let deliveryRunning = false;
 
-function ensureStore() {
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
-  if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, JSON.stringify({ reminders: [] }, null, 2));
-  }
-}
-
 function readStore() {
-  ensureStore();
-
-  try {
-    const store = JSON.parse(fs.readFileSync(dataFile, "utf8"));
-    return {
-      reminders: Array.isArray(store.reminders) ? store.reminders : [],
-    };
-  } catch {
-    return { reminders: [] };
-  }
+  const store = readJson(dataFile, { reminders: [] }, value =>
+    value && typeof value === "object" && !Array.isArray(value)
+  );
+  return { reminders: Array.isArray(store.reminders) ? store.reminders : [] };
 }
 
 function writeStore(store) {
-  ensureStore();
   const reminders = Array.isArray(store.reminders) ? store.reminders : [];
   const active = reminders.filter(reminder => !reminder.deliveredAt);
   const done = reminders
@@ -46,7 +29,7 @@ function writeStore(store) {
     .sort((a, b) => b.deliveredAt - a.deliveredAt)
     .slice(0, MAX_DONE_REMINDERS);
 
-  fs.writeFileSync(dataFile, JSON.stringify({ reminders: [...active, ...done] }, null, 2));
+  writeJson(dataFile, { reminders: [...active, ...done] });
 }
 
 function timestamp(ms) {

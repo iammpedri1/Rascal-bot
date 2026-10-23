@@ -1,6 +1,9 @@
+// @ts-nocheck
 const fs = require("fs");
 const path = require("path");
 const Database = require("better-sqlite3");
+
+const logger = require("./logger");
 
 const dataDir = path.join(__dirname, "../data");
 const dbFile = path.join(dataDir, "database.sqlite");
@@ -231,7 +234,10 @@ function migrateLegacyCookies() {
 
     migrate();
     fs.writeFileSync(marker, String(Date.now()));
-  } catch {
+  } catch (error) {
+    logger.error("Falha ao migrar cookies legados para SQLite", error, {
+      legacyCookiesFile,
+    });
     fs.writeFileSync(marker, String(Date.now()));
   }
 }

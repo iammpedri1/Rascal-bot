@@ -11,6 +11,7 @@ const {
   enableRaidMode,
   isRaidModeEnabled,
 } = require("../utils/raidMode");
+const { ACCESS_LEVELS } = require("../utils/permissions");
 
 const LOG_CHANNEL_ID = process.env.RAIDMODE_LOG_CHANNEL_ID || process.env.AUTOMOD_LOG_CHANNEL_ID || process.env.LOG_CHANNEL_ID || "";
 const STAFF_ROLE_IDS = String(process.env.STAFF_ROLE_IDS || "")
@@ -58,6 +59,7 @@ async function setVerificationLevel(guild, level, reason) {
 
 module.exports = {
   category: "staff",
+  access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageGuild },
 
   data: new SlashCommandBuilder()
     .setName("raidmode")

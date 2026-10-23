@@ -1,3 +1,4 @@
+// @ts-nocheck
 const db = require("./db");
 const cooldowns = require("./cooldowns");
 const { addUserXp } = require("./xpSystem");

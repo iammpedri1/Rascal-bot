@@ -1,3 +1,4 @@
+// @ts-nocheck
 const db = require("./db");
 
 const activeSessions = new Map();

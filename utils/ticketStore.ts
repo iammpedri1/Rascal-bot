@@ -1,30 +1,15 @@
-const fs = require("fs");
-const path = require("path");
+const { readJson, writeJson } = require("./jsonStore");
 
-const DATA_DIR = path.join(__dirname, "../data");
-const DATA_FILE = path.join(DATA_DIR, "tickets.json");
-
-function ensureFile() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({ guilds: {} }, null, 2));
-  }
-}
+const DATA_FILE = require("path").join(__dirname, "../data/tickets.json");
 
 function readData() {
-  ensureFile();
-
-  try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  } catch {
-    return { guilds: {} };
-  }
+  return readJson(DATA_FILE, { guilds: {} }, value =>
+    value && typeof value === "object" && !Array.isArray(value)
+  );
 }
 
 function writeData(data) {
-  ensureFile();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  writeJson(DATA_FILE, data);
 }
 
 function getGuild(data, guildId) {

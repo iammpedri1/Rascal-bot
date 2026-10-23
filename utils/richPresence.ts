@@ -1,3 +1,4 @@
+// @ts-nocheck
 const { ActivityType } = require("discord.js");
 
 const logger = require("./logger");

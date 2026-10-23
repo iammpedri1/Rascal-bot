@@ -1,13 +1,15 @@
 {
   "name": "discord-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node index.js",
-    "register": "node slash-commands.js",
-    "security:check": "node scripts/security-check.js",
-    "service:install": "node scripts/install-service.js",
-    "service:uninstall": "node scripts/uninstall-service.js"
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "register": "npm run build && node dist/slash-commands.js",
+    "test": "npm run build && node --test dist/test",
+    "security:check": "npm run build && node dist/scripts/security-check.js",
+    "service:install": "npm run build && node dist/scripts/install-service.js",
+    "service:uninstall": "node dist/scripts/uninstall-service.js"
   },
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
@@ -20,6 +22,8 @@
     "opusscript": "^0.0.8"
   },
   "devDependencies": {
-    "node-windows": "^1.0.0-beta.8"
+    "@types/node": "^24.10.0",
+    "node-windows": "^1.0.0-beta.8",
+    "typescript": "^5.9.3"
   }
 }

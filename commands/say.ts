@@ -1,9 +1,11 @@
 const { MessageFlags, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+const { ACCESS_LEVELS } = require("../utils/permissions");
 
 const cooldowns = new Map();
 
 module.exports = {
   category: "staff",
+  access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageMessages },
 
   data: new SlashCommandBuilder()
     .setName("say")

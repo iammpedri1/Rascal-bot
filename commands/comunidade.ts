@@ -10,6 +10,7 @@ const {
   parseLevelRoleRewards,
   syncGuildLevelRoles,
 } = require("../utils/communityManager");
+const { ACCESS_LEVELS } = require("../utils/permissions");
 
 function assertManager(interaction) {
   return interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ||
@@ -28,6 +29,7 @@ function rewardsText(guild) {
 
 module.exports = {
   category: "staff",
+  access: { level: ACCESS_LEVELS.ADMINISTRATOR, permission: PermissionFlagsBits.ManageGuild },
 
   data: new SlashCommandBuilder()
     .setName("comunidade")

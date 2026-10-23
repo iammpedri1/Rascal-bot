@@ -12,6 +12,7 @@ const {
 const emoji = require("../utils/emojis");
 const store = require("../utils/ticketStore");
 const logger = require("../utils/logger");
+const { ACCESS_LEVELS } = require("../utils/permissions");
 
 const SUPPORT_CATEGORY_NAME = "Atendimento";
 const PANEL_CHANNEL_NAME = "tickets";
@@ -355,6 +356,7 @@ async function createTicket(interaction, typeKey) {
 
 module.exports = {
   category: "staff",
+  access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageChannels },
 
   data: new SlashCommandBuilder()
     .setName("ticket")

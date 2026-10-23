@@ -1,5 +1,37 @@
 const logger = require("../utils/logger");
 const { buildErrorEmbed } = require("../utils/cookieViews");
+const { hasAccess } = require("../utils/permissions");
+
+async function reportInteractionError(interaction, context, error) {
+  logger.error(context, error, {
+    user: interaction.user?.id,
+    guild: interaction.guildId,
+    customId: interaction.customId,
+  });
+
+  const payload = {
+    embeds: [buildErrorEmbed(
+      interaction,
+      "\u274C Erro ao executar ação",
+      "Não foi possível concluir essa ação. Tente novamente em alguns instantes."
+    )],
+    flags: 64,
+  };
+
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp(payload);
+    } else {
+      await interaction.reply(payload);
+    }
+  } catch (responseError) {
+    logger.error("Falha ao responder erro de interação", responseError, {
+      user: interaction.user?.id,
+      guild: interaction.guildId,
+      customId: interaction.customId,
+    });
+  }
+}
 
 module.exports = {
   name: "interactionCreate",
@@ -10,6 +42,13 @@ module.exports = {
       if (!command) return;
 
       try {
+        if (command.access && !(await hasAccess(interaction, command.access))) {
+          return interaction.reply({
+            content: "Você não tem permissão para usar este comando.",
+            flags: 64,
+          });
+        }
+
         logger.debug("Comando usado", {
           command: interaction.commandName,
           user: interaction.user.id,
@@ -23,20 +62,11 @@ module.exports = {
           guild: interaction.guildId,
         });
 
-        const payload = {
-          embeds: [buildErrorEmbed(
-            interaction,
-            "\u274C Erro ao executar comando",
-            "Algo deu errado ao executar esse comando. Tente novamente em alguns instantes."
-          )],
-          flags: 64,
-        };
-
-        if (interaction.deferred || interaction.replied) {
-          return interaction.followUp(payload).catch(() => {});
-        }
-
-        return interaction.reply(payload).catch(() => {});
+        return reportInteractionError(
+          interaction,
+          `Erro ao executar /${interaction.commandName}`,
+          err
+        );
       }
     }
 
@@ -49,10 +79,7 @@ module.exports = {
       try {
         await command.handleButton(interaction, client);
       } catch (err) {
-        logger.error(`Erro ao processar botao ${interaction.customId}`, err, {
-          user: interaction.user.id,
-          guild: interaction.guildId,
-        });
+        await reportInteractionError(interaction, `Erro ao processar botao ${interaction.customId}`, err);
       }
     }
 
@@ -65,10 +92,7 @@ module.exports = {
       try {
         await command.handleSelect(interaction, client);
       } catch (err) {
-        logger.error(`Erro ao processar menu ${interaction.customId}`, err, {
-          user: interaction.user.id,
-          guild: interaction.guildId,
-        });
+        await reportInteractionError(interaction, `Erro ao processar menu ${interaction.customId}`, err);
       }
     }
 
@@ -81,10 +105,7 @@ module.exports = {
       try {
         await command.handleModal(interaction, client);
       } catch (err) {
-        logger.error(`Erro ao processar modal ${interaction.customId}`, err, {
-          user: interaction.user.id,
-          guild: interaction.guildId,
-        });
+        await reportInteractionError(interaction, `Erro ao processar modal ${interaction.customId}`, err);
       }
     }
   },
