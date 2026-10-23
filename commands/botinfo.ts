@@ -8,7 +8,9 @@ const emoji = require("../utils/emojis");
 const pkg = require(path.join(process.cwd(), "package.json"));
 
 const ARTIST_EMOJI = process.env.ARTIST_EMOJI || "🎨";
+const CREATOR_NAME = process.env.BOT_CREATOR || "amillenium";
 const ARTIST_NAME = process.env.BOT_ARTIST || "leobrissxx";
+const HONORABLE_MENTION = process.env.BOT_HONORABLE_MENTION || "Rascal Team";
 
 function formatUptime(totalSeconds) {
   const days = Math.floor(totalSeconds / 86400);
@@ -29,6 +31,13 @@ function getHostLabel() {
   return "Node.js local";
 }
 
+function formatCreatedAt(timestamp) {
+  return new Date(timestamp).toLocaleString("pt-BR", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+}
+
 module.exports = {
   category: "info",
 
@@ -46,62 +55,62 @@ module.exports = {
 
     const client = interaction.client;
     const botUser = await client.user.fetch({ force: true });
-    const createdTimestamp = Math.floor(botUser.createdAt.getTime() / 1000);
-    const uptimeStr = formatUptime(process.uptime());
-    const memory = process.memoryUsage();
-    const memoryStr = `${(memory.rss / 1024 / 1024).toFixed(1)} MB`;
-    const heapStr = `${(memory.heapUsed / 1024 / 1024).toFixed(1)} MB`;
-    const nodeVersion = process.version.replace("v", "");
-    const djsVersion = require("discord.js").version;
+    const createdTimestamp = Math.floor(botUser.createdTimestamp / 1000);
+    const uptimeSeconds = Math.floor((client.uptime ?? process.uptime() * 1000) / 1000);
+    const uptimeStr = formatUptime(uptimeSeconds);
     const ping = client.ws.ping;
-    const banner = botUser.bannerURL({ size: 2048, extension: "png" });
 
     const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setAuthor({
-        name: `${botUser.username} - painel tecnico`,
-        iconURL: botUser.displayAvatarURL({ size: 128 }),
-      })
+      .setColor(0xff8a3d)
       .setThumbnail(botUser.displayAvatarURL({ size: 256 }))
-      .setDescription(
-        [
-          `${emoji.devs} **Criador:** amillenium`,
-          `${ARTIST_EMOJI} **Artista colaborador:** ${ARTIST_NAME}`,
-          `${emoji.botFlag} **Versao:** ${codeLine(pkg.version)}`,
-        ].join("\n")
-      )
       .addFields(
         {
-          name: "Runtime",
-          value: [
-            `${emoji.js} Node.js ${codeLine(nodeVersion)}`,
-            `${emoji.work} Discord.js ${codeLine(djsVersion)}`,
-            `${emoji.channel} Host ${codeLine(getHostLabel())}`,
-          ].join("\n"),
+          name: `${emoji.devs} Criadores`,
+          value: `**${CREATOR_NAME}**`,
           inline: true,
         },
         {
-          name: "Status",
-          value: [
-            `${emoji.online} Ping ${codeLine(`${ping}ms`)}`,
-            `${emoji.clock} Online ${codeLine(uptimeStr)}`,
-            `${emoji.clock} Criado <t:${createdTimestamp}:R>`,
-          ].join("\n"),
+          name: `${emoji.js} Linguagem`,
+          value: "**JavaScript & Node.js**",
           inline: true,
         },
         {
-          name: "Memoria",
-          value: [
-            `RSS ${codeLine(memoryStr)}`,
-            `Heap ${codeLine(heapStr)}`,
-          ].join("\n"),
+          name: `${ARTIST_EMOJI} Designer`,
+          value: `**${ARTIST_NAME}**`,
+          inline: true,
+        },
+        {
+          name: `${emoji.clock} Ontime`,
+          value: codeLine(uptimeStr),
+          inline: true,
+        },
+        {
+          name: `${emoji.settingsIcon} Versão`,
+          value: codeLine(pkg.version),
+          inline: true,
+        },
+        {
+          name: `${emoji.online} Host`,
+          value: codeLine(getHostLabel()),
+          inline: true,
+        },
+        {
+          name: `${emoji.botFlag} Ping`,
+          value: codeLine(ping >= 0 ? `${Math.round(ping)} ms` : "Reconectando…"),
+          inline: true,
+        },
+        {
+          name: `${emoji.calendar} Criado em`,
+          value: codeLine(formatCreatedAt(botUser.createdTimestamp)),
+          inline: true,
+        },
+        {
+          name: `${emoji.owner} Menção Honrosa`,
+          value: `**${HONORABLE_MENTION}**`,
           inline: true,
         }
       )
-      .setFooter({ text: interaction.guild?.name || "Discord bot" })
-      .setTimestamp();
-
-    if (banner) embed.setImage(banner);
+      .setFooter({ text: "Copyright © 2022 Discord Network. All Rights Reserved." });
 
     return interaction.editReply({ embeds: [embed] });
   },

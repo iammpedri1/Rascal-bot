@@ -12,8 +12,8 @@ const {
 const emoji = require("../utils/emojis");
 const { loadCommands } = require("../utils/commandLoader");
 
-const MENU_COLOR = 0x5865f2;
-const PAGE_SIZE = 7;
+const MENU_COLOR = 0x3346a8;
+const PAGE_SIZE = 8;
 const DEFAULT_STAFF_ROLE_NAMES = [
   "admin",
   "administrador",
@@ -29,47 +29,47 @@ const categoryMeta = {
   economy: {
     name: "Economia",
     emoji: emoji.cookie,
-    description: "Cookies, recompensas, apostas e progresso.",
+    description: "Cookies, recompensas, apostas e itens da loja.",
   },
   games: {
     name: "Jogos",
     emoji: emoji.gamesIcon,
-    description: "Minigames e desafios sociais.",
+    description: "Minijogos, apostas e desafios sociais.",
   },
   action: {
-    name: "Interacoes",
-    emoji: emoji.humanIcon,
-    description: "Comandos sociais para usar com outros membros.",
+    name: "Interações",
+    emoji: emoji.lorittaCafune,
+    description: "Comandos sociais para usar com outras pessoas.",
   },
   utility: {
     name: "Utilidades",
     emoji: emoji.settingsIcon,
-    description: "Ferramentas do dia a dia do servidor.",
+    description: "Ferramentas para facilitar o dia a dia do servidor.",
   },
   user: {
-    name: "Usuario",
-    emoji: emoji.humanIcon,
-    description: "Perfil, avatar, banner e informacoes pessoais.",
+    name: "Perfil e membros",
+    emoji: emoji.identity,
+    description: "Perfis e informações de membros.",
   },
   info: {
-    name: "Informacoes",
-    emoji: emoji.botFlag,
-    description: "Dados do bot e do servidor.",
+    name: "Informações",
+    emoji: emoji.clipboard,
+    description: "Dados do bot, da comunidade e guias de uso.",
   },
   system: {
     name: "Sistema",
     emoji: emoji.menuIcon,
-    description: "Comandos gerais do bot.",
+    description: "Comandos gerais e diagnóstico do bot.",
   },
   staff: {
     name: "Equipe",
-    emoji: emoji.staffLed,
-    description: "Moderacao, administracao e suporte.",
+    emoji: emoji.staff,
+    description: "Moderação, administração e suporte.",
   },
   outros: {
     name: "Outros",
     emoji: emoji.menuIcon,
-    description: "Comandos diversos.",
+    description: "Comandos que não pertencem a outra categoria.",
   },
 };
 
@@ -106,6 +106,13 @@ function normalizeRoleName(name) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function normalizeSearch(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function commandUsages(command) {
   const data = command.data.toJSON();
   const options = data.options || [];
@@ -132,7 +139,7 @@ function commandUsages(command) {
 
   return [{
     name: `/${data.name}`,
-    description: data.description || "Sem descricao.",
+    description: data.description || "Sem descrição.",
   }];
 }
 
@@ -168,7 +175,14 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName("menu")
-    .setDescription("Abre o painel de comandos do bot"),
+    .setDescription("Abre o catálogo interativo de comandos do bot")
+    .addStringOption(option =>
+      option
+        .setName("buscar")
+        .setDescription("Filtra comandos pelo nome ou pelo que eles fazem")
+        .setMaxLength(50)
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
     const commands = [...loadCommands().values()]
@@ -188,19 +202,27 @@ module.exports = {
     );
 
     if (!categoryList.length) {
-      return interaction.reply({
-        content: "Nenhum comando encontrado.",
-        flags: 64,
-      });
+      return interaction.reply({ content: "Nenhum comando encontrado.", flags: 64 });
     }
 
     const bot = interaction.client.user;
-    let currentCategory = "home";
+    const allUsages = commands.flatMap(commandUsages);
+    const searchTerm = interaction.options.getString("buscar")?.trim() || "";
+    const normalizedTerm = normalizeSearch(searchTerm);
+    const searchResults = normalizedTerm
+      ? allUsages.filter(usage =>
+          normalizeSearch(`${usage.name} ${usage.description}`).includes(normalizedTerm)
+        )
+      : [];
+    let currentCategory = searchTerm ? "search" : "home";
     let page = 0;
 
-    const currentCommands = () =>
-      currentCategory === "home" ? [] : categories.get(currentCategory) || [];
-    const maxPage = () => Math.max(1, Math.ceil(currentCommands().length / PAGE_SIZE));
+    const currentEntries = () => {
+      if (currentCategory === "search") return searchResults;
+      if (currentCategory === "home") return [];
+      return (categories.get(currentCategory) || []).flatMap(commandUsages);
+    };
+    const maxPage = () => Math.max(1, Math.ceil(currentEntries().length / PAGE_SIZE));
     const clampPage = () => {
       page = Math.max(0, Math.min(page, maxPage() - 1));
     };
@@ -211,7 +233,7 @@ module.exports = {
         const meta = metaFor(category);
         return {
           name: `${meta.emoji} ${meta.name}`,
-          value: `${commandCount(categories.get(category))} comandos\n${meta.description}`,
+          value: `**${commandCount(categories.get(category))} comandos**\n${meta.description}`,
           inline: true,
         };
       });
@@ -219,50 +241,58 @@ module.exports = {
       return new EmbedBuilder()
         .setColor(MENU_COLOR)
         .setAuthor({
-          name: `${bot.username} - central de comandos`,
+          name: `${bot.username} · Central de comandos`,
           iconURL: bot.displayAvatarURL({ size: 128 }),
         })
         .setThumbnail(bot.displayAvatarURL({ size: 256 }))
-        .setDescription(
-          [
-            `Use o menu abaixo para navegar por **${categoryList.length} categorias** e **${totalCommands} comandos**.`,
-            "",
-            `${emoji.ticket} Suporte: \`/ticket\``,
-            `${emoji.voice} Musica: \`/play lofi\``,
-            `${emoji.cookie} Economia: \`/daily\`, \`/trabalhar\`, \`/rank\``,
-          ].join("\n")
-        )
+        .setDescription([
+          `Navegue por **${categoryList.length} categorias** e **${totalCommands} opções**.`,
+          "",
+          `${emoji.cookie} Economia: \`/daily\`, \`/loja\`, \`/inventario\``,
+          `${emoji.ticket} Suporte: \`/ticket\` · ${emoji.voice} conexão: \`/ping\``,
+          `${emoji.browser} Dica: use \`/menu buscar: texto\` para encontrar uma função.`,
+        ].join("\n"))
         .addFields(categorySummary.slice(0, 12))
-        .setFooter({ text: `Solicitado por ${interaction.user.username}` })
+        .setFooter({ text: `Catálogo de ${bot.username} · solicitado por ${interaction.user.username}` })
         .setTimestamp();
     };
 
     const buildCategoryEmbed = () => {
       clampPage();
-
-      const meta = metaFor(currentCategory);
-      const list = currentCommands();
+      const entries = currentEntries();
       const start = page * PAGE_SIZE;
-      const visible = list.slice(start, start + PAGE_SIZE);
+      const visible = entries.slice(start, start + PAGE_SIZE);
+      const title = currentCategory === "search"
+        ? `Busca: ${searchTerm}`
+        : metaFor(currentCategory).name;
+      const description = currentCategory === "search"
+        ? `${searchResults.length} resultado${searchResults.length === 1 ? "" : "s"} para sua busca.`
+        : metaFor(currentCategory).description;
 
-      return new EmbedBuilder()
+      const embed = new EmbedBuilder()
         .setColor(MENU_COLOR)
         .setAuthor({
-          name: `${bot.username} - ${meta.name}`,
+          name: `${bot.username} · ${title}`,
           iconURL: bot.displayAvatarURL({ size: 128 }),
         })
-        .setDescription(meta.description)
-        .addFields(
-          visible.flatMap(command =>
-            commandUsages(command).map(usage => ({
-              name: usage.name,
-              value: usage.description || "Sem descricao.",
-              inline: false,
-            }))
-          )
-        )
+        .setDescription(description);
+
+      if (visible.length) {
+        embed.addFields(visible.map(usage => ({
+          name: usage.name,
+          value: usage.description || "Sem descrição.",
+          inline: false,
+        })));
+      } else {
+        embed.addFields({
+          name: `${emoji.thinking} Nada por aqui`,
+          value: "Tente outro termo ou escolha uma categoria no menu abaixo.",
+        });
+      }
+
+      return embed
         .setFooter({
-          text: `Pagina ${page + 1}/${maxPage()} - ${commandCount(list)} comandos`,
+          text: `Página ${page + 1}/${maxPage()} · ${entries.length} comandos`,
         })
         .setTimestamp();
     };
@@ -270,31 +300,46 @@ module.exports = {
     const buildEmbed = () =>
       currentCategory === "home" ? buildHomeEmbed() : buildCategoryEmbed();
 
-    const buildSelect = () =>
-      new ActionRowBuilder().addComponents(
+    const buildSelect = () => {
+      const options = [
+        {
+          label: "Início",
+          description: "Resumo e atalhos",
+          value: "home",
+          emoji: parseEmoji(emoji.homeIcon),
+          default: currentCategory === "home",
+        },
+      ];
+
+      if (searchTerm) {
+        options.push({
+          label: "Resultados da busca",
+          description: `${searchResults.length} resultados`,
+          value: "search",
+          emoji: parseEmoji(emoji.settingsIcon),
+          default: currentCategory === "search",
+        });
+      }
+
+      const categoryLimit = searchTerm ? 23 : 24;
+      options.push(...categoryList.slice(0, categoryLimit).map(category => {
+        const meta = metaFor(category);
+        return {
+          label: meta.name,
+          description: `${commandCount(categories.get(category))} comandos`,
+          value: category,
+          emoji: parseEmoji(meta.emoji),
+          default: currentCategory === category,
+        };
+      }));
+
+      return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("menu_select")
           .setPlaceholder("Escolha uma categoria")
-          .addOptions([
-            {
-              label: "Inicio",
-              description: "Resumo do menu",
-              value: "home",
-              emoji: parseEmoji(emoji.homeIcon),
-              default: currentCategory === "home",
-            },
-            ...categoryList.slice(0, 24).map(category => {
-              const meta = metaFor(category);
-              return {
-                label: meta.name,
-                description: `${commandCount(categories.get(category))} comandos`,
-                value: category,
-                emoji: parseEmoji(meta.emoji),
-                default: currentCategory === category,
-              };
-            }),
-          ])
+          .addOptions(options)
       );
+    };
 
     const buildButtons = () => {
       const isHome = currentCategory === "home";
@@ -302,41 +347,42 @@ module.exports = {
       return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("menu_home")
+          .setLabel("Início")
           .setEmoji(parseEmoji(emoji.homeIcon))
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(isHome),
         new ButtonBuilder()
           .setCustomId("menu_prev")
+          .setLabel("Anterior")
           .setEmoji("⬅️")
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(isHome || page <= 0),
         new ButtonBuilder()
           .setCustomId("menu_next")
+          .setLabel("Próxima")
           .setEmoji("➡️")
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(isHome || page >= maxPage() - 1),
         new ButtonBuilder()
           .setCustomId("menu_close")
+          .setLabel("Fechar")
           .setEmoji(parseEmoji(emoji.crossed))
           .setStyle(ButtonStyle.Danger)
       );
     };
 
     await interaction.deferReply();
-
     const message = await interaction.editReply({
       embeds: [buildEmbed()],
       components: [buildSelect(), buildButtons()],
     });
 
-    const collector = message.createMessageComponentCollector({
-      time: 180000,
-    });
+    const collector = message.createMessageComponentCollector({ time: 180000 });
 
     collector.on("collect", async componentInteraction => {
       if (componentInteraction.user.id !== interaction.user.id) {
         return componentInteraction.reply({
-          content: "Esse menu pertence a outra pessoa.",
+          content: "Este catálogo está aberto para outra pessoa.",
           flags: 64,
         });
       }

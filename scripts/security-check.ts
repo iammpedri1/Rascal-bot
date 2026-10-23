@@ -13,7 +13,10 @@ const secretPatterns = [
   { name: "Discord bot token", pattern: /[MN][A-Za-z\d_-]{23,27}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27,}/ },
   { name: "Discord env token", pattern: /DISCORD_TOKEN\s*=\s*["']?\S+/ },
   { name: "Gemini API key", pattern: /AIza[0-9A-Za-z_-]{20,}/ },
-  { name: "generic secret assignment", pattern: /(TOKEN|API_KEY|SECRET|PASSWORD|SENHA)\s*=\s*["']?[^\s"']{12,}/i },
+  {
+    name: "generic secret assignment",
+    pattern: /\b(TOKEN|API_KEY|SECRET|PASSWORD|SENHA)\s*=\s*["']?(?!process\.env\b)[^\s"']{12,}/i,
+  },
 ];
 
 function trackedFiles() {

@@ -3,12 +3,11 @@ const { ChannelType, EmbedBuilder, SlashCommandBuilder } = require("discord.js")
 const emoji = require("../utils/emojis");
 
 const icons = {
-  user: "<:icons_human:1500922689072926980>",
-  id: "<:1000106067:1499822530213445825>",
-  created: "<:1000106075:1499822894077710497>",
+  user: emoji.humanIcon,
+  id: emoji.identity,
+  created: emoji.calendar,
   roles: emoji.roles,
   booster: emoji.booster,
-  bot: emoji.botFlag,
 };
 
 function code(value) {
@@ -31,7 +30,7 @@ function topRoles(member) {
 }
 
 function voiceState(member) {
-  if (!member.voice?.channel) return "Não está em call";
+  if (!member.voice?.channel) return "Não está em um canal de voz";
   const type = member.voice.channel.type === ChannelType.GuildStageVoice ? "Palco" : "Voz";
   return `${type}: ${member.voice.channel}`;
 }
@@ -109,7 +108,7 @@ module.exports = {
           inline: true,
         },
         {
-          name: "🎙 Voz",
+          name: `${emoji.voice} Voz`,
           value: voiceState(member),
           inline: true,
         },

@@ -20,30 +20,30 @@ function buildCookiesEmbed(interaction) {
       [
         "Cookies são a economia do servidor. Você ganha participando, jogando e usando os comandos de recompensa.",
         "",
-        `${emoji.gift} **Prêmios semanais:** top 1 recebe **15.000**, top 2 recebe **10.000** e top 3 recebe **5.000** cookies nos rankings de mensagens e voz.`,
+        `${emoji.calendar} **Prêmios semanais:** top 1 recebe **15.000**, top 2 recebe **10.000** e top 3 recebe **5.000** cookies nos rankings de mensagens e voz.`,
       ].join("\n")
     )
     .addFields(
       {
         name: `${emoji.correct} Como ganhar cookies`,
         value: [
-          bullet(emoji.lorittaMegafone, "Conversando no chat e acumulando XP."),
+          bullet(emoji.announcement, "Conversando no chat e acumulando XP."),
           bullet(emoji.voice, "Participando dos canais de voz para subir no `/rankvoz`."),
-          bullet(emoji.clap, "Aparecendo no `/rankmensagens` semanal."),
+          bullet(emoji.clipboard, "Aparecendo no `/rankmensagens` semanal."),
           bullet(emoji.work, "Usando `/trabalhar` quando o cooldown acabar."),
-          bullet(emoji.gift, "Resgatando `/daily` e `/bonus`."),
+          bullet(emoji.calendar, "Resgatando `/daily` e `/bonus`."),
           bullet(emoji.gamesIcon, "Participando de apostas e minigames como `/jokenpo`, `/cara-ou-coroa` e `/rifa`."),
-          bullet(emoji.police, "Tentando roubar alguém com `/roubar usuario` quando quiser arriscar."),
+          bullet(emoji.policePanda, "Tentando roubar alguém com `/roubar usuario` quando quiser arriscar."),
         ].join("\n"),
         inline: false,
       },
       {
         name: `${emoji.shop} Como gastar ou mover cookies`,
         value: [
+          bullet(emoji.shop, "Comprando cores, VIP, boost de cookies, caixas e removedores de cooldown em `/loja`."),
           bullet(emoji.cookie, "Apostando em jogos e desafios."),
           bullet(emoji.lorittaCafune, "Pagando outros membros com `/cookies pagar`."),
-          bullet(emoji.ticket, "Entrando em eventos, sorteios ou sistemas especiais do servidor quando a equipe abrir."),
-          bullet(emoji.thinking, "Arriscando em comandos que podem dar lucro ou prejuízo, como `/roubar` e `/trabalhar`."),
+          bullet(emoji.warning, "Arriscando em comandos que podem dar lucro ou prejuízo, como `/roubar` e `/trabalhar`."),
         ].join("\n"),
         inline: false,
       },
@@ -51,7 +51,9 @@ function buildCookiesEmbed(interaction) {
         name: `${emoji.menuIcon} Comandos úteis`,
         value: [
           "`/cookies saldo` - vê seu saldo e estatísticas.",
-          "`/inventario` - mostra seu inventário de cookies.",
+          "`/loja` - compra cores, VIP, boosts, caixas e removedores de cooldown.",
+          "`/inventario` - mostra saldo, estatísticas, itens e benefícios ativos.",
+          "`/tocando` - mostra a música do Spotify compartilhada no Discord.",
           "`/rank cookies` - ranking global de cookies.",
           "`/rankmensagens` - ranking semanal de mensagens.",
           "`/rankvoz` - ranking semanal de voz.",

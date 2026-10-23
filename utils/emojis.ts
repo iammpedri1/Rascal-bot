@@ -1,3 +1,93 @@
+const applicationEmojis = new Map();
+const applicationAliases = {
+  idle: "1370everythingisstable",
+  online: "entrada",
+  offline: "saida",
+  channel: "Channel",
+  dnd: "PingAlto",
+  booster: "188222levelboost",
+  party: "blobpart",
+  sad: "blobno",
+  roles: "User",
+  thread: "discordthreadwhite",
+  owner: "4102owner",
+  devs: "1646discordboten",
+  botFlag: "Info",
+  clap: "Like",
+  work: "blobWowo",
+  clock: "clock",
+  cookie: "BlobCookies",
+  palette: "1arte",
+  oldCookie: "CookieStar",
+  sino: "Sino",
+  peepSad: "blobno",
+  gift: "blobgift",
+  thinking: "Pesquisa",
+  redTick: "Crossed",
+  greenTick: "Correct",
+  crossed: "Crossed",
+  correct: "Correct",
+  js: "96295javascript",
+  shop: "7182shopw",
+  ticket: "4645reportmessage",
+  lorittaMegafone: "9786discordannouncementdark",
+  lorittaCafune: "HeartRep",
+  staffLed: "4360discordstaffexperimental",
+  likeLed: "Like",
+  dislikeLed: "Dislike",
+  bugHunterLed: "9148discordgoldbughunter",
+  police: "blobPolice",
+  blobBan: "Castigo",
+  pandaCientista: "Info",
+  homeIcon: "50738home",
+  humanIcon: "User",
+  menuIcon: "Menu",
+  settingsIcon: "Configg",
+  gamesIcon: "Game",
+  voice: "Voice",
+  identity: "User",
+  trash: "in_lixeira",
+  staff: "4360discordstaffexperimental",
+  punishment: "Castigo",
+  link: "7926copymessagelink",
+  announcement: "9786discordannouncementdark",
+  clipboard: "993667bag",
+  warning: "UserPerigo",
+  yes: "blobYeyeye",
+  no: "blobno",
+  calendar: "2373events",
+  browser: "World",
+  miner: "Game",
+  policePanda: "blobPolice",
+  slashCommand: "Slashcommand",
+  deafened: "70324soundmutea",
+  banHammer: "Castigo",
+  spotify: "Spotify",
+};
+
+function setApplicationEmojis(emojis) {
+  applicationEmojis.clear();
+
+  for (const emoji of emojis.values()) {
+    if (emoji.name) applicationEmojis.set(emoji.name.toLowerCase(), emoji.toString());
+  }
+
+  for (const [alias, name] of Object.entries(applicationAliases)) {
+    const value = applicationEmojis.get(name.toLowerCase());
+    if (value) module.exports[alias] = value;
+  }
+
+  return {
+    total: applicationEmojis.size,
+    replaced: Object.keys(applicationAliases)
+      .filter(alias => applicationEmojis.has(applicationAliases[alias].toLowerCase())),
+  };
+}
+
+function application(name, fallback = "") {
+  return applicationEmojis.get(String(name).toLowerCase()) || fallback;
+}
+
 module.exports = {
   idle: "<:idle:1501260201234403338>",
   online: "<:online1:1501259879204257812>",
@@ -6,7 +96,7 @@ module.exports = {
   dnd: "<:dnd1:1501260181953056990>",
   booster: "<:booster:1501637030973669386>",
   party: "<a:blobpart:1501260216732356649>",
-  sad: "<a:738063290390806588:1501259899408093244>",
+  sad: "<a:peepsad:1501627001730105435>",
   roles: "<:Roles:1501259876767105188>",
   thread: "<:ThreadChannel:1501259874862891048>",
   owner: "<:CrownOwner:1501637696173510736>",
@@ -16,6 +106,7 @@ module.exports = {
   work: "<a:work:1501255930770231379>",
   clock: "<a:clock:1500276315981353021>",
   cookie: "<a:59632cookie:1501627055148761250>",
+  palette: "<:1arte:1506439875354820658>",
   oldCookie: "<a:cookiesemoji:1500946522118950943>",
   sino: "<a:Sino:1501626669473992775>",
   peepSad: "<a:peepsad:1501627001730105435>",
@@ -45,4 +136,24 @@ module.exports = {
   settingsIcon: "<:icons_settings:1500922701512970304>",
   gamesIcon: "<:icons_games:1500934580125962312>",
   voice: "<:voice:1500936427373072394>",
+  identity: "<:in_identidade:1499799189125857410>",
+  trash: "<:in_lixeira:1499799192611323935>",
+  staff: "<:in_staff:1499799208650211451>",
+  punishment: "<:in_castigo:1499799234327871628>",
+  link: "<:in_link:1499799262614126765>",
+  announcement: "<:in_megafone1:1499799274387669002>",
+  clipboard: "<:in_prancheta3:1499799285510836414>",
+  warning: "<:in_exclamacao3:1499799293702438922>",
+  yes: "<a:in_yesLed:1499799494999670986>",
+  no: "<a:in_noLed:1499814132176650260>",
+  calendar: "<:in_calendario:1499814035728629962>",
+  browser: "<:browser:1500936385182433362>",
+  miner: "<a:panda_minerador:1502141985295831211>",
+  policePanda: "<:panda_police:1502138488290676856>",
+  slashCommand: "<:5710slashcommand:1502773644848402626>",
+  deafened: "<:4529undeafened:1502773663802462248>",
+  banHammer: "<a:1711neonblobbanhammer:1501627067966423120>",
+  spotify: "<:Spotify:1506439858451644496>",
+  application,
+  setApplicationEmojis,
 };

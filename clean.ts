@@ -1,22 +1,17 @@
 const { REST, Routes } = require("discord.js");
 require("dotenv").config();
+const { requireDiscordConfig } = require("./utils/discordConfig");
 
-const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+async function main() {
+  const { token, clientId, guildId } = requireDiscordConfig();
+  const rest = new REST({ version: "10" }).setToken(token);
 
-(async () => {
-  try {
-    console.log("🧹 Limpando comandos...");
+  console.log("🧹 Limpando comandos...");
+  await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
+  console.log("✅ Limpo com sucesso!");
+}
 
-    await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
-      { body: [] }
-    );
-
-    console.log("✅ Limpo com sucesso!");
-  } catch (err) {
-    console.error(err);
-  }
-})();
+main().catch(error => {
+  console.error("Falha ao limpar comandos da guilda:", error);
+  process.exitCode = 1;
+});

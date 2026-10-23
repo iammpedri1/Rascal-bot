@@ -117,7 +117,7 @@ module.exports = {
       }
 
       return interaction.reply({
-        content: `${emoji.gift} | **Aniversário de ${user.username}:** ${formatBirthday(birthday.day, birthday.month)}.`,
+        content: `${emoji.calendar} | **Aniversário de ${user.username}:** ${formatBirthday(birthday.day, birthday.month)}.`,
         flags: 64,
       });
     }

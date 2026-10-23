@@ -15,7 +15,7 @@ process.on("unhandledRejection", err => {
 });
 
 process.on("uncaughtException", err => {
-  logger.error("Excecao nao tratada", err);
+  logger.error("Exceção não tratada", err);
 });
 
 const client = new Client({
@@ -25,6 +25,9 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
+    ...(String(process.env.DISCORD_PRESENCE_INTENT).toLowerCase() === "true"
+      ? [GatewayIntentBits.GuildPresences]
+      : []),
   ],
 });
 
@@ -57,7 +60,7 @@ loadCommands(client);
 loadEvents(client);
 
 if (!process.env.DISCORD_TOKEN) {
-  logger.error("DISCORD_TOKEN nao foi encontrado no .env");
+  logger.error("DISCORD_TOKEN não foi encontrado no .env");
   process.exitCode = 1;
 } else {
   client.login(process.env.DISCORD_TOKEN).catch(err => {

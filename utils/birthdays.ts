@@ -148,7 +148,7 @@ function markBirthdaySent(guildId: string, userId: string, year: number): void {
 function buildBirthdayEmbed(user: User) {
   return new EmbedBuilder()
     .setColor(0xff9ac7)
-    .setTitle(`${emoji.gift} Feliz aniversário!`)
+    .setTitle(`${emoji.calendar} Feliz aniversário!`)
     .setDescription([
       `${emoji.party} Hoje é o aniversário de ${user}!`,
       `${emoji.clap} Deixem os parabéns e muitos cookies imaginários.`,

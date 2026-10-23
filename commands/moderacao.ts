@@ -61,7 +61,7 @@ const actions = {
     title: "Usu\u00e1rio avisado",
     menu: "Avisar usu\u00e1rio",
     color: 0x58b9ff,
-    emoji: emoji.lorittaMegafone,
+    emoji: emoji.staff,
     image: AVISO_ART,
     permission: null,
     reasonPrefix: "Aviso",
@@ -119,7 +119,7 @@ function punishmentEmbed(interaction, targetUser, action, reason, durationMs) {
     .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
     .setDescription(
       [
-        `${emoji.police} \u2022 Fazer o que n\u00e9, violou as Diretrizes & Termos de Conduta do servidor.`,
+        `${emoji.punishment} \u2022 Fazer o que n\u00e9, violou as Diretrizes & Termos de Conduta do servidor.`,
         `A equipe aplicou uma puni\u00e7\u00e3o. Da pr\u00f3xima vez, fique mais atento no chat.${durationLine}`,
       ].join("\n")
     )
@@ -135,7 +135,7 @@ function punishmentEmbed(interaction, targetUser, action, reason, durationMs) {
         inline: true,
       },
       {
-        name: `${emoji.police} \u2022 Punido por`,
+        name: `${emoji.punishment} \u2022 Punido por`,
         value: `\`${interaction.user.username}\``,
         inline: true,
       },

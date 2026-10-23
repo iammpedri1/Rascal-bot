@@ -2,6 +2,7 @@
 const db = require("./db");
 const cooldowns = require("./cooldowns");
 const { addUserXp } = require("./xpSystem");
+const { COLOR_ITEMS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -13,6 +14,9 @@ const DAILY_MAX_REWARD        = 1800;
 const DAILY_STREAK_WINDOW     = 48 * 60 * 60 * 1000;
 const DAILY_STREAK_BONUS      = 50;   // +50 cookies por dia de streak
 const DAILY_STREAK_BONUS_CAP  = 1500; // bônus máximo de streak
+const DAILY_MILESTONE_DAYS     = 10;
+const DAILY_MILESTONE_MIN      = 200;
+const DAILY_MILESTONE_MAX      = 400;
 
 // Work
 const WORK_MIN_REWARD         = 250;
@@ -96,6 +100,8 @@ function rowToProfile(row) {
     xp: integer(row.xp),
     messagesCount: integer(row.messages_count),
     selectedBanner: row.selected_banner || "default",
+    isVip: integer(row.vip) === 1,
+    cookieBoostUntil: integer(row.cookie_boost_until),
     lastTaxAt: integer(row.last_tax_at),
     createdAt: integer(row.created_at),
     updatedAt: integer(row.updated_at),
@@ -130,6 +136,13 @@ function setStat(userId, column, value) {
 
 function getById(userId) {
   return rowToProfile(db.prepare("SELECT * FROM usuarios WHERE id = ?").get(String(userId)));
+}
+
+function applyCookieBonuses(userId, baseReward) {
+  const perks = db.prepare("SELECT vip, cookie_boost_until FROM usuarios WHERE id = ?")
+    .get(String(userId));
+  const bonusPercent = (perks?.vip ? 10 : 0) + (integer(perks?.cookie_boost_until) > Date.now() ? 50 : 0);
+  return Math.floor(integer(baseReward) * (100 + bonusPercent) / 100);
 }
 
 function pushTransaction(type, userId, amount, details = {}) {
@@ -240,7 +253,11 @@ function claimDaily(user, details = {}) {
   );
 
   const base   = randomAmount(DAILY_MIN_REWARD, DAILY_MAX_REWARD);
-  const reward = base + streakBonus;
+  const rawReward = base + streakBonus;
+  const milestoneReward = streak % DAILY_MILESTONE_DAYS === 0
+    ? randomAmount(DAILY_MILESTONE_MIN, DAILY_MILESTONE_MAX)
+    : 0;
+  const reward = applyCookieBonuses(profile.id, rawReward + milestoneReward);
   const nextAt = cooldowns.consume(profile.id, "daily");
 
   addBalance(profile.id, reward);
@@ -259,11 +276,35 @@ function claimDaily(user, details = {}) {
     claimed: true,
     profile: getById(profile.id),
     reward,
+    perkBonus: reward - rawReward,
     base,
     streakBonus,
+    milestoneReward,
     xpReward,
     streak,
     nextAt,
+  };
+}
+
+function getDailyStreak(user) {
+  const profile = getUser(user);
+  const lastDaily = db.prepare(`
+    SELECT created_at AS createdAt
+    FROM transacoes
+    WHERE user_id = ? AND tipo = 'daily'
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(profile.id);
+  const active = Boolean(lastDaily && Date.now() - lastDaily.createdAt <= DAILY_STREAK_WINDOW);
+
+  return {
+    profile,
+    streak: active ? profile.dailyStreak : 0,
+    bestStreak: profile.bestDailyStreak,
+    active,
+    nextMilestone: active
+      ? DAILY_MILESTONE_DAYS - (profile.dailyStreak % DAILY_MILESTONE_DAYS || DAILY_MILESTONE_DAYS)
+      : DAILY_MILESTONE_DAYS,
   };
 }
 
@@ -307,7 +348,8 @@ function work(user, details = {}) {
     };
   }
 
-  const reward = randomAmount(WORK_MIN_REWARD, WORK_MAX_REWARD);
+  const baseReward = randomAmount(WORK_MIN_REWARD, WORK_MAX_REWARD);
+  const reward = applyCookieBonuses(profile.id, baseReward);
 
   addBalance(profile.id, reward);
   updateStats(profile.id, { cookies_won: reward, total_earned: reward });
@@ -320,6 +362,7 @@ function work(user, details = {}) {
     success: true,
     profile: getById(profile.id),
     reward,
+    perkBonus: reward - baseReward,
     xpReward,
     nextAt,
   };
@@ -340,7 +383,8 @@ function claimBonus(user, details = {}) {
     };
   }
 
-  const reward = randomAmount(150, 450);
+  const baseReward = randomAmount(150, 450);
+  const reward = applyCookieBonuses(profile.id, baseReward);
   const nextAt = cooldowns.consume(profile.id, "bonus");
 
   addBalance(profile.id, reward);
@@ -355,6 +399,7 @@ function claimBonus(user, details = {}) {
     claimed: true,
     profile: getById(profile.id),
     reward,
+    perkBonus: reward - baseReward,
     nextAt,
   };
 }
@@ -604,6 +649,229 @@ function getNetProfit(profile) {
   return integer(profile.cookiesWon) - integer(profile.cookiesLost);
 }
 
+function getShopInventory(userId) {
+  return db.prepare(`
+    SELECT item_id AS itemId, quantity, purchased_at AS purchasedAt
+    FROM cookie_shop_inventory
+    WHERE user_id = ? AND quantity > 0
+    ORDER BY purchased_at ASC
+  `).all(String(userId));
+}
+
+function purchaseShopItem(user, itemId, details = {}) {
+  const item = SHOP_ITEMS_BY_ID[itemId];
+  if (!item) return { ok: false, reason: "invalid_item" };
+
+  const profile = getUser(user);
+  const userId = profile.id;
+  const purchase = db.transaction(() => {
+    const owned = db.prepare(`
+      SELECT quantity FROM cookie_shop_inventory WHERE user_id = ? AND item_id = ?
+    `).get(userId, item.id);
+
+    if ((item.kind === "color" && owned?.quantity > 0) || (item.kind === "vip" && profile.isVip)) {
+      return { ok: false, reason: "owned", profile: getById(userId), item };
+    }
+
+    const debit = db.prepare(`
+      UPDATE usuarios
+      SET cookies = cookies - ?,
+          cookies_lost = cookies_lost + ?,
+          total_spent = total_spent + ?,
+          updated_at = ?
+      WHERE id = ? AND cookies >= ?
+    `).run(item.price, item.price, item.price, Date.now(), userId, item.price);
+
+    if (debit.changes === 0) {
+      return { ok: false, reason: "balance", profile: getById(userId), item };
+    }
+
+    const now = Date.now();
+    if (item.kind === "vip") {
+      db.prepare("UPDATE usuarios SET vip = 1, updated_at = ? WHERE id = ?").run(now, userId);
+    } else {
+      db.prepare(`
+        INSERT INTO cookie_shop_inventory (user_id, item_id, quantity, purchased_at)
+        VALUES (?, ?, 1, ?)
+        ON CONFLICT(user_id, item_id)
+        DO UPDATE SET quantity = cookie_shop_inventory.quantity + 1
+      `).run(userId, item.id, now);
+    }
+    pushTransaction("shop_purchase", userId, -item.price, {
+      ...details,
+      note: item.name,
+    });
+
+    return { ok: true, item, profile: getById(userId) };
+  });
+
+  return purchase();
+}
+
+function openShopChest(user, itemId, details = {}) {
+  const item = SHOP_ITEMS_BY_ID[itemId];
+  if (!item || item.kind !== "chest") return { ok: false, reason: "invalid_chest" };
+
+  const profile = getUser(user);
+  const open = db.transaction(() => {
+    const inventory = db.prepare(`
+      SELECT quantity FROM cookie_shop_inventory WHERE user_id = ? AND item_id = ?
+    `).get(profile.id, item.id);
+
+    if (!inventory?.quantity) return { ok: false, reason: "no_chest", item };
+
+    const consumed = db.prepare(`
+      UPDATE cookie_shop_inventory SET quantity = quantity - 1
+      WHERE user_id = ? AND item_id = ? AND quantity > 0
+    `).run(profile.id, item.id);
+    if (!consumed.changes) return { ok: false, reason: "no_chest", item };
+
+    db.prepare("DELETE FROM cookie_shop_inventory WHERE user_id = ? AND item_id = ? AND quantity <= 0")
+      .run(profile.id, item.id);
+
+    const baseCookieReward = randomAmount(item.minReward, item.maxReward);
+    const cookieReward = applyCookieBonuses(profile.id, baseCookieReward);
+    let colorReward = null;
+    let duplicateColorBonus = 0;
+
+    if (item.colorDropChance && Math.random() < item.colorDropChance) {
+      const ownedColors = new Set(db.prepare(`
+        SELECT item_id FROM cookie_shop_inventory WHERE user_id = ? AND quantity > 0
+      `).all(profile.id).map(row => row.item_id));
+      const availableColors = COLOR_ITEMS.filter(color => !ownedColors.has(color.id));
+
+      if (availableColors.length) {
+        colorReward = availableColors[Math.floor(Math.random() * availableColors.length)];
+        db.prepare(`
+          INSERT INTO cookie_shop_inventory (user_id, item_id, quantity, purchased_at)
+          VALUES (?, ?, 1, ?)
+          ON CONFLICT(user_id, item_id) DO NOTHING
+        `).run(profile.id, colorReward.id, Date.now());
+      } else {
+        duplicateColorBonus = item.duplicateCompensation;
+      }
+    }
+
+    const totalReward = cookieReward + duplicateColorBonus;
+    addBalance(profile.id, totalReward);
+    updateStats(profile.id, { cookies_won: totalReward, total_earned: totalReward });
+    pushTransaction("shop_chest_open", profile.id, totalReward, {
+      ...details,
+      note: item.name,
+    });
+
+    if (colorReward) {
+      pushTransaction("shop_color_drop", profile.id, 0, {
+        ...details,
+        note: colorReward.name,
+      });
+    }
+
+    return {
+      ok: true,
+      item,
+      cookieReward,
+      baseCookieReward,
+      colorReward,
+      duplicateColorBonus,
+      profile: getById(profile.id),
+    };
+  });
+
+  return open();
+}
+
+function useShopCooldownPass(user, itemId, target, details = {}) {
+  const item = SHOP_ITEMS_BY_ID[itemId];
+  if (!item || item.kind !== "cooldown_pass") return { ok: false, reason: "invalid_item" };
+  if (!cooldowns.DURATIONS[target]) return { ok: false, reason: "invalid_target" };
+
+  const profile = getUser(user);
+  const use = db.transaction(() => {
+    const activeCooldown = cooldowns.check(profile.id, target);
+    if (activeCooldown.ready) {
+      return { ok: false, reason: "cooldown_ready", profile: getById(profile.id) };
+    }
+
+    const consumed = db.prepare(`
+      UPDATE cookie_shop_inventory SET quantity = quantity - 1
+      WHERE user_id = ? AND item_id = ? AND quantity > 0
+    `).run(profile.id, item.id);
+
+    if (!consumed.changes) return { ok: false, reason: "no_pass", profile: getById(profile.id) };
+
+    db.prepare("DELETE FROM cookie_shop_inventory WHERE user_id = ? AND item_id = ? AND quantity <= 0")
+      .run(profile.id, item.id);
+    cooldowns.clear(profile.id, target);
+    pushTransaction("shop_cooldown_reset", profile.id, 0, {
+      ...details,
+      note: target,
+    });
+
+    return {
+      ok: true,
+      remaining: activeCooldown.remaining,
+      target,
+      profile: getById(profile.id),
+    };
+  });
+
+  return use();
+}
+
+function activateCookieBoost(user, itemId, details = {}) {
+  const item = SHOP_ITEMS_BY_ID[itemId];
+  if (!item || item.kind !== "cookie_boost") return { ok: false, reason: "invalid_item" };
+
+  const profile = getUser(user);
+  const activate = db.transaction(() => {
+    const consumed = db.prepare(`
+      UPDATE cookie_shop_inventory SET quantity = quantity - 1
+      WHERE user_id = ? AND item_id = ? AND quantity > 0
+    `).run(profile.id, item.id);
+    if (!consumed.changes) return { ok: false, reason: "no_boost", profile: getById(profile.id) };
+
+    db.prepare("DELETE FROM cookie_shop_inventory WHERE user_id = ? AND item_id = ? AND quantity <= 0")
+      .run(profile.id, item.id);
+    const now = Date.now();
+    const oldExpiry = getById(profile.id).cookieBoostUntil;
+    const expiresAt = Math.max(now, oldExpiry) + item.duration;
+    db.prepare("UPDATE usuarios SET cookie_boost_until = ?, updated_at = ? WHERE id = ?")
+      .run(expiresAt, now, profile.id);
+    pushTransaction("shop_cookie_boost", profile.id, 0, {
+      ...details,
+      note: item.name,
+    });
+
+    return { ok: true, expiresAt, profile: getById(profile.id) };
+  });
+
+  return activate();
+}
+
+function equipShopItem(user, itemId) {
+  const profile = getUser(user);
+  if (itemId !== "default" && SHOP_ITEMS_BY_ID[itemId]?.kind !== "color") {
+    return { ok: false, reason: "invalid_item", profile };
+  }
+
+  if (itemId !== "default") {
+    const owned = db.prepare(`
+      SELECT 1 FROM cookie_shop_inventory WHERE user_id = ? AND item_id = ? AND quantity > 0
+    `).get(profile.id, itemId);
+    if (!owned) return { ok: false, reason: "not_owned", profile };
+  }
+
+  db.prepare("UPDATE usuarios SET selected_banner = ?, updated_at = ? WHERE id = ?")
+    .run(itemId, Date.now(), profile.id);
+
+  return {
+    ok: true,
+    item: itemId === "default" ? null : SHOP_ITEMS_BY_ID[itemId],
+    profile: getById(profile.id),
+  };
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -620,22 +888,30 @@ module.exports = {
   WORK_MAX_REWARD,
   WORK_MIN_REWARD,
   addBalance,
+  activateCookieBoost,
+  applyCookieBonuses,
   updateStats,
   pushTransaction,
   canBet,
   claimBonus,
   claimDaily,
+  getDailyStreak,
   giveRep,
   getById,
   getHistory,
   getNetProfit,
   getProfile,
   getRank,
+  getShopInventory,
+  openShopChest,
   playRifa,
+  purchaseShopItem,
   rob,
   settleBet,
   settleDraw,
   settleDuel,
   transfer,
+  equipShopItem,
+  useShopCooldownPass,
   work,
 };

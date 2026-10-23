@@ -6,6 +6,7 @@ const {
 
 const emoji = require("../utils/emojis");
 const { playLofi, stopLofi } = require("../utils/lofiPlayer");
+const logger = require("../utils/logger");
 
 module.exports = {
   category: "utility",
@@ -50,7 +51,7 @@ module.exports = {
 
     if (!channel) {
       return interaction.reply({
-        content: `${emoji.voice} Entre em um canal de voz antes de usar \`/play lofi\`.`,
+        content: `${emoji.deafened} Entre em um canal de voz antes de usar \`/play lofi\`.`,
         flags: 64,
       });
     }
@@ -70,7 +71,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x57f287)
-        .setTitle(`${emoji.pandaCientista} Rádio lo-fi ligada`)
+        .setTitle(`${emoji.miner} Rádio lo-fi ligada`)
         .setDescription(
           [
             `${emoji.voice} Tocando em ${channel}.`,
@@ -82,6 +83,10 @@ module.exports = {
 
       return interaction.editReply({ embeds: [embed] });
     } catch (err) {
+      logger.error("Falha ao iniciar rádio lo-fi", err, {
+        guild: interaction.guildId,
+        channel: channel.id,
+      });
       stopLofi(interaction.guildId);
 
       return interaction.editReply({

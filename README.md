@@ -1,46 +1,59 @@
 # Rascal Bot
 
-Bot Discord modular em TypeScript com `discord.js` 14.
+Rascal é um bot Discord modular, desenvolvido em TypeScript com
+`discord.js` v14. Ele reúne ferramentas de moderação, utilidades, economia,
+minijogos, níveis, rankings, tickets, lembretes e integrações com presença do
+Spotify.
 
-## Execução
+## Principais recursos
 
-1. Instale Node.js em uma versão suportada pelas dependências nativas do projeto.
-2. Copie `.env.example` para `.env` e preencha `DISCORD_TOKEN`, `CLIENT_ID` e `GUILD_ID`.
-3. Execute `npm install`.
-4. Registre os comandos com `npm run register`.
-5. Inicie o bot com `npm start`.
+- Economia com cookies, `/daily`, `/streak`, loja, VIPs, boosts e inventário.
+- Minijogos e comandos sociais para interação entre os membros.
+- Moderação, proteção, tickets e ferramentas para a equipe.
+- Rankings de cookies, XP, mensagens e tempo em canais de voz.
+- `/tocando` com card visual da música atual do Spotify.
+- Emojis personalizados carregados do Developer Portal.
+- Persistência local em SQLite e arquivos auxiliares com validação.
 
-Todo o código do projeto foi convertido para arquivos TypeScript. `npm run build`
-compila os arquivos para `dist/`; os scripts de início, registro e instalação
-do serviço usam essa saída compilada. Alguns módulos legados mantêm
-`@ts-nocheck` temporariamente porque usam respostas dinâmicas do Discord ou
-resultados sem esquema do SQLite; eles continuam sendo candidatos às próximas
-etapas de tipagem estrita.
+## Como executar
 
-`OWNER_ID` identifica o proprietário da aplicação para operações de nível 5. O
-`LOG_LEVEL` aceita `silent`, `error`, `warn`, `info` ou `debug`.
+1. Use Node.js 22 ou superior.
+2. Instale as dependências:
 
-## Organização
+   ```bash
+   npm install
+   ```
 
-- `commands/`: comandos slash e handlers de componentes em TypeScript.
-- `events/`: eventos do Discord em TypeScript.
+3. Copie `.env.example` para `.env` e preencha o token e os identificadores da
+   aplicação.
+4. Registre os comandos:
+
+   ```bash
+   npm run register
+   ```
+
+5. Inicie o bot:
+
+   ```bash
+   npm start
+   ```
+
+## Estrutura
+
+- `commands/`: comandos slash.
+- `events/`: eventos do Discord.
 - `handlers/`: carregamento de comandos e eventos.
-- `utils/`: persistência, permissões, economia, XP e integrações.
-- `data/database.sqlite`: persistência principal em SQLite.
-- `data/tickets.json` e `data/reminders.json`: armazenamentos auxiliares JSON
-  com leitura validada, backup de arquivos corrompidos e escrita temporária.
+- `utils/`: economia, persistência, permissões, emojis e integrações.
+- `test/`: testes automatizados.
+- `scripts/`: tarefas de segurança e instalação do serviço.
 
-Os níveis de acesso são definidos em `utils/permissions.ts`: público, membro,
-VIP, moderador, administrador e proprietário. Comandos administrativos também
-mantêm as verificações nativas de permissões do Discord.
+## Verificação
 
-## Validação local
+```bash
+npm run build
+npm test
+npm run security:check
+```
 
-- `npm test`: executa os testes de persistência e autorização.
-- `npm run build`: verifica e compila a camada TypeScript.
-- `npm run security:check`: verifica arquivos rastreados (ou todos os arquivos
-  do projeto quando o executável `git` não estiver disponível).
-
-O registro de comandos e a conexão com o Discord exigem credenciais e não são
-executados pelos testes locais. O `better-sqlite3` também precisa ser instalado
-com binário compatível com a versão de Node em uso.
+Nunca versionem `.env`, tokens ou os bancos de dados locais. Use o
+`.env.example` como referência para a configuração.

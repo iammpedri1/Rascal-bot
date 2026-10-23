@@ -6,7 +6,7 @@ const { readJson, writeJson } = require("./jsonStore");
 
 const dataDir = path.join(__dirname, "../data");
 const dataFile = path.join(dataDir, "reminders.json");
-const CLOCK_EMOJI = emoji.clock;
+const CLOCK_EMOJI = emoji.calendar;
 const MAX_DONE_REMINDERS = 50;
 const DUPLICATE_WINDOW_MS = 5 * 1000;
 const DELIVERY_LOCK_MS = 2 * 60 * 1000;
@@ -135,22 +135,25 @@ async function deliverDueReminders(client) {
   if (deliveryRunning) return;
   deliveryRunning = true;
 
-  const store = readStore();
-  const now = Date.now();
-  const due = store.reminders.filter(reminder => {
-    if (reminder.deliveredAt || reminder.dueAt > now) return false;
-    if (!reminder.deliveringAt) return true;
-    return now - reminder.deliveringAt > DELIVERY_LOCK_MS;
-  });
-
   try {
+    const store = readStore();
+    const now = Date.now();
+    const due = store.reminders.filter(reminder => {
+      if (reminder.deliveredAt || reminder.dueAt > now) return false;
+      if (!reminder.deliveringAt) return true;
+      return now - reminder.deliveringAt > DELIVERY_LOCK_MS;
+    });
+
     for (const reminder of due) {
       reminder.deliveringAt = Date.now();
       writeStore(store);
 
-      await sendReminder(client, reminder);
-      reminder.deliveredAt = Date.now();
-      delete reminder.deliveringAt;
+      if (await sendReminder(client, reminder)) {
+        reminder.deliveredAt = Date.now();
+        delete reminder.deliveringAt;
+      } else {
+        reminder.deliveringAt = Date.now();
+      }
       writeStore(store);
     }
   } finally {

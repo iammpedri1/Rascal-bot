@@ -32,10 +32,10 @@ const repeatedMessages = new Map();
 const icons = {
   user: "<:1000106067:1499822530213445825>",
   id: "<:1000106076:1499822871667540121>",
-  staff: emoji.staffLed || "<:in_staff1:1499799210357293166>",
-  reason: "📜",
-  frog: "🐸",
-  police: emoji.police || "👮‍♂️",
+  staff: emoji.staff,
+  reason: emoji.clipboard,
+  frog: emoji.policePanda,
+  police: emoji.policePanda,
 };
 
 const INVITE_REGEX = /\b(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-z0-9-]+/i;

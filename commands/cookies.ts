@@ -94,7 +94,7 @@ module.exports = {
         )
         .addFields(
           {
-            name: `${emoji.clap} Movimentacao`,
+            name: `${emoji.clipboard} Movimentação`,
             value: [
               `Ganhos totais: **${amount(profile.totalEarned)}**`,
               `Gastos e perdas: **${amount(profile.totalSpent)}**`,
@@ -113,7 +113,7 @@ module.exports = {
             inline: true,
           },
           {
-            name: `${emoji.gift} Daily`,
+            name: `${emoji.calendar} Daily`,
             value: [
               `Sequencia: **${amount(profile.dailyStreak)}**`,
               `Melhor: **${amount(profile.bestDailyStreak)}**`,
@@ -157,7 +157,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x57f287)
-        .setTitle(`${emoji.greenTick} Transferencia concluida`)
+        .setTitle(`${emoji.greenTick} Transferência concluída`)
         .setDescription(
           [
             `<@${interaction.user.id}> enviou ${COOKIE_EMOJI} **${amount(result.amount)} cookies** para <@${target.id}>.`,

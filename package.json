@@ -1,6 +1,9 @@
 {
   "name": "discord-bot",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -13,7 +16,6 @@
   },
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
-    "@google/generative-ai": "^0.24.1",
     "@napi-rs/canvas": "^1.0.0",
     "better-sqlite3": "^13.0.3",
     "discord.js": "^14.26.4",
@@ -22,7 +24,7 @@
     "opusscript": "^0.0.8"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0",
+    "@types/node": "^24.19.2",
     "node-windows": "^1.0.0-beta.8",
     "typescript": "^5.9.3"
   }

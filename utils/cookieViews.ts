@@ -159,6 +159,8 @@ function buildDailyEmbed(source, result) {
     .setDescription(
       [
         `${COOKIE_EMOJI} \u00bb Hoje você coletou **${amount(result.reward)} cookies!**`,
+        ...(result.milestoneReward ? [`${GIFT_EMOJI} \u00bb Marco de sequência: **+${amount(result.milestoneReward)} cookies**.`] : []),
+        ...(result.perkBonus ? [`${GIFT_EMOJI} \u00bb Seus benefícios adicionaram **${amount(result.perkBonus)} cookies**.`] : []),
         "",
         `${COOKIE_EMOJI} \u00bb Agora você possui: **${amount(result.profile.balance)} cookies.**`,
         "",
@@ -202,6 +204,7 @@ function buildWorkEmbed(source, result) {
         `\uD83E\uDDF0 \u00bb Parabéns! Você acaba de realizar um trabalho.`,
         "",
         `${CALM_EMOJI} \u00bb Você trabalhou como **${pick(workSuccessMessages)}** e ganhou **${amount(result.reward)} cookies!**`,
+        ...(result.perkBonus ? [`${GIFT_EMOJI} \u00bb Seus benefícios adicionaram **${amount(result.perkBonus)} cookies**.`] : []),
         "",
         `${COOKIE_EMOJI} \u00bb Agora você possui: **${amount(result.profile.balance)} cookies.**`,
         "",
@@ -222,6 +225,7 @@ function buildBonusEmbed(source, result) {
     .setDescription(
       [
         `${emoji.correct} \u00bb Voc\u00ea recebeu **${amount(result.reward)} cookies**.`,
+        ...(result.perkBonus ? [`${GIFT_EMOJI} \u00bb Seus benefícios adicionaram **${amount(result.perkBonus)} cookies**.`] : []),
         `${COOKIE_EMOJI} \u00bb Saldo atual: **${amount(result.profile.balance)} cookies**.`,
         `${CLOCK_EMOJI} \u00bb Pr\u00f3ximo resgate ${timestamp(result.nextAt)}.`,
       ].join("\n")

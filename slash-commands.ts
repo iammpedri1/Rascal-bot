@@ -3,10 +3,11 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 const { REST, Routes } = require("discord.js");
-
-const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+const { requireDiscordConfig } = require("./utils/discordConfig");
 
 async function main() {
+  const { token, clientId, guildId } = requireDiscordConfig();
+  const rest = new REST({ version: "10" }).setToken(token);
   const commands = [];
   const commandsPath = path.join(__dirname, "commands");
   const files = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
@@ -20,8 +21,8 @@ async function main() {
 
   await rest.put(
     Routes.applicationGuildCommands(
-      process.env.CLIENT_ID,
-      process.env.GUILD_ID
+      clientId,
+      guildId
     ),
     { body: commands }
   );

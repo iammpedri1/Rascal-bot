@@ -50,6 +50,8 @@ db.exec(`
     xp INTEGER NOT NULL DEFAULT 0,
     messages_count INTEGER NOT NULL DEFAULT 0,
     selected_banner TEXT NOT NULL DEFAULT 'default',
+    vip INTEGER NOT NULL DEFAULT 0,
+    cookie_boost_until INTEGER NOT NULL DEFAULT 0,
     last_tax_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -120,6 +122,14 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS cookie_shop_inventory (
+    user_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    purchased_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, item_id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_usuarios_xp ON usuarios (xp DESC, messages_count DESC);
   CREATE INDEX IF NOT EXISTS idx_message_weekly_rank ON message_weekly_stats (guild_id, week_key, messages DESC);
   CREATE INDEX IF NOT EXISTS idx_voice_weekly_rank ON voice_weekly_stats (guild_id, week_key, seconds DESC);
@@ -139,6 +149,17 @@ if (!userColumns.includes("messages_count")) {
 }
 if (!userColumns.includes("selected_banner")) {
   db.prepare("ALTER TABLE usuarios ADD COLUMN selected_banner TEXT NOT NULL DEFAULT 'default'").run();
+}
+if (!userColumns.includes("vip")) {
+  db.prepare("ALTER TABLE usuarios ADD COLUMN vip INTEGER NOT NULL DEFAULT 0").run();
+}
+if (!userColumns.includes("cookie_boost_until")) {
+  db.prepare("ALTER TABLE usuarios ADD COLUMN cookie_boost_until INTEGER NOT NULL DEFAULT 0").run();
+}
+
+const shopColumns = db.prepare("PRAGMA table_info(cookie_shop_inventory)").all().map(column => column.name);
+if (!shopColumns.includes("quantity")) {
+  db.prepare("ALTER TABLE cookie_shop_inventory ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1").run();
 }
 
 function integer(value, fallback = 0) {
@@ -238,7 +259,6 @@ function migrateLegacyCookies() {
     logger.error("Falha ao migrar cookies legados para SQLite", error, {
       legacyCookiesFile,
     });
-    fs.writeFileSync(marker, String(Date.now()));
   }
 }
 
