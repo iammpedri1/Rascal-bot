@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const forbiddenPaths = [
-  /^\.env(?:\..*)?$/,
+  /(?:^|[\\/])\.env(?:\..*)?$/,
   /^node_modules[\\/]/,
   /^data[\\/].*\.(?:sqlite|sqlite-\w*|json)$/i,
   /(?:^|[\\/]).*\.log$/i,
@@ -15,13 +15,13 @@ const secretPatterns = [
   { name: "Gemini API key", pattern: /AIza[0-9A-Za-z_-]{20,}/ },
   {
     name: "generic secret assignment",
-    pattern: /\b(TOKEN|API_KEY|SECRET|PASSWORD|SENHA)\s*=\s*["']?(?!process\.env\b)[^\s"']{12,}/i,
+    pattern: /\b(?:TOKEN|API_KEY|SECRET|PASSWORD|SENHA)\s*=\s*(?![^\r\n]*\bprocess\.env\b)["']?[^\s"']{12,}/i,
   },
 ];
 
 function trackedFiles() {
   try {
-    return execFileSync("git", ["ls-files"], { encoding: "utf8" })
+    return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { encoding: "utf8" })
       .split(/\r?\n/)
       .filter(Boolean);
   } catch (error) {
@@ -50,7 +50,6 @@ function trackedFiles() {
 }
 
 function isForbiddenPath(file) {
-  if (file === ".env.example") return false;
   return forbiddenPaths.some(pattern => pattern.test(file));
 }
 
@@ -72,7 +71,6 @@ for (const file of files) {
     continue;
   }
 
-  if (file === ".env.example") continue;
   if (!isTextFile(file)) continue;
 
   const content = fs.readFileSync(file, "utf8");

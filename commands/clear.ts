@@ -11,6 +11,37 @@ const { ACCESS_LEVELS } = require("../utils/permissions");
 
 const MAX_DELETE = 100;
 
+function discordErrorCode(error) {
+  return typeof error?.code === "number" ? error.code : undefined;
+}
+
+function scheduleReplyDeletion(interaction, messageId = "@original") {
+  const timer = setTimeout(() => {
+    void interaction.deleteReply(messageId).catch(error => {
+      if (![10008, 10015, 10062].includes(discordErrorCode(error))) {
+        console.error("Erro ao remover resposta temporária do /clear:", error);
+      }
+    });
+  }, 5000);
+  timer.unref?.();
+}
+
+async function sendClearResult(interaction, content) {
+  try {
+    await interaction.editReply(content);
+    scheduleReplyDeletion(interaction);
+  } catch (error) {
+    if (discordErrorCode(error) !== 10008) throw error;
+
+    const fallback = await interaction.followUp({
+      content,
+      flags: MessageFlags.Ephemeral,
+      fetchReply: true,
+    });
+    scheduleReplyDeletion(interaction, fallback.id);
+  }
+}
+
 module.exports = defineCommand({
   category: "staff",
   access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageMessages },
@@ -75,6 +106,7 @@ module.exports = defineCommand({
 
     await interaction.deferReply();
 
+    let resultMessage;
     try {
       const fetched = await interaction.channel.messages.fetch({ limit: MAX_DELETE });
       const messages = target
@@ -82,26 +114,23 @@ module.exports = defineCommand({
         : fetched.first(amount);
 
       if (!messages.length) {
-        const reply = await interaction.editReply(`${emoji.peepSad} Não encontrei mensagens para apagar.`);
-        setTimeout(() => reply.delete().catch(() => interaction.deleteReply().catch(() => {})), 5000);
-        return;
+        resultMessage = `${emoji.peepSad} Não encontrei mensagens para apagar.`;
+      } else {
+        const deleted = await interaction.channel.bulkDelete(messages, true);
+        const skipped = messages.length - deleted.size;
+        const targetText = target ? ` de ${target}` : "";
+        const skippedText = skipped
+          ? `\n${emoji.sino} ${skipped} mensagem(ns) não puderam ser apagadas por serem antigas demais.`
+          : "";
+        resultMessage = `${emoji.correct} Apaguei **${deleted.size}** mensagem(ns)${targetText}.${skippedText}`;
       }
-
-      const deleted = await interaction.channel.bulkDelete(messages, true);
-      const skipped = messages.length - deleted.size;
-      const targetText = target ? ` de ${target}` : "";
-      const skippedText = skipped
-        ? `\n${emoji.sino} ${skipped} mensagem(ns) não puderam ser apagadas por serem antigas demais.`
-        : "";
-      const reply = await interaction.editReply(
-        `${emoji.correct} Apaguei **${deleted.size}** mensagem(ns)${targetText}.${skippedText}`
-      );
-
-      setTimeout(() => reply.delete().catch(() => interaction.deleteReply().catch(() => {})), 5000);
     } catch (error) {
-      console.error("Erro no /clear chat:", error);
-      const reply = await interaction.editReply(`${emoji.crossed} Não consegui limpar as mensagens desse canal.`);
-      setTimeout(() => reply.delete().catch(() => interaction.deleteReply().catch(() => {})), 5000);
+      if (discordErrorCode(error) !== 10008) console.error("Erro no /clear chat:", error);
+      resultMessage = discordErrorCode(error) === 10008
+        ? `${emoji.sino} A lista de mensagens mudou durante a limpeza. Tente novamente.`
+        : `${emoji.crossed} Não consegui limpar as mensagens desse canal.`;
     }
+
+    return sendClearResult(interaction, resultMessage);
   },
 });

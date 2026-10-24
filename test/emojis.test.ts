@@ -10,6 +10,7 @@ test("emoji refresh is shared and keeps the last cache when Discord is unavailab
     resolveFetch = resolve;
   });
   const client = {
+    isReady: () => true,
     application: {
       emojis: {
         fetch() {
@@ -34,6 +35,7 @@ test("emoji refresh is shared and keeps the last cache when Discord is unavailab
   assert.equal(getEmojiEntries()[0][0], "BlobCookies");
 
   const unavailable = {
+    isReady: () => true,
     application: { emojis: { fetch: async () => { throw new Error("offline"); } } },
   };
   await assert.rejects(loadEmojis(unavailable), /offline/);
