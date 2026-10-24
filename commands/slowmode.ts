@@ -1,7 +1,8 @@
-const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { ACCESS_LEVELS } = require("../utils/permissions");
 
-module.exports = {
+module.exports = defineCommand({
   category: "staff",
   access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageChannels },
 
@@ -53,4 +54,4 @@ module.exports = {
 
     return interaction.reply({ embeds: [embed] });
   },
-};
+});

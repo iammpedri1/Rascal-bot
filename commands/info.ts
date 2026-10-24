@@ -1,95 +1,78 @@
-const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
-
-const emoji = require("../utils/emojis");
-
-const COOKIE_COLOR = 0xf5a623;
-
-function bullet(icon, text) {
-  return `${icon} ${text}`;
-}
+import { defineCommand } from "../types/command";
+const { EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
+const { guildRoleOffers, vipBenefitsFor } = require("../utils/cookieShop");
+const { formatNumber, icon, randomColor, setBrandFooter } = require("../utils/embedStyle");
 
 function buildCookiesEmbed(interaction) {
-  return new EmbedBuilder()
-    .setColor(COOKIE_COLOR)
-    .setAuthor({
-      name: `${interaction.client.user.username} - Guia de cookies`,
-      iconURL: interaction.client.user.displayAvatarURL({ size: 128 }),
-    })
-    .setTitle(`${emoji.cookie} Como funcionam os cookies?`)
-    .setDescription(
-      [
-        "Cookies são a economia do servidor. Você ganha participando, jogando e usando os comandos de recompensa.",
-        "",
-        `${emoji.calendar} **Prêmios semanais:** top 1 recebe **15.000**, top 2 recebe **10.000** e top 3 recebe **5.000** cookies nos rankings de mensagens e voz.`,
-      ].join("\n")
-    )
-    .addFields(
-      {
-        name: `${emoji.correct} Como ganhar cookies`,
-        value: [
-          bullet(emoji.announcement, "Conversando no chat e acumulando XP."),
-          bullet(emoji.voice, "Participando dos canais de voz para subir no `/rankvoz`."),
-          bullet(emoji.clipboard, "Aparecendo no `/rankmensagens` semanal."),
-          bullet(emoji.work, "Usando `/trabalhar` quando o cooldown acabar."),
-          bullet(emoji.calendar, "Resgatando `/daily` e `/bonus`."),
-          bullet(emoji.gamesIcon, "Participando de apostas e minigames como `/jokenpo`, `/cara-ou-coroa` e `/rifa`."),
-          bullet(emoji.policePanda, "Tentando roubar alguém com `/roubar usuario` quando quiser arriscar."),
-        ].join("\n"),
-        inline: false,
-      },
-      {
-        name: `${emoji.shop} Como gastar ou mover cookies`,
-        value: [
-          bullet(emoji.shop, "Comprando cores, VIP, boost de cookies, caixas e removedores de cooldown em `/loja`."),
-          bullet(emoji.cookie, "Apostando em jogos e desafios."),
-          bullet(emoji.lorittaCafune, "Pagando outros membros com `/cookies pagar`."),
-          bullet(emoji.warning, "Arriscando em comandos que podem dar lucro ou prejuízo, como `/roubar` e `/trabalhar`."),
-        ].join("\n"),
-        inline: false,
-      },
-      {
-        name: `${emoji.menuIcon} Comandos úteis`,
-        value: [
-          "`/cookies saldo` - vê seu saldo e estatísticas.",
-          "`/loja` - compra cores, VIP, boosts, caixas e removedores de cooldown.",
-          "`/inventario` - mostra saldo, estatísticas, itens e benefícios ativos.",
-          "`/tocando` - mostra a música do Spotify compartilhada no Discord.",
-          "`/rank cookies` - ranking global de cookies.",
-          "`/rankmensagens` - ranking semanal de mensagens.",
-          "`/rankvoz` - ranking semanal de voz.",
-          "`/lembretes` - vê seus cooldowns importantes.",
-        ].join("\n"),
-        inline: false,
-      }
-    )
-    .setFooter({ text: "Os prêmios semanais são pagos uma única vez por semana para cada ranking." })
-    .setTimestamp();
+  const embed = new EmbedBuilder()
+    .setColor(randomColor())
+    .setThumbnail(interaction.client.user.displayAvatarURL({ size: 256 }))
+    .setDescription([
+      `${icon("info", "❓")}  » **Como consigo ganhar cookies?**`,
+      `> • Resgatando **/daily**: 900 a 1.800 cookies; a cada 5 dias seguidos há um bônus de 1.000 a 3.000.`,
+      `> • Trabalhando com **/trabalhar**: 250 a 950 cookies antes dos bônus. Uma falha pode gerar uma multa de até 700.`,
+      `> • Coletando **/bonus**: 150 a 450 cookies uma vez por semana.`,
+      `> • Ficando em voz sem mute: receba de 1 a 5 cookies a cada 10 minutos.`,
+      `> • Ficando no top 3 semanal de **/rankmensagens**, **/rankvoz** ou **/ranktransmissao**: ganhe 15.000, 10.000 ou 5.000 cookies.`,
+      `> • No primeiro boost do servidor: bônus único de 25.000 e multiplicador permanente x2 no **/daily**.`,
+      `> • Tentando **/roubar @usuario**: um roubo bem-sucedido leva de 8% a 20% do saldo da pessoa; se for pego, você pode ser preso.`,
+      `> • Apostando em **/cara-ou-coroa**, **/jokenpo** e **/rifa**. Jogos também podem resultar em perda.`,
+      "",
+      `${icon("info", "❓")}  » **Como posso gastar meus cookies?**`,
+      "> • Comprando cores, VIPs e aceleradores em **/loja**; a aba do Mercado Negro é exclusiva para VIPs.",
+      "> • Comprando uma **/raspadinha** por 500 cookies ou bilhetes da **/loteria**; metade de cada bilhete aumenta o prêmio semanal.",
+      "> • Enviando cookies para outra pessoa com **/cookies pagar**.",
+      "> • Fazendo apostas em **/cara-ou-coroa**, **/jokenpo** ou **/rifa**; você pode perder a aposta.",
+      "> • Pagando a fiança com **/fianca** para sair da prisão antes do prazo.",
+      "> • A taxa de inatividade é 1% a cada 25 dias sem **/daily**; a taxa mensal é 2%. Nitro Boost isenta da taxa mensal.",
+    ].join("\n"));
+
+  setBrandFooter(embed, interaction.client, "economia de cookies");
+  return embed;
 }
 
-module.exports = {
+function buildVipsEmbed(interaction) {
+  const guild = interaction.guild;
+  const roles = guildRoleOffers(guild, "vip").slice(0, 10);
+  const roleDetails = roles.length
+    ? roles.map(role =>
+      `• ${role.mention} · **${formatNumber(role.price)} cookies / 1 mês**\n↳ ${vipBenefitsFor(role)}\n↳ Compre em **/loja**.`
+    ).join("\n\n")
+    : "Nenhum cargo VIP que o bot possa atribuir foi encontrado. A equipe precisa criar cargos VIP e posicioná-los abaixo do Rascal.";
+  const embed = new EmbedBuilder()
+    .setColor(randomColor())
+    .setAuthor({
+      name: `${guild.name} · Vantagens VIP`,
+      ...(guild.iconURL({ size: 128 }) ? { iconURL: guild.iconURL({ size: 128 }) } : {}),
+    })
+    .setTitle(`${icon("owner", "⭐")} VIPs disponíveis`)
+    .setThumbnail(guild.iconURL({ size: 256 }) || interaction.client.user.displayAvatarURL({ size: 256 }))
+    .setDescription("Os VIPs dão bônus reais às recompensas da economia durante o período ativo e liberam o Mercado Negro.")
+    .addFields({ name: `${icon("roles", "🎭")} VIPs DESTE SERVIDOR · 1 mês`, value: roleDetails, inline: false });
+  setBrandFooter(embed, interaction.client, `/loja · ${guild.name}`);
+  return embed;
+}
+
+module.exports = defineCommand({
   category: "info",
 
   data: new SlashCommandBuilder()
     .setName("info")
-    .setDescription("Mostra guias e informações do servidor")
+    .setDescription("Guias da economia e benefícios do servidor")
     .addSubcommand(subcommand =>
-      subcommand
-        .setName("cookies")
-        .setDescription("Explica como ganhar, gastar e acompanhar cookies")
+      subcommand.setName("cookies").setDescription("Como ganhar, usar e acompanhar cookies")
+    )
+    .addSubcommand(subcommand =>
+      subcommand.setName("vips").setDescription("Mostra os benefícios VIP da economia e do servidor")
     ),
 
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
-
-    if (subcommand === "cookies") {
-      return interaction.reply({
-        embeds: [buildCookiesEmbed(interaction)],
-      });
+    if (subcommand === "cookies") return interaction.reply({ embeds: [buildCookiesEmbed(interaction)] });
+    if (subcommand === "vips") {
+      if (!interaction.guild) return interaction.reply({ content: "Use `/info vips` dentro de um servidor.", flags: 64 });
+      return interaction.reply({ embeds: [buildVipsEmbed(interaction)] });
     }
-
-    return interaction.reply({
-      content: `${emoji.crossed} Subcomando desconhecido.`,
-      flags: 64,
-    });
+    return interaction.reply({ content: "Subcomando desconhecido.", flags: 64 });
   },
-};
+});

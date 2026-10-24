@@ -1,21 +1,15 @@
 require("dotenv").config();
 
-const fs = require("fs");
-const path = require("path");
+import { CommandHandler } from "./handlers/commandHandler";
 const { REST, Routes } = require("discord.js");
 const { requireDiscordConfig } = require("./utils/discordConfig");
 
 async function main() {
   const { token, clientId, guildId } = requireDiscordConfig();
   const rest = new REST({ version: "10" }).setToken(token);
-  const commands = [];
-  const commandsPath = path.join(__dirname, "commands");
-  const files = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
-
-  for (const file of files) {
-    const command = require(path.join(commandsPath, file));
-    if (command?.data) commands.push(command.data.toJSON());
-  }
+  const commands = CommandHandler.discover()
+    .filter(command => command.data.name !== "xp")
+    .map(command => command.data.toJSON());
 
   console.log("Comandos finais:", commands.map(command => command.name));
 

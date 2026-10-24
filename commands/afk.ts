@@ -1,11 +1,12 @@
-const { SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
 const { removeAfk, setAfk } = require("../utils/afkStore");
 
 const REASON_EMOJI = "<:1000106078:1499822832757113024>";
 
-module.exports = {
+module.exports = defineCommand({
   category: "utility",
 
   data: new SlashCommandBuilder()
@@ -62,4 +63,4 @@ module.exports = {
 
     return interaction.reply({ content: "Subcomando desconhecido.", flags: 64 });
   },
-};
+});

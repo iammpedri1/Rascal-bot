@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 
 const { claimBonus } = require("../utils/cookieEconomy");
 const {
@@ -7,7 +8,7 @@ const {
   buildContext,
 } = require("../utils/cookieViews");
 
-module.exports = {
+module.exports = defineCommand({
   category: "economy",
 
   data: new SlashCommandBuilder()
@@ -22,4 +23,4 @@ module.exports = {
 
     return interaction.reply({ embeds: [embed] });
   },
-};
+});

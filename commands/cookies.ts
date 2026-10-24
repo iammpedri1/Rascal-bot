@@ -1,7 +1,8 @@
+import { defineCommand } from "../types/command";
 const {
   SlashCommandBuilder,
   EmbedBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
 const {
@@ -13,7 +14,7 @@ const {
   buildInlineErrorEmbed,
 } = require("../utils/cookieViews");
 
-const COOKIE_EMOJI = emoji.cookie;
+const cookieEmoji = () => emoji.cookie;
 
 function amount(value) {
   return Number(value || 0).toLocaleString("pt-BR");
@@ -34,7 +35,7 @@ function emojiImageUrl(customEmoji) {
   return `https://cdn.discordapp.com/emojis/${match[1]}.${extension}?quality=lossless`;
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "economy",
 
   data: new SlashCommandBuilder()
@@ -84,12 +85,12 @@ module.exports = {
           name: `Carteira de ${user.username}`,
           iconURL: user.displayAvatarURL({ size: 64 }),
         })
-        .setTitle(`${COOKIE_EMOJI} Saldo de Cookies`)
+        .setTitle(`${cookieEmoji()} Saldo de Cookies`)
         .setThumbnail(emojiImageUrl(emoji.cookie) || user.displayAvatarURL({ size: 256 }))
         .setDescription(
           [
             `${emoji.online} \u00bb Usuário: <@${user.id}>`,
-            `${COOKIE_EMOJI} \u00bb Saldo atual: **${amount(profile.balance)} cookies**`,
+            `${cookieEmoji()} \u00bb Saldo atual: **${amount(profile.balance)} cookies**`,
           ].join("\n")
         )
         .addFields(
@@ -150,7 +151,7 @@ module.exports = {
 
       if (!result.ok && result.reason === "balance") {
         return interaction.reply({
-          embeds: [buildInlineErrorEmbed(`Você não tem ${COOKIE_EMOJI} **${amount(quantity)} cookies** para enviar!`)],
+          embeds: [buildInlineErrorEmbed(`Você não tem ${cookieEmoji()} **${amount(quantity)} cookies** para enviar!`)],
           flags: 64,
         });
       }
@@ -160,10 +161,10 @@ module.exports = {
         .setTitle(`${emoji.greenTick} Transferência concluída`)
         .setDescription(
           [
-            `<@${interaction.user.id}> enviou ${COOKIE_EMOJI} **${amount(result.amount)} cookies** para <@${target.id}>.`,
+            `<@${interaction.user.id}> enviou ${cookieEmoji()} **${amount(result.amount)} cookies** para <@${target.id}>.`,
             "",
-            `Seu saldo: ${COOKIE_EMOJI} **${amount(result.from.balance)}**`,
-            `Saldo de ${target.username}: ${COOKIE_EMOJI} **${amount(result.to.balance)}**`,
+            `Seu saldo: ${cookieEmoji()} **${amount(result.from.balance)}**`,
+            `Saldo de ${target.username}: ${cookieEmoji()} **${amount(result.to.balance)}**`,
           ].join("\n")
         )
         .setFooter({
@@ -180,4 +181,4 @@ module.exports = {
       flags: 64,
     });
   },
-};
+});

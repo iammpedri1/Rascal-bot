@@ -1,16 +1,17 @@
+import { defineCommand } from "../types/command";
 const {
   ChannelType,
   MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
 const { ACCESS_LEVELS } = require("../utils/permissions");
 
 const MAX_DELETE = 100;
 
-module.exports = {
+module.exports = defineCommand({
   category: "staff",
   access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageMessages },
 
@@ -103,4 +104,4 @@ module.exports = {
       setTimeout(() => reply.delete().catch(() => interaction.deleteReply().catch(() => {})), 5000);
     }
   },
-};
+});

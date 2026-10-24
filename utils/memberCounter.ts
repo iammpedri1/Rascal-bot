@@ -1,6 +1,7 @@
 const { ChannelType } = require("discord.js");
 
 const logger = require("./logger");
+const { getPrimaryGuild } = require("./primaryGuild");
 
 const MEMBER_COUNTER_INTERVAL_MS = Number(process.env.MEMBER_COUNTER_INTERVAL_MS || 10 * 60 * 1000);
 
@@ -28,18 +29,19 @@ async function updateGuildMemberCounter(guild) {
 
 function startMemberCounterUpdater(client) {
   const updateAll = () => {
-    for (const guild of client.guilds.cache.values()) {
-      updateGuildMemberCounter(guild).catch(error => {
-        logger.warn("Erro no ciclo do contador de membros", {
-          guild: guild.id,
-          error: error.message,
-        });
+    const guild = getPrimaryGuild(client);
+    if (!guild) return;
+    updateGuildMemberCounter(guild).catch(error => {
+      logger.warn("Erro no ciclo do contador de membros", {
+        guild: guild.id,
+        error: error.message,
       });
-    }
+    });
   };
 
   updateAll();
-  setInterval(updateAll, MEMBER_COUNTER_INTERVAL_MS);
+  const timer = setInterval(updateAll, MEMBER_COUNTER_INTERVAL_MS);
+  timer.unref?.();
 }
 
 module.exports = {

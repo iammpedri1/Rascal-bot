@@ -1,22 +1,21 @@
 // @ts-nocheck
 const db = require("./db");
 const cooldowns = require("./cooldowns");
-const { addUserXp } = require("./xpSystem");
-const { COLOR_ITEMS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
+const { PRIMARY_GUILD_ID } = require("./primaryGuild");
+const blackMarket = require("./blackMarket") as typeof import("./blackMarket");
+const { COLOR_ITEMS, COOLDOWN_TARGETS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const START_BALANCE           = 100;
 
-// Daily — base + bônus por streak
+// Daily rewards
 const DAILY_MIN_REWARD        = 900;
 const DAILY_MAX_REWARD        = 1800;
 const DAILY_STREAK_WINDOW     = 48 * 60 * 60 * 1000;
-const DAILY_STREAK_BONUS      = 50;   // +50 cookies por dia de streak
-const DAILY_STREAK_BONUS_CAP  = 1500; // bônus máximo de streak
-const DAILY_MILESTONE_DAYS     = 10;
-const DAILY_MILESTONE_MIN      = 200;
-const DAILY_MILESTONE_MAX      = 400;
+const DAILY_MILESTONE_DAYS     = 5;
+const DAILY_MILESTONE_MIN      = 1000;
+const DAILY_MILESTONE_MAX      = 3000;
 
 // Work
 const WORK_MIN_REWARD         = 250;
@@ -44,6 +43,7 @@ const REP_COOLDOWN            = cooldowns.DURATIONS.rep;
 const DAILY_TAX_RATE          = 0.01;
 const DAILY_TAX_MAX           = 250;
 const DAILY_TAX_GRACE_BALANCE = 500;
+const INACTIVITY_TAX_PERIOD_MS = 25 * 24 * 60 * 60 * 1000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -97,12 +97,12 @@ function rowToProfile(row) {
     transferredOut: integer(row.transferred_out),
     transferredIn: integer(row.transferred_in),
     biggestWin: integer(row.biggest_win),
-    xp: integer(row.xp),
     messagesCount: integer(row.messages_count),
     selectedBanner: row.selected_banner || "default",
     isVip: integer(row.vip) === 1,
     cookieBoostUntil: integer(row.cookie_boost_until),
     lastTaxAt: integer(row.last_tax_at),
+    inactivityTaxPeriods: integer(row.inactivity_tax_periods),
     createdAt: integer(row.created_at),
     updatedAt: integer(row.updated_at),
   };
@@ -141,8 +141,31 @@ function getById(userId) {
 function applyCookieBonuses(userId, baseReward) {
   const perks = db.prepare("SELECT vip, cookie_boost_until FROM usuarios WHERE id = ?")
     .get(String(userId));
-  const bonusPercent = (perks?.vip ? 10 : 0) + (integer(perks?.cookie_boost_until) > Date.now() ? 50 : 0);
+  const now = Date.now();
+  const vipPurchase = db.prepare(`
+    SELECT MAX(
+      CASE
+        WHEN benefit_percent > 0 THEN benefit_percent
+        WHEN price >= 60000 THEN 15
+        WHEN price >= 30000 THEN 10
+        ELSE 5
+      END
+    ) AS bonusPercent
+    FROM guild_shop_role_purchases
+    WHERE guild_id = ? AND user_id = ? AND kind = 'vip'
+      AND (expires_at IS NULL OR expires_at > ?)
+  `).get(String(PRIMARY_GUILD_ID), String(userId), now);
+  const purchasedVipPercent = integer(vipPurchase?.bonusPercent);
+  const vipPercent = purchasedVipPercent > 0 ? purchasedVipPercent : (perks?.vip ? 10 : 0);
+  const bonusPercent = vipPercent + (integer(perks?.cookie_boost_until) > now ? 50 : 0);
   return Math.floor(integer(baseReward) * (100 + bonusPercent) / 100);
+}
+
+function applyPermanentDailyBoost(userId, guildId, reward) {
+  const boosted = Boolean(db.prepare(`
+    SELECT 1 FROM server_boost_rewards WHERE guild_id = ? AND user_id = ?
+  `).get(String(guildId || PRIMARY_GUILD_ID), String(userId)));
+  return { reward: boosted ? integer(reward) * 2 : integer(reward), multiplier: boosted ? 2 : 1 };
 }
 
 function pushTransaction(type, userId, amount, details = {}) {
@@ -164,35 +187,56 @@ function pushTransaction(type, userId, amount, details = {}) {
 // ─── Impostos ─────────────────────────────────────────────────────────────────
 
 function applyDailyTax(userId) {
-  const profile = rowToProfile(db.prepare("SELECT * FROM usuarios WHERE id = ?").get(String(userId)));
+  const row = db.prepare("SELECT * FROM usuarios WHERE id = ?").get(String(userId));
+  const profile = rowToProfile(row);
   const now = Date.now();
   if (!profile) return null;
 
-  if (!profile.lastTaxAt) {
-    db.prepare("UPDATE usuarios SET last_tax_at = ? WHERE id = ?").run(now, String(userId));
-    return { profile, charged: 0, days: 0 };
-  }
+  const lastDaily = db.prepare(`
+    SELECT created_at AS createdAt
+    FROM transacoes
+    WHERE user_id = ? AND tipo = 'daily'
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(profile.id);
+  const inactivityStart = integer(lastDaily?.createdAt, profile.createdAt || now);
+  const duePeriods = Math.floor(Math.max(0, now - inactivityStart) / INACTIVITY_TAX_PERIOD_MS);
+  const alreadyChargedPeriods = integer(row.inactivity_tax_periods);
+  const periods = Math.max(0, duePeriods - alreadyChargedPeriods);
 
-  const days = Math.floor((now - profile.lastTaxAt) / (24 * 60 * 60 * 1000));
-  if (days <= 0) return { profile, charged: 0, days: 0 };
+  if (!periods) return { profile, charged: 0, periods: 0 };
 
-  if (profile.balance <= DAILY_TAX_GRACE_BALANCE) {
-    db.prepare("UPDATE usuarios SET last_tax_at = ? WHERE id = ?").run(now, String(userId));
-    return { profile, charged: 0, days: 0 };
-  }
+  const settle = db.transaction(() => {
+    let balance = integer(db.prepare("SELECT cookies FROM usuarios WHERE id = ?").get(profile.id)?.cookies);
+    let charged = 0;
+    for (let index = 0; index < periods && balance > DAILY_TAX_GRACE_BALANCE; index++) {
+      const periodTax = Math.min(
+        DAILY_TAX_MAX,
+        Math.max(1, Math.floor((balance - DAILY_TAX_GRACE_BALANCE) * DAILY_TAX_RATE))
+      );
+      const actualTax = Math.min(balance - DAILY_TAX_GRACE_BALANCE, periodTax);
+      balance -= actualTax;
+      charged += actualTax;
+    }
 
-  const taxableBalance = profile.balance - DAILY_TAX_GRACE_BALANCE;
-  const dailyTax = Math.min(DAILY_TAX_MAX, Math.max(1, Math.floor(taxableBalance * DAILY_TAX_RATE)));
-  const charged  = Math.min(profile.balance - DAILY_TAX_GRACE_BALANCE, dailyTax * days);
+    if (charged > 0) {
+      addBalance(profile.id, -charged);
+      updateStats(profile.id, { total_spent: charged, cookies_lost: charged });
+      pushTransaction("inactivity_tax", profile.id, -charged, {
+        note: `${periods} período(s) de 25 dias sem /daily`,
+      });
+    }
 
-  if (charged <= 0) return { profile, charged: 0, days: 0 };
+    db.prepare(`
+      UPDATE usuarios
+      SET inactivity_tax_periods = ?, last_tax_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(duePeriods, now, now, profile.id);
 
-  addBalance(profile.id, -charged);
-  updateStats(profile.id, { total_spent: charged, cookies_lost: charged });
-  pushTransaction("daily_tax", profile.id, -charged, { note: `${days} dia(s)` });
-  db.prepare("UPDATE usuarios SET last_tax_at = ? WHERE id = ?").run(now, String(userId));
-
-  return { profile: getById(profile.id), charged, days };
+    return charged;
+  });
+  const charged = settle();
+  return { profile: getById(profile.id), charged, periods };
 }
 
 // ─── Usuário ──────────────────────────────────────────────────────────────────
@@ -245,19 +289,18 @@ function claimDaily(user, details = {}) {
   const streak = previousDaily && now - previousDaily.createdAt <= DAILY_STREAK_WINDOW
     ? profile.dailyStreak + 1
     : 1;
-
-  // Bônus de streak: +50 por dia, máximo de DAILY_STREAK_BONUS_CAP
-  const streakBonus = Math.min(
-    DAILY_STREAK_BONUS_CAP,
-    (streak - 1) * DAILY_STREAK_BONUS
-  );
-
   const base   = randomAmount(DAILY_MIN_REWARD, DAILY_MAX_REWARD);
-  const rawReward = base + streakBonus;
-  const milestoneReward = streak % DAILY_MILESTONE_DAYS === 0
+  const dailyBaseReward = applyCookieBonuses(profile.id, base);
+  const dailyBoost = applyPermanentDailyBoost(profile.id, details.guildId, dailyBaseReward);
+  const dailyReward = dailyBoost.reward;
+  const streakBonus = streak % DAILY_MILESTONE_DAYS === 0
     ? randomAmount(DAILY_MILESTONE_MIN, DAILY_MILESTONE_MAX)
     : 0;
-  const reward = applyCookieBonuses(profile.id, rawReward + milestoneReward);
+  const milestoneBaseReward = streakBonus ? applyCookieBonuses(profile.id, streakBonus) : 0;
+  const milestoneReward = streakBonus
+    ? applyPermanentDailyBoost(profile.id, details.guildId, milestoneBaseReward).reward
+    : 0;
+  const reward = dailyReward + milestoneReward;
   const nextAt = cooldowns.consume(profile.id, "daily");
 
   addBalance(profile.id, reward);
@@ -268,20 +311,25 @@ function claimDaily(user, details = {}) {
   });
   setStat(profile.id, "daily_streak", streak);
   if (streak > profile.bestDailyStreak) setStat(profile.id, "best_daily_streak", streak);
-  pushTransaction("daily", profile.id, reward, details);
-
-  const xpReward = addUserXp(user, 120);
+  pushTransaction("daily", profile.id, dailyReward, details);
+  if (milestoneReward) {
+    pushTransaction("daily_streak_bonus", profile.id, milestoneReward, {
+      ...details,
+      note: `Bônus de sequência diária: ${streak} dias`,
+    });
+  }
+  db.prepare("UPDATE usuarios SET inactivity_tax_periods = 0 WHERE id = ?").run(profile.id);
 
   return {
     claimed: true,
     profile: getById(profile.id),
     reward,
-    perkBonus: reward - rawReward,
+    perkBonus: dailyReward - base + milestoneReward - streakBonus,
     base,
-    streakBonus,
+    streakBonus: milestoneReward,
     milestoneReward,
-    xpReward,
     streak,
+    dailyMultiplier: dailyBoost.multiplier,
     nextAt,
   };
 }
@@ -303,7 +351,7 @@ function getDailyStreak(user) {
     bestStreak: profile.bestDailyStreak,
     active,
     nextMilestone: active
-      ? DAILY_MILESTONE_DAYS - (profile.dailyStreak % DAILY_MILESTONE_DAYS || DAILY_MILESTONE_DAYS)
+      ? DAILY_MILESTONE_DAYS - (profile.dailyStreak % DAILY_MILESTONE_DAYS)
       : DAILY_MILESTONE_DAYS,
   };
 }
@@ -320,52 +368,59 @@ function work(user, details = {}) {
       profile,
       remaining: cooldown.remaining,
       nextAt: cooldown.expiresAt,
+      nextAt: cooldown.expiresAt,
     };
   }
 
-  const nextAt  = cooldowns.consume(profile.id, "trabalhar");
-  const success = Math.random() < 0.4;
+  const nextAt = cooldowns.consume(profile.id, "trabalhar");
+  const settleWork = db.transaction(() => {
+    const currentProfile = getById(profile.id);
+    updateStats(profile.id, { work_count: 1 });
 
-  updateStats(profile.id, { work_count: 1 });
+    if (Math.random() >= 0.4) {
+      // A multa nunca pode exceder o saldo que realmente existe.
+      const loss = Math.min(currentProfile.balance, randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS));
+      if (loss > 0) {
+        addBalance(profile.id, -loss);
+        updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
+        pushTransaction("work_loss", profile.id, -loss, {
+          ...details,
+          note: details.reason || details.note,
+        });
+      }
 
-  if (!success) {
-    const loss = randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS);
+      return {
+        worked: true,
+        success: false,
+        profile: getById(profile.id),
+        loss,
+        reason: details.reason || null,
+        job: details.job || null,
+        nextAt,
+      };
+    }
 
-    addBalance(profile.id, -loss);
-    updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
-    pushTransaction("work_loss", profile.id, -loss, details);
-
-    const xpReward = addUserXp(user, 25);
+    const baseReward = randomAmount(WORK_MIN_REWARD, WORK_MAX_REWARD);
+    const reward = applyCookieBonuses(profile.id, baseReward);
+    addBalance(profile.id, reward);
+    updateStats(profile.id, { cookies_won: reward, total_earned: reward });
+    pushTransaction("work", profile.id, reward, {
+      ...details,
+      note: details.job || details.note,
+    });
 
     return {
       worked: true,
-      success: false,
+      success: true,
       profile: getById(profile.id),
-      loss,
-      xpReward,
-      reason: details.reason || null,
+      reward,
+      perkBonus: reward - baseReward,
+      job: details.job || null,
       nextAt,
     };
-  }
+  });
 
-  const baseReward = randomAmount(WORK_MIN_REWARD, WORK_MAX_REWARD);
-  const reward = applyCookieBonuses(profile.id, baseReward);
-
-  addBalance(profile.id, reward);
-  updateStats(profile.id, { cookies_won: reward, total_earned: reward });
-  pushTransaction("work", profile.id, reward, details);
-
-  const xpReward = addUserXp(user, 60);
-
-  return {
-    worked: true,
-    success: true,
-    profile: getById(profile.id),
-    reward,
-    perkBonus: reward - baseReward,
-    xpReward,
-    nextAt,
-  };
+  return settleWork();
 }
 
 // ─── Bonus ────────────────────────────────────────────────────────────────────
@@ -414,6 +469,9 @@ function rob(thiefUser, targetUser, details = {}) {
     return { ok: false, reason: "self", thief, target };
   }
 
+  const prison = blackMarket.getActivePrisonStatus(thief.id);
+  if (prison) return { ok: false, reason: "prison", thief, target, prison };
+
   if (target.balance < ROB_MIN_TARGET_BALANCE) {
     return { ok: false, reason: "target_balance", thief, target };
   }
@@ -430,54 +488,98 @@ function rob(thiefUser, targetUser, details = {}) {
     };
   }
 
-  const nextAt  = cooldowns.consume(thief.id, "roubar");
-  const success = Math.random() < ROB_SUCCESS_CHANCE;
+  return db.transaction(() => {
+    const nextAt = cooldowns.consume(thief.id, "roubar");
+    const guildId = String(details.guildId || PRIMARY_GUILD_ID);
+    const cameraUsed = blackMarket.consumeInventoryItem(target.id, "camera");
+    updateStats(thief.id, { rob_count: 1 });
 
-  updateStats(thief.id, { rob_count: 1 });
+    if (cameraUsed) {
+      pushTransaction("rob_blocked", thief.id, 0, {
+        ...details,
+        targetId: target.id,
+        note: "O roubo foi bloqueado por uma câmera de segurança",
+      });
+      pushTransaction("rob_camera_protection", target.id, 0, {
+        ...details,
+        targetId: thief.id,
+        note: "Câmera de Segurança bloqueou uma tentativa de roubo",
+      });
+      return {
+        ok: true,
+        success: false,
+        protected: true,
+        thief: getById(thief.id),
+        target: getById(target.id),
+        nextAt,
+      };
+    }
 
-  if (success) {
-    const percent = randomAmount(ROB_STEAL_MIN_PCT, ROB_STEAL_MAX_PCT);
-    const stolen  = Math.max(1, Math.floor(target.balance * (percent / 100)));
+    const crowbarUsed = blackMarket.consumeInventoryItem(thief.id, "crowbar");
+    const chance = Math.min(0.95, ROB_SUCCESS_CHANCE + (crowbarUsed ? 0.1 : 0));
+    const success = Math.random() < chance;
 
-    addBalance(target.id, -stolen);
-    addBalance(thief.id, stolen);
-    updateStats(thief.id, { rob_wins: 1, cookies_won: stolen, total_earned: stolen });
-    updateStats(target.id, { cookies_lost: stolen, total_spent: stolen });
-    pushTransaction("rob_win", thief.id, stolen, { ...details, targetId: target.id, note: `${percent}%` });
-    pushTransaction("rob_loss_target", target.id, -stolen, { ...details, targetId: thief.id, note: `${percent}%` });
+    if (success) {
+      const percent = randomAmount(ROB_STEAL_MIN_PCT, ROB_STEAL_MAX_PCT);
+      const stolen = Math.max(1, Math.floor(target.balance * (percent / 100)));
+
+      addBalance(target.id, -stolen);
+      addBalance(thief.id, stolen);
+      updateStats(thief.id, { rob_wins: 1, cookies_won: stolen, total_earned: stolen });
+      updateStats(target.id, { cookies_lost: stolen, total_spent: stolen });
+      pushTransaction("rob_win", thief.id, stolen, {
+        ...details,
+        targetId: target.id,
+        note: `${percent}%${crowbarUsed ? "; pé de cabra" : ""}`,
+      });
+      pushTransaction("rob_loss_target", target.id, -stolen, {
+        ...details,
+        targetId: thief.id,
+        note: `${percent}%`,
+      });
+
+      return {
+        ok: true,
+        success: true,
+        thief: getById(thief.id),
+        target: getById(target.id),
+        stolen,
+        percent,
+        chance,
+        crowbarUsed,
+        nextAt,
+      };
+    }
+
+    let penalty = randomAmount(ROB_PENALTY_MIN, ROB_PENALTY_MAX);
+    if (ROB_PENALTY_SCALE) {
+      const scaledMax = Math.max(ROB_PENALTY_MIN, Math.floor(thief.balance * 0.10));
+      penalty = Math.min(penalty, scaledMax, thief.balance);
+    }
+    penalty = Math.min(thief.balance, Math.max(0, penalty));
+    const lawyerUsed = blackMarket.consumeInventoryItem(thief.id, "lawyer");
+    const jail = blackMarket.recordRobberyJail(thief.id, guildId, Date.now(), lawyerUsed);
+
+    addBalance(thief.id, -penalty);
+    updateStats(thief.id, { rob_losses: 1, cookies_lost: penalty, total_spent: penalty });
+    pushTransaction("rob_fail", thief.id, -penalty, {
+      ...details,
+      targetId: target.id,
+      note: `Pego${crowbarUsed ? " (pé de cabra consumido)" : ""}; preso por 3 horas; fiança de ${jail.bailAmount} cookies${lawyerUsed ? " (advogado aplicado)" : ""}`,
+    });
 
     return {
       ok: true,
-      success: true,
+      success: false,
       thief: getById(thief.id),
-      target: getById(target.id),
-      stolen,
-      percent,
+      target,
+      penalty,
+      jail,
+      lawyerUsed,
+      crowbarUsed,
       nextAt,
     };
-  }
-
-  // Penalidade proporcional ao saldo do ladrão — não perde mais do que tem
-  let penalty = randomAmount(ROB_PENALTY_MIN, ROB_PENALTY_MAX);
-  if (ROB_PENALTY_SCALE) {
-    // Penalidade = até 10% do saldo do ladrão, limitada ao range configurado
-    const scaledMax = Math.max(ROB_PENALTY_MIN, Math.floor(thief.balance * 0.10));
-    penalty = Math.min(penalty, scaledMax, thief.balance);
-  }
-  penalty = Math.max(1, penalty);
-
-  addBalance(thief.id, -penalty);
-  updateStats(thief.id, { rob_losses: 1, cookies_lost: penalty, total_spent: penalty });
-  pushTransaction("rob_fail", thief.id, -penalty, { ...details, targetId: target.id });
-
-  return {
-    ok: true,
-    success: false,
-    thief: getById(thief.id),
-    target,
-    penalty,
-    nextAt,
-  };
+  })();
 }
 
 // ─── Rifa ─────────────────────────────────────────────────────────────────────
@@ -498,7 +600,6 @@ function playRifa(user, amount, details = {}) {
     updateStats(profile.id, { rifa_wins: 1, cookies_won: profit, total_earned: profit });
     if (prize > profile.biggestWin) setStat(profile.id, "biggest_win", prize);
     pushTransaction("rifa_win", profile.id, profit, details);
-    addUserXp(user, 70);
 
     return { ok: true, won: true, profile: getById(profile.id), amount: value, prize };
   }
@@ -506,7 +607,6 @@ function playRifa(user, amount, details = {}) {
   addBalance(profile.id, -value);
   updateStats(profile.id, { rifa_losses: 1, cookies_lost: value, total_spent: value });
   pushTransaction("rifa_loss", profile.id, -value, details);
-  addUserXp(user, 25);
 
   return { ok: true, won: false, profile: getById(profile.id), amount: value };
 }
@@ -536,19 +636,41 @@ function giveRep(fromUser, toUser, details = {}) {
 // ─── Transfer ─────────────────────────────────────────────────────────────────
 
 function transfer(fromUser, toUser, amount, details = {}) {
-  const value = cleanAmount(amount);
-  const from  = getUser(fromUser);
-  const to    = getUser(toUser);
+  const requested = Number(amount);
+  if (!Number.isSafeInteger(requested) || requested <= 0) {
+    return { ok: false, reason: "amount", from: getUser(fromUser), to: getUser(toUser) };
+  }
 
+  const value = requested;
+  const from = getUser(fromUser);
+  const to = getUser(toUser);
   if (from.id === to.id) return { ok: false, reason: "self", from, to };
-  if (from.balance < value) return { ok: false, reason: "balance", from, to };
 
-  addBalance(from.id, -value);
-  addBalance(to.id, value);
-  updateStats(from.id, { transfers_sent: 1, transferred_out: value, total_spent: value });
-  updateStats(to.id,   { transfers_received: 1, transferred_in: value, total_earned: value });
-  pushTransaction("transfer_out", from.id, -value, { ...details, targetId: to.id });
-  pushTransaction("transfer_in",  to.id,   value,  { ...details, targetId: from.id });
+  const transferAtomically = db.transaction(() => {
+    const sender = db.prepare("SELECT cookies FROM usuarios WHERE id = ?").get(from.id);
+    if (!sender || integer(sender.cookies) < value) return false;
+
+    const debit = db.prepare(`
+      UPDATE usuarios SET cookies = cookies - ?, updated_at = ?
+      WHERE id = ? AND cookies >= ?
+    `).run(value, Date.now(), from.id, value);
+    if (debit.changes !== 1) return false;
+
+    const credit = db.prepare(`
+      UPDATE usuarios SET cookies = cookies + ?, updated_at = ? WHERE id = ?
+    `).run(value, Date.now(), to.id);
+    if (credit.changes !== 1) throw new Error("Destinatário da transferência não encontrado.");
+
+    updateStats(from.id, { transfers_sent: 1, transferred_out: value, total_spent: value });
+    updateStats(to.id, { transfers_received: 1, transferred_in: value, total_earned: value });
+    pushTransaction("transfer_out", from.id, -value, { ...details, targetId: to.id });
+    pushTransaction("transfer_in", to.id, value, { ...details, targetId: from.id });
+    return true;
+  });
+
+  if (!transferAtomically()) {
+    return { ok: false, reason: "balance", from: getById(from.id), to: getById(to.id) };
+  }
 
   return { ok: true, from: getById(from.id), to: getById(to.id), amount: value };
 }
@@ -593,8 +715,6 @@ function settleDuel(winnerUser, loserUser, amount, details = {}) {
   if (value > winner.biggestWin) setStat(winner.id, "biggest_win", value);
   pushTransaction("duel_win",  winner.id, value,  { ...details, targetId: loser.id });
   pushTransaction("duel_loss", loser.id, -value,  { ...details, targetId: winner.id });
-  addUserXp(winnerUser, 80);
-  addUserXp(loserUser, 25);
 
   return { winner: getById(winner.id), loser: getById(loser.id) };
 }
@@ -627,7 +747,7 @@ function getRank(limit = 10, type = "balance") {
     .map(rowToProfile);
 }
 
-function getHistory(user, limit = 8) {
+function getHistory(user, limit = 10, offset = 0) {
   return db.prepare(`
     SELECT
       tipo          AS type,
@@ -641,8 +761,13 @@ function getHistory(user, limit = 8) {
     FROM transacoes
     WHERE user_id = ?
     ORDER BY created_at DESC
-    LIMIT ?
-  `).all(String(user.id), integer(limit, 8));
+    LIMIT ? OFFSET ?
+  `).all(String(user.id), Math.max(1, integer(limit, 10)), Math.max(0, integer(offset)));
+}
+
+function getHistoryCount(user) {
+  return integer(db.prepare("SELECT COUNT(*) AS count FROM transacoes WHERE user_id = ?")
+    .get(String(user.id))?.count);
 }
 
 function getNetProfit(profile) {
@@ -668,8 +793,9 @@ function purchaseShopItem(user, itemId, details = {}) {
     const owned = db.prepare(`
       SELECT quantity FROM cookie_shop_inventory WHERE user_id = ? AND item_id = ?
     `).get(userId, item.id);
+    const isVip = Boolean(db.prepare("SELECT vip FROM usuarios WHERE id = ?").get(userId)?.vip);
 
-    if ((item.kind === "color" && owned?.quantity > 0) || (item.kind === "vip" && profile.isVip)) {
+    if ((item.kind === "color" && owned?.quantity > 0) || (item.kind === "vip" && isVip)) {
       return { ok: false, reason: "owned", profile: getById(userId), item };
     }
 
@@ -706,6 +832,51 @@ function purchaseShopItem(user, itemId, details = {}) {
   });
 
   return purchase();
+}
+
+function getGuildShopRolePurchases(guildId, userId) {
+  return db.prepare("SELECT role_id AS roleId, kind, price, purchased_at AS purchasedAt, expires_at AS expiresAt FROM guild_shop_role_purchases WHERE guild_id = ? AND user_id = ? ORDER BY purchased_at DESC")
+    .all(String(guildId), String(userId));
+}
+
+function getGuildShopRolePurchase(guildId, userId, roleId, kind) {
+  return db.prepare("SELECT role_id AS roleId, kind, price, purchased_at AS purchasedAt, expires_at AS expiresAt FROM guild_shop_role_purchases WHERE guild_id = ? AND user_id = ? AND role_id = ? AND kind = ?")
+    .get(String(guildId), String(userId), String(roleId), String(kind)) || null;
+}
+
+function purchaseCooldownUnlock(user, targets, price, details = {}) {
+  const eligibleTargets = [...new Set((Array.isArray(targets) ? targets : [targets]).map(String))]
+    .filter(target => ["daily", "roubar", "trabalhar"].includes(target) && cooldowns.DURATIONS[target]);
+  const cost = Math.max(0, integer(price));
+  if (!eligibleTargets.length || !cost) return { ok: false, reason: "invalid_offer" };
+
+  const profile = getUser(user);
+  return db.transaction(() => {
+    const activeTargets = eligibleTargets.filter(target => !cooldowns.check(profile.id, target).ready);
+    if (!activeTargets.length) return { ok: false, reason: "cooldown_ready", profile: getById(profile.id) };
+
+    const now = Date.now();
+    const debit = db.prepare("UPDATE usuarios SET cookies = cookies - ?, cookies_lost = cookies_lost + ?, total_spent = total_spent + ?, updated_at = ? WHERE id = ? AND cookies >= ?")
+      .run(cost, cost, cost, now, profile.id, cost);
+    if (!debit.changes) return { ok: false, reason: "balance", profile: getById(profile.id) };
+
+    const cooldownColumns = {
+      daily: "cooldown_daily",
+      roubar: "cooldown_roubar",
+      trabalhar: "cooldown_trabalhar",
+    };
+    for (const target of activeTargets) {
+      db.prepare("DELETE FROM cooldowns WHERE user_id = ? AND comando = ?")
+        .run(profile.id, target);
+      db.prepare(`UPDATE usuarios SET ${cooldownColumns[target]} = 0, updated_at = ? WHERE id = ?`)
+        .run(now, profile.id);
+    }
+    pushTransaction("shop_cooldown_unlock", profile.id, -cost, {
+      ...details,
+      note: "Acelerador: " + activeTargets.join(", "),
+    });
+    return { ok: true, targets: activeTargets, profile: getById(profile.id) };
+  })();
 }
 
 function openShopChest(user, itemId, details = {}) {
@@ -784,7 +955,9 @@ function openShopChest(user, itemId, details = {}) {
 function useShopCooldownPass(user, itemId, target, details = {}) {
   const item = SHOP_ITEMS_BY_ID[itemId];
   if (!item || item.kind !== "cooldown_pass") return { ok: false, reason: "invalid_item" };
-  if (!cooldowns.DURATIONS[target]) return { ok: false, reason: "invalid_target" };
+  if (!COOLDOWN_TARGETS.some(entry => entry.id === target) || !cooldowns.DURATIONS[target]) {
+    return { ok: false, reason: "invalid_target" };
+  }
 
   const profile = getUser(user);
   const use = db.transaction(() => {
@@ -879,8 +1052,9 @@ module.exports = {
   DAILY_COOLDOWN,
   DAILY_MAX_REWARD,
   DAILY_MIN_REWARD,
-  DAILY_STREAK_BONUS,
-  DAILY_STREAK_BONUS_CAP,
+  DAILY_MILESTONE_DAYS,
+  DAILY_MILESTONE_MAX,
+  DAILY_MILESTONE_MIN,
   REP_COOLDOWN,
   ROB_COOLDOWN,
   START_BALANCE,
@@ -899,13 +1073,18 @@ module.exports = {
   giveRep,
   getById,
   getHistory,
+  getHistoryCount,
+  getGuildShopRolePurchase,
+  getGuildShopRolePurchases,
   getNetProfit,
   getProfile,
   getRank,
   getShopInventory,
+  getUser,
   openShopChest,
   playRifa,
   purchaseShopItem,
+  purchaseCooldownUnlock,
   rob,
   settleBet,
   settleDraw,

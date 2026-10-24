@@ -3,10 +3,8 @@ const {
   EmbedBuilder,
   PermissionFlagsBits,
 } = require("discord.js");
+const { randomColor } = require("./embedStyle") as { randomColor: () => number };
 
-const db = require("./db");
-
-const LEVEL_ROLE_MODE = String(process.env.LEVEL_ROLE_MODE || "highest").toLowerCase();
 
 function normalizeName(value) {
   return String(value || "")
@@ -37,10 +35,6 @@ function detectCommunityRoles(guild) {
     visitor,
     staff: [admin, mod].filter(Boolean),
   };
-}
-
-function canManageRole(member, role) {
-  return Boolean(role && role.editable && member?.roles?.highest && role.position < member.roles.highest.position);
 }
 
 function permissionOverwrites(guild, roles, visibility) {
@@ -178,7 +172,7 @@ async function seedRules(channel) {
   if (alreadySent) return false;
 
   const embed = new EmbedBuilder()
-    .setColor(0x57f287)
+    .setColor(randomColor())
     .setTitle("Regras da comunidade")
     .setDescription([
       "1. Respeite todas as pessoas.",
@@ -250,83 +244,7 @@ async function applyCommunityStructure(guild) {
   };
 }
 
-function parseLevelRoleRewards(guild) {
-  const configured = String(process.env.LEVEL_ROLE_REWARDS || "")
-    .split(",")
-    .map(item => item.trim())
-    .filter(Boolean)
-    .map(item => {
-      const [level, roleRef] = item.split(":").map(part => part?.trim());
-      return {
-        level: Number(level),
-        role: guild.roles.cache.get(roleRef) ||
-          guild.roles.cache.find(role => normalizeName(role.name) === normalizeName(roleRef)),
-      };
-    })
-    .filter(item => Number.isInteger(item.level) && item.level > 0 && item.role);
-
-  if (configured.length) return configured.sort((a, b) => a.level - b.level);
-
-  return guild.roles.cache
-    .map(role => {
-      const match = normalizeName(role.name).match(/(?:level|lvl|nivel)\s*(\d+)/);
-      return match ? { level: Number(match[1]), role } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.level - b.level);
-}
-
-async function syncMemberLevelRoles(member, level) {
-  if (!member?.guild || member.user?.bot) return { added: [], removed: [], skipped: true };
-
-  const rewards = parseLevelRoleRewards(member.guild);
-  if (!rewards.length) return { added: [], removed: [], skipped: true };
-
-  const manageable = rewards.filter(item => canManageRole(member.guild.members.me, item.role));
-  const eligible = manageable.filter(item => level >= item.level);
-  const desired = new Set(
-    LEVEL_ROLE_MODE === "cumulative"
-      ? eligible.map(item => item.role.id)
-      : eligible.slice(-1).map(item => item.role.id)
-  );
-  const allRewardIds = new Set(manageable.map(item => item.role.id));
-  const current = member.roles.cache;
-  const toAdd = [...desired].filter(roleId => !current.has(roleId));
-  const toRemove = [...allRewardIds].filter(roleId => current.has(roleId) && !desired.has(roleId));
-
-  if (toAdd.length) await member.roles.add(toAdd, `Cargo automatico por level ${level}`).catch(() => {});
-  if (toRemove.length) await member.roles.remove(toRemove, `Atualizacao de cargo automatico por level ${level}`).catch(() => {});
-
-  return {
-    added: toAdd.map(id => member.guild.roles.cache.get(id)?.name).filter(Boolean),
-    removed: toRemove.map(id => member.guild.roles.cache.get(id)?.name).filter(Boolean),
-    skipped: false,
-  };
-}
-
-async function syncGuildLevelRoles(guild) {
-  const rows = db.prepare("SELECT id, xp FROM usuarios WHERE xp > 0 ORDER BY xp DESC").all();
-  let checked = 0;
-  let changed = 0;
-
-  const { progressFromXp } = require("./xpSystem");
-
-  for (const row of rows) {
-    const member = await guild.members.fetch(row.id).catch(() => null);
-    if (!member || member.user.bot) continue;
-
-    checked++;
-    const result = await syncMemberLevelRoles(member, progressFromXp(row.xp).level);
-    if (result.added.length || result.removed.length) changed++;
-  }
-
-  return { checked, changed, rewards: parseLevelRoleRewards(guild).length };
-}
-
 module.exports = {
   applyCommunityStructure,
   detectCommunityRoles,
-  parseLevelRoleRewards,
-  syncGuildLevelRoles,
-  syncMemberLevelRoles,
 };

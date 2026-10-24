@@ -1,7 +1,8 @@
-const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { ACCESS_LEVELS } = require("../utils/permissions");
 
-module.exports = {
+module.exports = defineCommand({
   category: "staff",
   access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageChannels },
 
@@ -28,8 +29,12 @@ module.exports = {
     }
 
     const reason = interaction.options.getString("motivo") || "Não informado";
+    const channel = interaction.channel;
+    if (!channel || !("permissionOverwrites" in channel)) {
+      return interaction.reply({ content: "Esse tipo de canal não pode ser destravado por esse comando.", flags: 64 });
+    }
 
-    await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+    await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
       SendMessages: null,
       AddReactions: null,
     }, { reason: `Canal desbloqueado por ${interaction.user.tag}: ${reason}` });
@@ -47,4 +52,4 @@ module.exports = {
 
     return interaction.reply({ embeds: [embed] });
   },
-};
+});

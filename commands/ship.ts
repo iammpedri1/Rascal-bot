@@ -1,13 +1,13 @@
-const { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
 const emoji = require("../utils/emojis");
+const { COLORS, setBrandFooter } = require("../utils/embedStyle");
 
 const WIDTH = 1100;
 const HEIGHT = 520;
 const CARD_RADIUS = 28;
-const SHIP_EMOJI = "<a:ablobcouple:1500896909332840569>";
-
 function displayName(user) {
   return user.globalName || user.username || "Usuario";
 }
@@ -43,51 +43,13 @@ function compatibility(userA, userB) {
 }
 
 function verdict(percent) {
-  if (percent === 100) return "Amor proprio impecavel. Ninguem compete.";
-  if (percent >= 90) return "Casal lendario. A timeline nao estava pronta.";
-  if (percent >= 75) return "Quimica forte, energia boa e perigo de virar fanfic.";
-  if (percent >= 55) return "Combina bem. Tem conversa, tem clima, tem chance.";
-  if (percent >= 35) return "Pode render, mas vai precisar de paciencia e timing.";
-  if (percent >= 15) return "Talvez amizade seja o caminho mais saudavel.";
-  return "O destino olhou, pensou um pouco e pediu para tentar outro par.";
-}
-
-function parseEmoji(value) {
-  const match = String(value || "").match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
-  if (!match) return value;
-
-  return {
-    name: match[1],
-    id: match[2],
-    animated: value.startsWith("<a:"),
-  };
-}
-
-function customEmoji(guild, names, fallback) {
-  const wanted = names.map(name => name.toLowerCase());
-  const found = guild?.emojis?.cache?.find(item =>
-    wanted.some(name => item.name.toLowerCase().includes(name))
-  );
-
-  return found ? found.toString() : fallback;
-}
-
-function shipEmojis(guild) {
-  return {
-    filled: customEmoji(guild, ["heart", "love", "coracao", "like"], "💖"),
-    empty: customEmoji(guild, ["empty", "gray", "cinza", "off", "dislike"], "🖤"),
-    couple: customEmoji(guild, ["couple", "ship", "casal"], SHIP_EMOJI),
-    spark: customEmoji(guild, ["spark", "party", "star"], emoji.party || "✨"),
-  };
-}
-
-function progressBar(percent, icons) {
-  const total = 10;
-  const filled = Math.round((percent / 100) * total);
-
-  return Array.from({ length: total }, (_, index) =>
-    index < filled ? icons.filled : icons.empty
-  ).join("");
+  if (percent === 100) return "Match perfeito. Até o algoritmo torceu por vocês.";
+  if (percent >= 90) return "Sintonia lá no alto — a timeline já está escrevendo a história.";
+  if (percent >= 75) return "Química forte, energia boa e chance de virar fanfic.";
+  if (percent >= 55) return "Combina bem: tem conversa, clima e possibilidade.";
+  if (percent >= 35) return "Pode dar certo com um pouco de paciência e timing.";
+  if (percent >= 15) return "Talvez a amizade seja o melhor começo.";
+  return "O algoritmo não sentiu o match hoje. Tentem outra dupla.";
 }
 
 function fillRoundRect(ctx, x, y, width, height, radius) {
@@ -253,7 +215,7 @@ async function buildShipImage(userA, userB, percent, coupleName) {
   return canvas.toBuffer("image/png");
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "action",
 
   data: new SlashCommandBuilder()
@@ -279,49 +241,35 @@ module.exports = {
     const second = interaction.options.getUser("usuario2") || interaction.user;
     const percent = compatibility(first, second);
     const coupleName = shipName(first, second);
-    const icons = shipEmojis(interaction.guild);
     const image = await buildShipImage(first, second, percent, coupleName);
     const attachment = new AttachmentBuilder(image, { name: "ship-report.png" });
 
     const embed = new EmbedBuilder()
-      .setColor(percent >= 70 ? 0xf472b6 : percent >= 40 ? 0xf59e0b : 0x64748b)
+      .setColor(COLORS.brand)
       .setAuthor({
-        name: "Resultado do ship",
+        name: "RASCAL · COMPATIBILIDADE",
         iconURL: interaction.client.user.displayAvatarURL({ size: 128 }),
       })
-      .setTitle(`${icons.couple} ${displayName(first)} + ${displayName(second)}`)
+      .setTitle(`${emoji.heartmine} ${displayName(first)} × ${displayName(second)}`)
       .setDescription(
         [
-          `${icons.spark} **Nome do casal:** ${coupleName}`,
-          `${emoji.likeLed} **Compatibilidade:** ${percent}%`,
-          progressBar(percent, icons),
-          "",
-          verdict(percent),
+          `**${percent}% de compatibilidade**`,
+          `${emoji.party} ${verdict(percent)}`,
         ].join("\n")
       )
-      .addFields(
-        {
-          name: "Pessoa A",
-          value: `${first}\n\`${first.id}\``,
-          inline: true,
-        },
-        {
-          name: "Pessoa B",
-          value: `${second}\n\`${second.id}\``,
-          inline: true,
-        }
-      )
-      .setThumbnail(first.displayAvatarURL({ size: 256 }))
-      .setImage("attachment://ship-report.png")
-      .setFooter({
-        text: "O resultado e fixo para o mesmo par de usuarios.",
-        iconURL: second.displayAvatarURL({ size: 64 }),
+      .addFields({
+        name: `${emoji.lorittaCafune} Nome do ship`,
+        value: `**${coupleName}**`,
+        inline: true,
       })
+      .setImage("attachment://ship-report.png")
       .setTimestamp();
+
+    setBrandFooter(embed, interaction.client, "resultado fixo para esta dupla");
 
     return interaction.editReply({
       embeds: [embed],
       files: [attachment],
     });
   },
-};
+});

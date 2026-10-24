@@ -1,18 +1,18 @@
-const { EmbedBuilder } = require("discord.js");
-
 const emoji = require("../utils/emojis");
 const { handleAutoMod } = require("../utils/automod");
 const { getAfk, removeAfk } = require("../utils/afkStore");
-const { syncMemberLevelRoles } = require("../utils/communityManager");
-const { addMessageXp } = require("../utils/xpSystem");
+const { recordMessage } = require("../utils/messageStats");
+const { isPrimaryGuild } = require("../utils/primaryGuild");
 
 const AFK_REASON_EMOJI = "<:1000106078:1499822832757113024>";
 const BOT_REPLY_GUILD_COOLDOWN = 45 * 1000;
 const BOT_REPLY_USER_COOLDOWN = 2 * 60 * 1000;
+const MAX_TRACKED_COOLDOWNS = 5000;
 const botReplyGuildCooldowns = new Map();
 const botReplyUserCooldowns = new Map();
+let cooldownChecksUntilPrune = 0;
 
-const greetingReplies = [
+const greetingReplies = () => [
   `${emoji.lorittaCafune} Oi oi!`,
   `${emoji.correct} Opa! Tudo certo por aí?`,
   `${emoji.lorittaMegafone} Chamou? Estou por aqui.`,
@@ -20,7 +20,7 @@ const greetingReplies = [
   `${emoji.clap} E aí!`,
 ];
 
-const randomReplies = [
+const randomReplies = () => [
   `${emoji.thinking} Eu estava lendo o chat em silêncio.`,
   `${emoji.cookie} Alguém falou em cookies?`,
   `${emoji.lorittaMegafone} Passando só para dizer que eu existo.`,
@@ -38,6 +38,13 @@ function normalizeContent(content) {
 
 function canRandomReply(message) {
   const now = Date.now();
+  cooldownChecksUntilPrune += 1;
+  if (cooldownChecksUntilPrune >= 128 || botReplyUserCooldowns.size > MAX_TRACKED_COOLDOWNS) {
+    cooldownChecksUntilPrune = 0;
+    for (const [key, expiresAt] of botReplyGuildCooldowns) if (expiresAt <= now) botReplyGuildCooldowns.delete(key);
+    for (const [key, expiresAt] of botReplyUserCooldowns) if (expiresAt <= now) botReplyUserCooldowns.delete(key);
+    while (botReplyUserCooldowns.size > MAX_TRACKED_COOLDOWNS) botReplyUserCooldowns.delete(botReplyUserCooldowns.keys().next().value);
+  }
   const guildKey = message.guild.id;
   const userKey = `${message.guild.id}:${message.author.id}`;
 
@@ -62,7 +69,7 @@ async function handleRandomBotReply(message) {
 
   if (!shouldReply || !canRandomReply(message)) return;
 
-  const replies = isGreeting || mentionedBot ? greetingReplies : randomReplies;
+  const replies = isGreeting || mentionedBot ? greetingReplies() : randomReplies();
   const reply = replies[Math.floor(Math.random() * replies.length)];
 
   await message.reply({ content: reply }).catch(() => {});
@@ -112,42 +119,15 @@ module.exports = {
   name: "messageCreate",
 
   async execute(message) {
+    if (!isPrimaryGuild(message.guild?.id)) return;
+
     const punished = await handleAutoMod(message);
     if (punished) return;
 
     await handleAfk(message);
     await handleRandomBotReply(message);
-
-    const result = addMessageXp(message);
-    if (!result) return;
-
-    if (!result.leveledUp) {
-      const notice = await message.channel.send({
-        content: `${emoji.lorittaMegafone} ${message.author} ganhou **+${result.gained} XP**!`,
-      }).catch(() => null);
-
-      if (notice?.deletable) {
-        setTimeout(() => notice.delete().catch(() => {}), 6000);
-      }
-      return;
+    if (message.guild && !message.author.bot && !message.webhookId && !message.system) {
+      recordMessage(message.guild.id, message.author.id);
     }
-
-    const roleSync = await syncMemberLevelRoles(message.member, result.after.level);
-    const roleLine = roleSync.added.length
-      ? `\n${emoji.roles} Cargo recebido: **${roleSync.added.join(", ")}**`
-      : "";
-
-    const embed = new EmbedBuilder()
-      .setColor(0xff6a00)
-      .setTitle(`${emoji.lorittaCafune} Level up!`)
-      .setDescription(
-        [
-          `${message.author} subiu para o **level ${result.after.level}**.`,
-          `${emoji.lorittaMegafone} XP: **${result.after.totalXp}**${roleLine}`,
-        ].join("\n")
-      )
-      .setThumbnail(message.author.displayAvatarURL({ size: 256 }));
-
-    message.channel.send({ embeds: [embed] }).catch(() => {});
   },
 };

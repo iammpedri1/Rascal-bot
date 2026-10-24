@@ -1,3 +1,6 @@
+import { defineCommand } from "../types/command";
+import type { GuildMember, Role } from "discord.js";
+import type { ShopRoleOffer, ShopRoleKind } from "../utils/shopRolePurchases";
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -6,420 +9,552 @@ const {
   EmbedBuilder,
   MessageFlags,
   SlashCommandBuilder,
-  StringSelectMenuBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
-const emoji = require("../utils/emojis");
+const emoji = require("../utils/emojis") as typeof import("../utils/emojis") & Record<string, any>;
 const cooldowns = require("../utils/cooldowns");
-const { COOLDOWN_TARGETS, SHOP_ITEMS_BY_ID, SHOP_SECTIONS } = require("../utils/cookieShop");
+const { SHOP_SECTIONS, guildRoleOffers, vipBenefitsFor } = require("../utils/cookieShop");
+const { randomColor } = require("../utils/embedStyle");
+const logger = require("../utils/logger");
 const {
-  activateCookieBoost,
-  equipShopItem,
   getProfile,
-  getShopInventory,
-  openShopChest,
-  purchaseShopItem,
-  useShopCooldownPass,
+  getGuildShopRolePurchase,
+  purchaseCooldownUnlock,
 } = require("../utils/cookieEconomy");
+const rolePurchases = require("../utils/shopRolePurchases") as typeof import("../utils/shopRolePurchases");
+const blackMarket = require("../utils/blackMarket") as typeof import("../utils/blackMarket");
+const { PRIMARY_GUILD_ID } = require("../utils/primaryGuild") as typeof import("../utils/primaryGuild");
 
-const COLOR_DEFAULT = {
-  id: "default",
-  kind: "color",
-  name: "Clássico",
-  emoji: emoji.cookie,
-  description: "Restaure a cor original do seu inventário.",
-  price: 0,
-  color: 0xf5a623,
-};
+const COLOR_PAGE_SIZE = 10;
+const VIP_PAGE_SIZE = 5;
+const activePurchaseUsers = new Set<string>();
+const ACCELERATORS = [
+  { id: "daily", label: "Daily", targets: ["daily"], price: 10000, emoji: "cookie", fallback: "🍪" },
+  { id: "roubar", label: "Roubar", targets: ["roubar"], price: 3500, emoji: "pand_police", fallback: "🚨" },
+  { id: "trabalhar", label: "Trabalhar", targets: ["trabalhar"], price: 4600, emoji: "work", fallback: "💼" },
+  { id: "todos", label: "Todos", targets: ["daily", "roubar", "trabalhar"], price: 18000, emoji: "clock", fallback: "⏳" },
+];
 
-function parseEmoji(value) {
-  const match = String(value || "").match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
-  if (!match) return value;
-
-  return { name: match[1], id: match[2], animated: value.startsWith("<a:") };
+function amount(value: number): string {
+  return Math.max(0, Math.floor(Number(value) || 0)).toLocaleString("pt-BR");
 }
 
-function amount(value) {
-  return Number(value || 0).toLocaleString("pt-BR");
+function timestamp(value: number): string {
+  return `<t:${Math.floor(value / 1000)}:R>`;
 }
 
-function percent(value) {
-  return `${Math.round(value * 100)}%`;
+function pageCountFor(kind: ShopRoleKind, count: number): number {
+  const size = kind === "color" ? COLOR_PAGE_SIZE : VIP_PAGE_SIZE;
+  return Math.max(1, Math.ceil(count / size));
 }
 
-function timestamp(ms) {
-  return `<t:${Math.floor(ms / 1000)}:R>`;
+function displayColorNumber(offer: ShopRoleOffer, absoluteIndex: number): string {
+  const match = offer.name.match(/(?:^|\D)(\d{1,2})(?:\D|$)/);
+  return match?.[1] || String(absoluteIndex + 1);
 }
 
-module.exports = {
+function buttonEmoji(button: InstanceType<typeof ButtonBuilder>, name: string, fallback: string) {
+  return emoji.setApplicationButtonEmoji(button, name, fallback);
+}
+
+function storeMember(interaction): GuildMember | undefined {
+  const cached = interaction.guild.members.cache.get(interaction.user.id);
+  if (cached) return cached;
+  const member = interaction.member as GuildMember | { roles?: unknown } | null;
+  return member?.roles && !Array.isArray(member.roles) ? member as GuildMember : undefined;
+}
+
+function categoryRow(interaction, sectionId: string) {
+  const sections = [...SHOP_SECTIONS];
+  const member = storeMember(interaction);
+  if (member && blackMarket.isVipMember(interaction.guild, member)) {
+    sections.push({ id: "mercado_negro", name: "Mercado Negro" });
+  }
+  const buttons = sections.map((section) => {
+    const config = section.id === "cores"
+      ? { emoji: "palette", fallback: "🎨" }
+      : section.id === "vip"
+        ? { emoji: "owner", fallback: "👑" }
+        : section.id === "mercado_negro"
+          ? { emoji: "pand_police", fallback: "🕶️" }
+          : { emoji: "clock", fallback: "⏳" };
+    const button = new ButtonBuilder()
+      .setCustomId(`loja|categoria|${section.id}`)
+      .setLabel(section.name)
+      .setStyle(sectionId === section.id ? ButtonStyle.Success : ButtonStyle.Secondary);
+    return buttonEmoji(button, config.emoji, config.fallback);
+  });
+  return new ActionRowBuilder().addComponents(...buttons);
+}
+
+function navigationRow(sectionId: string, page: number, pages: number) {
+  const buttons = [
+    buttonEmoji(new ButtonBuilder()
+      .setCustomId("loja|home")
+      .setLabel("Voltar")
+      .setStyle(ButtonStyle.Secondary), "previous", "⬅️"),
+  ];
+
+  if (pages > 1) {
+    buttons.push(
+      buttonEmoji(new ButtonBuilder()
+        .setCustomId("loja|pagina|anterior")
+        .setLabel("Anterior")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page <= 0), "previous", "◀️"),
+      new ButtonBuilder()
+        .setCustomId("loja|pagina|estado")
+        .setLabel(`${page + 1}/${pages}`)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true),
+      buttonEmoji(new ButtonBuilder()
+        .setCustomId("loja|pagina|proxima")
+        .setLabel("Próxima")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page >= pages - 1), "next", "▶️"),
+    );
+  }
+
+  buttons.push(buttonEmoji(new ButtonBuilder()
+    .setCustomId("loja|fechar")
+    .setLabel("Fechar")
+    .setStyle(ButtonStyle.Danger), "crossed", "❌"));
+  return new ActionRowBuilder().addComponents(...buttons);
+}
+
+function roleStatus(kind: ShopRoleKind, offer: ShopRoleOffer, assigned: boolean, purchase: any): string {
+  if (kind === "color") {
+    if (assigned) return `${emoji.application("correct", "✅")} já aplicada`;
+    if (purchase) return `${emoji.application("correct", "✅")} sua; clique para reaplicar sem pagar`;
+    return `${emoji.application("cookie", "🍪")} ${amount(offer.price)} cookies`;
+  }
+
+  const active = Number(purchase?.expiresAt) > Date.now();
+  if (active && assigned) return `${emoji.application("clock", "⏰")} ativa até ${timestamp(purchase.expiresAt)} · clique para renovar`;
+  if (active) return `${emoji.application("correct", "✅")} ativa até ${timestamp(purchase.expiresAt)} · reaplicar sem pagar`;
+  if (purchase) return `${emoji.application("clock", "⏰")} expirada · ${amount(offer.price)} cookies / 30 dias`;
+  if (assigned) return `${emoji.application("correct", "✅")} você já tem este cargo`;
+  return `${emoji.application("cookie", "🍪")} ${amount(offer.price)} cookies / 30 dias`;
+}
+
+function buildRoleEmbed(interaction, sectionId: "cores" | "vip", page: number, notice: string) {
+  const kind: ShopRoleKind = sectionId === "cores" ? "color" : "vip";
+  const offers: ShopRoleOffer[] = guildRoleOffers(interaction.guild, kind);
+  const size = kind === "color" ? COLOR_PAGE_SIZE : VIP_PAGE_SIZE;
+  const pages = pageCountFor(kind, offers.length);
+  const currentPage = Math.max(0, Math.min(page, pages - 1));
+  const visible = offers.slice(currentPage * size, currentPage * size + size);
+  const profile = getProfile(interaction.user);
+  const lines = visible.map((offer, index) => {
+    const purchase = getGuildShopRolePurchase(interaction.guildId, interaction.user.id, offer.roleId, kind);
+    const assigned = interaction.guild.members.cache.get(interaction.user.id)?.roles.cache.has(offer.roleId) || false;
+    const label = kind === "color" ? displayColorNumber(offer, currentPage * size + index) : offer.name;
+    const details = kind === "vip"
+      ? `\n   ${vipBenefitsFor(offer)}`
+      : "";
+    return `${emoji.application("next", "›")} **${label}** » ${offer.mention}\n   ${roleStatus(kind, offer, assigned, purchase)}${details}`;
+  });
+
+  const title = kind === "color" ? "Cores do servidor" : "VIPs do servidor";
+  const description = offers.length
+    ? [
+      kind === "color"
+        ? "Escolha um número para comprar o cargo de cor e aplicá-lo ao seu perfil."
+        : "Star VIP, Elite VIP e Super VIP, com bônus de cookies e acesso ao Mercado Negro.",
+      "",
+      ...lines,
+      "",
+      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
+      notice,
+    ].filter(Boolean).join("\n")
+    : [
+      kind === "color"
+        ? "Não encontrei cargos de cor disponíveis. Os cargos numerados de cor do servidor serão detectados automaticamente."
+        : "Não encontrei os cargos Star VIP, Elite VIP ou Super VIP disponíveis. Confira se os nomes estão corretos e se o cargo do Rascal está acima deles.",
+      "",
+      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
+      notice,
+    ].filter(Boolean).join("\n");
+
+  const embed = new EmbedBuilder()
+    .setColor(randomColor())
+    .setAuthor({ name: `${interaction.guild.name} · Loja do Rascal` })
+    .setTitle(`${emoji.application(kind === "color" ? "palette" : "owner", kind === "color" ? "🎨" : "👑")} ${title}`)
+    .setDescription(description)
+    .setFooter({ text: `Página ${currentPage + 1}/${pages} · ${kind === "color" ? "cargos de cor" : "duração VIP de 30 dias"}` });
+
+  return { embed, offers, page: currentPage, pages, visible, profile };
+}
+
+function buildHomeEmbed(interaction, notice: string) {
+  const profile = getProfile(interaction.user);
+  const member = storeMember(interaction);
+  const marketAvailable = Boolean(member && blackMarket.isVipMember(interaction.guild, member));
+  return new EmbedBuilder()
+    .setColor(randomColor())
+    .setAuthor({ name: `Loja de ${interaction.guild.name}` })
+    .setTitle(`${emoji.application("shop", "🛍️")} Loja do Rascal`)
+    .setDescription([
+      "Escolha uma categoria. A loja usa os cargos e os cooldowns deste servidor.",
+      "",
+      `${emoji.application("palette", "🎨")} **CORES**\n↳ Cargos numerados de cor encontrados no servidor.`,
+      `${emoji.application("owner", "👑")} **VIPs**\n↳ Star VIP, Elite VIP e Super VIP disponíveis neste servidor.`,
+      `${emoji.application("clock", "⏳")} **ACELERADORES**\n↳ Libere Daily, Roubar ou Trabalhar antes do cooldown.`,
+      ...(marketAvailable ? [`${emoji.application("pand_police", "🕶️")} **MERCADO NEGRO**\n↳ Itens táticos exclusivos para VIPs.`] : []),
+      "",
+      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
+      notice,
+    ].filter(Boolean).join("\n\n"));
+}
+
+function buildBlackMarketEmbed(interaction, notice: string) {
+  const profile = getProfile(interaction.user);
+  const lines = blackMarket.BLACK_MARKET_ITEMS.map((item) => {
+    const quantity = blackMarket.getInventoryCount(interaction.user.id, item.id);
+    return `${emoji.application(item.emoji, item.fallback)} **${item.name}** — **${amount(item.price)} cookies**\n↳ ${item.description}\n↳ No inventário: **${quantity}**`;
+  });
+  return new EmbedBuilder()
+    .setColor(randomColor())
+    .setAuthor({ name: `${interaction.guild.name} · acesso VIP` })
+    .setTitle(`${emoji.application("pand_police", "🕶️")} Mercado Negro`)
+    .setDescription([
+      "Equipamentos consumíveis: cada unidade é usada automaticamente no próximo roubo aplicável.",
+      "",
+      ...lines,
+      "",
+      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
+      notice,
+    ].filter(Boolean).join("\n\n"));
+}
+
+function buildAcceleratorEmbed(interaction, notice: string) {
+  const profile = getProfile(interaction.user);
+  const cooldownsForUser = cooldowns.allForUser(interaction.user.id);
+  const targets = { daily: "daily", roubar: "rob", trabalhar: "work" };
+  const lines = ACCELERATORS.map((offer) => {
+    const ready = offer.targets.some((target) => !cooldowns.check(interaction.user.id, target).ready);
+    const state = offer.targets.map((target) => {
+      const key = targets[target];
+      const cooldown = cooldownsForUser[key];
+      return cooldown?.ready ? null : `/${target} pronto ${timestamp(cooldown.expiresAt)}`;
+    }).filter(Boolean).join(" · ");
+    return `${emoji.application(offer.emoji, offer.fallback)} **${offer.label}** — **${amount(offer.price)} cookies**${ready ? `\n   ${state}` : "\n   sem cooldown ativo"}`;
+  });
+
+  return new EmbedBuilder()
+    .setColor(randomColor())
+    .setAuthor({ name: `Aceleradores · ${interaction.guild.name}` })
+    .setTitle(`${emoji.application("clock", "⏳")} Aceleradores de tempo`)
+    .setDescription([
+      "Compre apenas quando houver cooldown ativo. Os cookies são descontados e o cooldown real é liberado imediatamente.",
+      "",
+      ...lines,
+      "",
+      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
+      notice,
+    ].filter(Boolean).join("\n\n"));
+}
+
+function buildRoleButtons(interaction, kind: ShopRoleKind, offers: ShopRoleOffer[], page: number) {
+  const size = kind === "color" ? COLOR_PAGE_SIZE : VIP_PAGE_SIZE;
+  const visible = offers.slice(page * size, page * size + size);
+  return visible.map((offer, index) => {
+    const member = interaction.guild.members.cache.get(interaction.user.id);
+    const assigned = member?.roles.cache.has(offer.roleId) || false;
+    const purchase = getGuildShopRolePurchase(interaction.guildId, interaction.user.id, offer.roleId, kind);
+    const activeVip = kind === "vip" && Number(purchase?.expiresAt) > Date.now();
+    const canReapply = kind === "color" ? Boolean(purchase) : Boolean(activeVip);
+    const cannotBuyBecauseAlreadyAssigned = assigned && !canReapply;
+    const cannotAfford = !canReapply && getProfile(interaction.user).balance < offer.price;
+    const label = kind === "color"
+      ? displayColorNumber(offer, page * size + index)
+      : offer.name.slice(0, 80);
+    const button = new ButtonBuilder()
+      .setCustomId(`loja|cargo|${kind}|${offer.roleId}`)
+      .setLabel(label)
+      .setStyle(kind === "color" ? ButtonStyle.Primary : ButtonStyle.Success)
+      .setDisabled(cannotBuyBecauseAlreadyAssigned || cannotAfford);
+    if (kind === "vip") buttonEmoji(button, "owner", "👑");
+    return button;
+  });
+}
+
+function buildComponents(interaction, sectionId: string, page: number, notice: string) {
+  if (sectionId === "home") return [categoryRow(interaction, sectionId)];
+  const rows = [];
+
+  if (sectionId === "cores" || sectionId === "vip") {
+    const kind: ShopRoleKind = sectionId === "cores" ? "color" : "vip";
+    const offers = guildRoleOffers(interaction.guild, kind);
+    const pages = pageCountFor(kind, offers.length);
+    const currentPage = Math.max(0, Math.min(page, pages - 1));
+    const buttons = buildRoleButtons(interaction, kind, offers, currentPage);
+    for (let offset = 0; offset < buttons.length; offset += 5) {
+      rows.push(new ActionRowBuilder().addComponents(...buttons.slice(offset, offset + 5)));
+    }
+    rows.push(navigationRow(sectionId, currentPage, pages));
+    return rows;
+  }
+
+  if (sectionId === "aceleradores") {
+    rows.push(new ActionRowBuilder().addComponents(...ACCELERATORS.map((offer) => {
+      const hasCooldown = offer.targets.some((target) => !cooldowns.check(interaction.user.id, target).ready);
+      const canAfford = getProfile(interaction.user).balance >= offer.price;
+      return buttonEmoji(new ButtonBuilder()
+        .setCustomId(`loja|acelerador|${offer.id}`)
+        .setLabel(`${offer.label} · ${amount(offer.price)}`)
+        .setStyle(offer.id === "todos" ? ButtonStyle.Secondary : ButtonStyle.Success)
+        .setDisabled(!hasCooldown || !canAfford), offer.emoji, offer.fallback);
+    })));
+    rows.push(navigationRow(sectionId, 0, 1));
+    return rows;
+  }
+
+  if (sectionId === "mercado_negro") {
+    const buttons = blackMarket.BLACK_MARKET_ITEMS.map((item) => {
+      const button = new ButtonBuilder()
+        .setCustomId(`loja|mercado|comprar|${item.id}`)
+        .setLabel(`${item.name} · ${amount(item.price)}`)
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(getProfile(interaction.user).balance < item.price);
+      return buttonEmoji(button, item.emoji, item.fallback);
+    });
+    rows.push(new ActionRowBuilder().addComponents(...buttons));
+    rows.push(navigationRow(sectionId, 0, 1));
+    return rows;
+  }
+
+  return [categoryRow(interaction, sectionId)];
+}
+
+module.exports = defineCommand({
   category: "economy",
-
   data: new SlashCommandBuilder()
     .setName("loja")
-    .setDescription("Compre cores, VIP, boosts, caixas e removedores de cooldown"),
+    .setDescription("Compre cargos de cor, VIPs e aceleradores do servidor"),
 
   async execute(interaction) {
-    let sectionId = "cores";
-    let selectedId = SHOP_SECTIONS[0].items[0].id;
-    let selectedCooldown = null;
+    if (!interaction.guild) {
+      return interaction.reply({ content: "Use /loja dentro do servidor.", flags: MessageFlags.Ephemeral });
+    }
+    if (!PRIMARY_GUILD_ID || interaction.guildId !== PRIMARY_GUILD_ID) {
+      return interaction.reply({ content: "A loja do Rascal está disponível apenas no servidor oficial.", flags: MessageFlags.Ephemeral });
+    }
+
+    let sectionId = "home";
+    let page = 0;
     let notice = "";
-    let profile = getProfile(interaction.user);
-    let inventory = getShopInventory(interaction.user.id);
-    const serverColorRoles = interaction.guild
-      ? interaction.guild.roles.cache
-        .filter(role => role.name !== "@everyone" && role.color !== 0)
-        .sort((a, b) => b.position - a.position)
-        .first(10)
-      : [];
+    await interaction.deferReply();
+    const message = await interaction.editReply({
+      embeds: [buildHomeEmbed(interaction, notice)],
+      components: [categoryRow(interaction, sectionId)],
+      allowedMentions: { parse: [] },
+    });
+    const collector = message.createMessageComponentCollector({ time: 180_000 });
 
-    const section = () => SHOP_SECTIONS.find(entry => entry.id === sectionId) || SHOP_SECTIONS[0];
-    const item = () => {
-      if (sectionId === "cores" && selectedId === "default") return COLOR_DEFAULT;
-      return section().items.find(entry => entry.id === selectedId) || section().items[0];
-    };
-    const quantityOf = id => inventory.find(entry => entry.itemId === id)?.quantity || 0;
-    const findActiveCooldown = () => COOLDOWN_TARGETS.find(target =>
-      !cooldowns.check(interaction.user.id, target.id).ready
-    );
-    const refresh = () => {
-      profile = getProfile(interaction.user);
-      inventory = getShopInventory(interaction.user.id);
-    };
-
-    const buildEmbed = () => {
-      const current = item();
-      const stock = quantityOf(current.id);
-      const equipped = current.kind === "color" && profile.selectedBanner === current.id;
-      const fields = [{
-        name: `${emoji.cookie} Saldo`,
-        value: `**${amount(profile.balance)} cookies**`,
-        inline: true,
-      }, {
-        name: "Valor",
-        value: current.price ? `**${amount(current.price)} cookies**` : "Grátis",
-        inline: true,
-      }];
-      if (sectionId === "cores" && serverColorRoles.length) {
-        fields.push({
-          name: "Cargos de cor do servidor",
-          value: serverColorRoles.map(role => `${role} \`${role.name}\``).join("\n").slice(0, 1024),
-          inline: false,
-        });
-      }
-      if (sectionId === "vip") {
-        fields.push({
-          name: "Status VIP",
-          value: profile.isVip ? "VIP ativo na sua conta." : "VIP ainda não adquirido.",
-          inline: false,
-        });
+    collector.on("collect", async (component) => {
+      if (component.user.id !== interaction.user.id) {
+        await component.reply({ content: "Esta loja foi aberta por outra pessoa.", flags: MessageFlags.Ephemeral });
+        return;
       }
 
-      let status;
-      if (current.kind === "color") {
-        status = current.id === "default"
-          ? (equipped ? "A cor clássica já está selecionada." : "Selecione para restaurar a cor original.")
-          : equipped
-            ? "Esta cor está equipada."
-            : stock
-              ? "Cor permanente na sua coleção."
-              : "Disponível para compra permanente.";
-        fields.push({
-          name: "Coleção",
-          value: `${inventory.filter(entry => SHOP_ITEMS_BY_ID[entry.itemId]?.kind === "color").length} cores · equipada: **${profile.selectedBanner === "default" ? "Clássico" : (SHOP_ITEMS_BY_ID[profile.selectedBanner]?.name || "Clássico")}**`,
-          inline: true,
-        });
-      } else if (current.kind === "vip") {
-        status = profile.isVip
-          ? "VIP permanente ativo na sua conta."
-          : "Compra única. O benefício não expira.";
-        fields.push({
-          name: "Benefício",
-          value: "**+10%** em recompensas de `/daily`, `/trabalhar`, `/bonus` e caixas.",
-          inline: true,
-        });
-      } else if (current.kind === "cookie_boost") {
-        const active = profile.cookieBoostUntil > Date.now();
-        status = active
-          ? `Boost ativo até ${timestamp(profile.cookieBoostUntil)}. Ativações extras estendem a duração.`
-          : "Sem boost ativo no momento.";
-        fields.push({
-          name: "No inventário",
-          value: `**${stock}** boost${stock === 1 ? "" : "s"}`,
-          inline: true,
-        });
-      } else if (current.kind === "chest") {
-        status = `Você tem **${stock}** caixa${stock === 1 ? "" : "s"} deste tipo.`;
-        fields.push({
-          name: "Possíveis recompensas",
-          value: `${amount(current.minReward)}–${amount(current.maxReward)} cookies${current.colorDropChance ? `\nChance de cor: **${percent(current.colorDropChance)}**` : ""}`,
-          inline: true,
-        });
-      } else {
-        const target = COOLDOWN_TARGETS.find(entry => entry.id === selectedCooldown);
-        const cooldown = target ? cooldowns.check(interaction.user.id, target.id) : null;
-        status = `Passes no inventário: **${stock}**.`;
-        if (!target) status += " Escolha qual cooldown deseja liberar.";
-        else if (!cooldown || cooldown.ready) status += ` **${target.name}** já está liberado.`;
-        else status += ` **${target.name}** tem mais **${cooldowns.formatDuration(cooldown.remaining)}**.`;
-        fields.push({
-          name: "Como funciona",
-          value: "Remove um cooldown ativo. O item não é consumido se o tempo já terminou.",
-          inline: true,
-        });
+      const id = component.customId;
+      const isPurchase = id.startsWith("loja|cargo|") || id.startsWith("loja|acelerador|") || id.startsWith("loja|mercado|comprar|");
+      if (isPurchase && activePurchaseUsers.has(component.user.id)) {
+        await component.reply({ content: `${emoji.clock} Sua outra compra ainda está sendo processada. Aguarde.`, flags: MessageFlags.Ephemeral });
+        return;
       }
+      if (isPurchase) activePurchaseUsers.add(component.user.id);
 
-      return new EmbedBuilder()
-        .setColor(current.color)
-        .setAuthor({
-          name: `${interaction.client.user.username} · Loja de itens`,
-          iconURL: interaction.client.user.displayAvatarURL({ size: 128 }),
-        })
-        .setTitle(`${section().emoji} Loja de itens`)
-        .setDescription([
-          `**${section().name}**`,
-          section().description,
-          "",
-          `${current.emoji} **${current.name}**`,
-          current.description,
-          "",
-          status,
-          notice,
-        ].filter(Boolean).join("\n"))
-        .addFields(fields)
-        .setFooter({ text: "VIP e boosts aumentam recompensas de atividades; compras e transferências não recebem bônus." })
-        .setTimestamp();
-    };
+      try {
+        await component.deferUpdate();
+        notice = "";
 
-    const buildComponents = () => {
-      const currentSection = section();
-      const current = item();
-      const stock = quantityOf(current.id);
-      const rows = [
-        new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId("loja|secao")
-            .setPlaceholder("Escolha uma categoria")
-            .addOptions(SHOP_SECTIONS.map(entry => ({
-              label: entry.name,
-              description: entry.description,
-              value: entry.id,
-              emoji: parseEmoji(entry.emoji),
-              default: sectionId === entry.id,
-            })))
-        ),
-        new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId("loja|item")
-            .setPlaceholder(`Escolha em ${currentSection.name.toLowerCase()}`)
-            .addOptions([
-              ...(sectionId === "cores" ? [{
-                label: COLOR_DEFAULT.name,
-                description: "Grátis · restaurar a cor original",
-                value: COLOR_DEFAULT.id,
-                emoji: parseEmoji(COLOR_DEFAULT.emoji),
-                default: selectedId === COLOR_DEFAULT.id,
-              }] : []),
-              ...currentSection.items.map(entry => ({
-                label: entry.name,
-                description: `${amount(entry.price)} cookies · ${entry.kind === "color" || entry.kind === "vip" ? "permanente" : "consumível"}`,
-                value: entry.id,
-                emoji: parseEmoji(entry.emoji),
-                default: selectedId === entry.id,
-              })),
-            ])
-        ),
-      ];
-
-      if (current.kind === "cooldown_pass") {
-        rows.push(new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId("loja|alvo")
-            .setPlaceholder("Escolha um cooldown para liberar")
-            .addOptions(COOLDOWN_TARGETS.map(target => {
-              const state = cooldowns.check(interaction.user.id, target.id);
-              return {
-                label: target.name,
-                description: state.ready ? "Já está liberado" : `Faltam ${cooldowns.formatDuration(state.remaining)}`,
-                value: target.id,
-                emoji: parseEmoji(target.emoji),
-                default: selectedCooldown === target.id,
-              };
-            }))
-        ));
-      }
-
-      const actions = new ActionRowBuilder();
-      if (current.kind === "color") {
-        if (current.id !== "default") {
-          actions.addComponents(new ButtonBuilder()
-            .setCustomId("loja|comprar")
-            .setLabel("Comprar cor")
-            .setEmoji(parseEmoji(emoji.shop))
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(stock > 0 || profile.balance < current.price));
-        }
-        actions.addComponents(new ButtonBuilder()
-          .setCustomId("loja|equipar")
-          .setLabel(current.id === "default" ? "Voltar ao clássico" : "Equipar")
-          .setEmoji(parseEmoji(emoji.roles))
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled((current.id !== "default" && stock === 0) || equippedColor(profile, current.id)));
-      } else if (current.kind === "vip") {
-        actions.addComponents(new ButtonBuilder()
-          .setCustomId("loja|comprar")
-          .setLabel(profile.isVip ? "VIP permanente ativo" : "Comprar VIP")
-          .setEmoji(parseEmoji(emoji.owner))
-          .setStyle(ButtonStyle.Success)
-          .setDisabled(profile.isVip || profile.balance < current.price));
-      } else if (current.kind === "cookie_boost") {
-        actions.addComponents(
-          new ButtonBuilder()
-            .setCustomId("loja|comprar")
-            .setLabel("Comprar boost")
-            .setEmoji(parseEmoji(emoji.shop))
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(profile.balance < current.price),
-          new ButtonBuilder()
-            .setCustomId("loja|ativar")
-            .setLabel("Ativar / estender")
-            .setEmoji(parseEmoji(emoji.booster))
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(stock === 0)
-        );
-      } else if (current.kind === "chest") {
-        actions.addComponents(
-          new ButtonBuilder()
-            .setCustomId("loja|comprar")
-            .setLabel("Comprar caixa")
-            .setEmoji(parseEmoji(emoji.shop))
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(profile.balance < current.price),
-          new ButtonBuilder()
-            .setCustomId("loja|abrir")
-            .setLabel("Abrir caixa")
-            .setEmoji(parseEmoji(emoji.gift))
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(stock === 0)
-        );
-      } else {
-        const targetReady = selectedCooldown
-          ? cooldowns.check(interaction.user.id, selectedCooldown).ready
-          : true;
-        actions.addComponents(
-          new ButtonBuilder()
-            .setCustomId("loja|comprar")
-            .setLabel("Comprar passe")
-            .setEmoji(parseEmoji(emoji.shop))
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(profile.balance < current.price),
-          new ButtonBuilder()
-            .setCustomId("loja|usar")
-            .setLabel("Remover cooldown")
-            .setEmoji(parseEmoji(emoji.clock))
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(stock === 0 || !selectedCooldown || targetReady)
-        );
-      }
-
-      actions.addComponents(new ButtonBuilder()
-        .setCustomId("loja|fechar")
-        .setLabel("Fechar")
-        .setEmoji(parseEmoji(emoji.crossed))
-        .setStyle(ButtonStyle.Secondary));
-      rows.push(actions);
-      return rows;
-    };
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const message = await interaction.editReply({ embeds: [buildEmbed()], components: buildComponents() });
-    const collector = message.createMessageComponentCollector({ time: 180000 });
-
-    collector.on("collect", async componentInteraction => {
-      if (componentInteraction.user.id !== interaction.user.id) {
-        return componentInteraction.reply({
-          content: "Esta loja está aberta para outra pessoa.",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      notice = "";
-      const id = componentInteraction.customId;
-      if (componentInteraction.componentType === ComponentType.StringSelect) {
-        if (id === "loja|secao") {
-          sectionId = componentInteraction.values[0];
-          selectedId = section().items[0].id;
-          selectedCooldown = sectionId === "utilidades" ? findActiveCooldown()?.id || null : null;
-        } else if (id === "loja|item") {
-          selectedId = componentInteraction.values[0];
-          if (SHOP_ITEMS_BY_ID[selectedId]?.kind === "cooldown_pass" && !selectedCooldown) {
-            selectedCooldown = findActiveCooldown()?.id || null;
+        if (id.startsWith("loja|categoria|")) {
+          const selected = id.split("|")[2];
+          const member = storeMember(component);
+          const canOpenMarket = selected === "mercado_negro" && Boolean(member && blackMarket.isVipMember(interaction.guild, member));
+          if (SHOP_SECTIONS.some((entry) => entry.id === selected) || canOpenMarket) {
+            sectionId = selected;
+            page = 0;
+          } else if (selected === "mercado_negro") {
+            sectionId = "home";
+            notice = `${emoji.redTick} O Mercado Negro é restrito aos VIPs deste servidor.`;
           }
-        } else if (id === "loja|alvo") {
-          selectedCooldown = componentInteraction.values[0];
+        } else if (id === "loja|home") {
+          sectionId = "home";
+          page = 0;
+        } else if (id === "loja|pagina|anterior") {
+          page = Math.max(0, page - 1);
+        } else if (id === "loja|pagina|proxima") {
+          const kind: ShopRoleKind = sectionId === "cores" ? "color" : "vip";
+          page = Math.min(pageCountFor(kind, guildRoleOffers(interaction.guild, kind).length) - 1, page + 1);
+        } else if (id.startsWith("loja|cargo|")) {
+          const [, , kindText, roleId] = id.split("|");
+          const kind = kindText as ShopRoleKind;
+          const member = component.member as GuildMember;
+          const role: Role | undefined = interaction.guild.roles.cache.get(roleId);
+          const offer: ShopRoleOffer | undefined = guildRoleOffers(interaction.guild, kind)
+            .find((candidate) => candidate.roleId === roleId);
+          if (!role || !offer) {
+            notice = `${emoji.redTick} Esse cargo não está mais disponível na loja.`;
+          } else {
+            notice = await processGuildRolePurchase(component, member, role, offer);
+          }
+        } else if (id.startsWith("loja|acelerador|")) {
+          const offer = ACCELERATORS.find((entry) => entry.id === id.split("|")[2]);
+          if (!offer) {
+            notice = `${emoji.redTick} Esse acelerador não existe.`;
+          } else {
+            const result = purchaseCooldownUnlock(interaction.user, offer.targets, offer.price, {
+              guildId: interaction.guildId,
+              guildName: interaction.guild.name,
+            });
+            if (result.ok) notice = `${emoji.correct} Cooldown liberado: ${result.targets.map((target) => `/${target}`).join(", ")}.`;
+            else if (result.reason === "balance") notice = `${emoji.redTick} Saldo insuficiente para esse acelerador.`;
+            else if (result.reason === "cooldown_ready") notice = `${emoji.thinking} Esse cooldown já está liberado.`;
+            else notice = `${emoji.redTick} Não consegui aplicar esse acelerador.`;
+          }
+        } else if (id.startsWith("loja|mercado|comprar|")) {
+          const itemId = id.split("|")[3];
+          const member = storeMember(component);
+          const item = blackMarket.BLACK_MARKET_ITEMS.find((entry) => entry.id === itemId);
+          if (!member || !blackMarket.isVipMember(interaction.guild, member)) {
+            sectionId = "home";
+            notice = `${emoji.redTick} O Mercado Negro é restrito aos VIPs deste servidor.`;
+          } else if (!item) {
+            notice = `${emoji.redTick} Esse item não está disponível.`;
+          } else {
+            const purchase = blackMarket.purchaseItem(interaction.user, item.id, interaction.guildId, interaction.guild.name);
+            notice = purchase.ok === true
+              ? `${emoji.correct} **${item.name}** comprado. Você tem ${blackMarket.getInventoryCount(interaction.user.id, item.id)} unidade(s).`
+              : `${emoji.redTick} ${purchase.reason === "balance" ? "Saldo insuficiente." : "Esse item não está disponível."}`;
+          }
+        } else if (id === "loja|fechar") {
+          collector.stop("closed");
+          await component.editReply({ components: [] });
+          return;
+        } else {
+          await component.followUp({ content: "Ação da loja inválida. Abra /loja novamente.", flags: MessageFlags.Ephemeral });
+          return;
         }
-      } else if (id === "loja|comprar") {
-        const result = purchaseShopItem(interaction.user, selectedId, {
-          guildId: interaction.guildId,
-          guildName: interaction.guild?.name,
-        });
-        if (result.ok) notice = `${emoji.correct} **${result.item.name}** comprado.`;
-        else if (result.reason === "balance") notice = `${emoji.redTick} Saldo insuficiente para esta compra.`;
-        else if (result.reason === "owned") notice = `${emoji.thinking} Você já possui este item permanente.`;
-        refresh();
-      } else if (id === "loja|equipar") {
-        const result = equipShopItem(interaction.user, selectedId);
-        if (result.ok) {
-          profile = result.profile;
-          notice = `${emoji.correct} Tema aplicado ao inventário.`;
-        } else notice = `${emoji.redTick} Compre esta cor antes de equipá-la.`;
-      } else if (id === "loja|ativar") {
-        const result = activateCookieBoost(interaction.user, selectedId, {
-          guildId: interaction.guildId,
-          guildName: interaction.guild?.name,
-        });
-        if (result.ok) notice = `${emoji.correct} Boost ativo até ${timestamp(result.expiresAt)}.`;
-        else notice = `${emoji.redTick} Você não tem um boost no inventário.`;
-        refresh();
-      } else if (id === "loja|abrir") {
-        const result = openShopChest(interaction.user, selectedId, {
-          guildId: interaction.guildId,
-          guildName: interaction.guild?.name,
-        });
-        if (result.ok) {
-          const colorText = result.colorReward
-            ? `\nCor liberada: **${result.colorReward.name}**.`
-            : result.duplicateColorBonus
-              ? `\nColeção completa: bônus de **${amount(result.duplicateColorBonus)} cookies**.`
-              : "";
-          notice = `${emoji.correct} Caixa aberta: **${amount(result.cookieReward)} cookies**.${colorText}`;
-        } else notice = `${emoji.redTick} Você não tem esta caixa no inventário.`;
-        refresh();
-      } else if (id === "loja|usar") {
-        const result = useShopCooldownPass(interaction.user, selectedId, selectedCooldown, {
-          guildId: interaction.guildId,
-          guildName: interaction.guild?.name,
-        });
-        if (result.ok) {
-          const target = COOLDOWN_TARGETS.find(entry => entry.id === result.target);
-          notice = `${emoji.correct} **${target?.name || result.target}** liberado; restavam ${cooldowns.formatDuration(result.remaining)}.`;
-        } else if (result.reason === "cooldown_ready") {
-          notice = `${emoji.thinking} Este comando já está liberado; o passe não foi consumido.`;
-        } else notice = `${emoji.redTick} Você precisa ter um removedor de cooldown.`;
-        refresh();
-      } else if (id === "loja|fechar") {
-        collector.stop("closed");
-        return componentInteraction.update({ components: [] });
-      }
 
-      return componentInteraction.update({ embeds: [buildEmbed()], components: buildComponents() });
+        const embeds = sectionId === "home"
+          ? [buildHomeEmbed(interaction, notice)]
+          : sectionId === "aceleradores"
+            ? [buildAcceleratorEmbed(interaction, notice)]
+            : sectionId === "mercado_negro"
+              ? [buildBlackMarketEmbed(interaction, notice)]
+            : [buildRoleEmbed(interaction, sectionId as "cores" | "vip", page, notice).embed];
+        await component.editReply({
+          embeds,
+          components: buildComponents(interaction, sectionId, page, notice),
+          allowedMentions: { parse: [] },
+        });
+      } catch (error) {
+        logger.error("Falha ao processar interação da loja", error, {
+          userId: component.user.id,
+          customId: component.customId,
+        });
+        await component.followUp({
+          content: `${emoji.redTick} Não consegui concluir a ação. Tente novamente.`,
+          flags: MessageFlags.Ephemeral,
+        }).catch(() => undefined);
+      } finally {
+        if (isPurchase) activePurchaseUsers.delete(component.user.id);
+      }
     });
 
     collector.on("end", () => {
-      message.edit({ components: [] }).catch(() => {});
+      message.edit({ components: [] }).catch(() => undefined);
     });
   },
-};
+});
 
-function equippedColor(profile, id) {
-  return profile.selectedBanner === id;
+async function processGuildRolePurchase(
+  interaction,
+  member: GuildMember,
+  role: Role,
+  offer: ShopRoleOffer,
+): Promise<string> {
+  const alreadyAssigned = member.roles.cache.has(role.id);
+  const existing = getGuildShopRolePurchase(interaction.guildId, interaction.user.id, role.id, offer.kind);
+
+  if (alreadyAssigned && offer.kind === "color") {
+    return `${emoji.thinking} Você já está usando essa cor; nenhum cookie foi cobrado.`;
+  }
+  if (alreadyAssigned && offer.kind === "vip" && !existing) {
+    return `${emoji.thinking} Você já possui esse VIP; nenhum cookie foi cobrado.`;
+  }
+
+  const activePurchase = existing && (offer.kind === "color" || Number(existing.expiresAt) > Date.now());
+  if (!alreadyAssigned && activePurchase) {
+    try {
+      await member.roles.add(role, "Reaplicação de um cargo comprado na loja");
+      return `${emoji.correct} Cargo ${role} reaplicado sem nova cobrança.`;
+    } catch (error) {
+      logger.error("Falha ao reaplicar cargo comprado", error, { roleId: role.id, userId: interaction.user.id });
+      return discordErrorCode(error) === 50013
+        ? `${emoji.redTick} Não consigo aplicar o cargo. A equipe precisa mover o cargo do Rascal acima dele.`
+        : `${emoji.redTick} Não consegui aplicar o cargo agora.`;
+    }
+  }
+
+  const reservation = rolePurchases.reserveRolePurchase(
+    { id: interaction.user.id, username: interaction.user.username },
+    offer,
+    { guildId: interaction.guildId, guildName: interaction.guild.name },
+  );
+  if (reservation.ok === false) {
+    if (reservation.reason === "balance") return `${emoji.redTick} Você precisa de ${amount(offer.price)} cookies para comprar esse cargo.`;
+    if (reservation.reason === "owned") return `${emoji.thinking} Essa cor já está registrada na sua coleção.`;
+    if (reservation.reason === "busy") return `${emoji.clock} Sua outra compra ainda está sendo processada.`;
+    return `${emoji.redTick} Não consegui concluir essa compra.`;
+  }
+
+  try {
+    await member.roles.add(role, "Cargo comprado na loja com cookies");
+  } catch (error) {
+    logger.error("Falha ao aplicar cargo comprado", error, {
+      roleId: role.id,
+      userId: interaction.user.id,
+      reservationId: reservation.reservation.id,
+    });
+    const code = discordErrorCode(error);
+    let applied: boolean | null = code === 50013 ? false : null;
+    if (applied === null) {
+      try {
+        const freshMember = await interaction.guild.members.fetch(interaction.user.id);
+        applied = freshMember.roles.cache.has(role.id);
+      } catch (verificationError) {
+        logger.warn("Não foi possível confirmar a aplicação do cargo", {
+          roleId: role.id,
+          userId: interaction.user.id,
+          code: discordErrorCode(verificationError),
+        });
+      }
+    }
+    if (applied === true) {
+      rolePurchases.completeRolePurchase(reservation.reservation.id);
+      return `${emoji.correct} Cargo aplicado e compra registrada.`;
+    }
+    if (applied === false) {
+      const refunded = rolePurchases.refundRolePurchase(reservation.reservation.id, "Discord recusou a aplicação do cargo");
+      return refunded
+        ? `${emoji.redTick} A compra foi cancelada e os cookies devolvidos. Confira se o cargo do Rascal está acima do cargo da loja.`
+        : `${emoji.redTick} O estorno está pendente de reconciliação; avise a equipe do servidor.`;
+    }
+    return `${emoji.clock} O Discord não confirmou a aplicação. Mantive a compra pendente para proteger seu saldo.`;
+  }
+
+  const completed = rolePurchases.completeRolePurchase(reservation.reservation.id);
+  if (!completed) return `${emoji.clock} Cargo aplicado; o registro será reconciliado automaticamente.`;
+  return `${emoji.correct} ${role} comprado e aplicado!` +
+    (completed.expiresAt ? ` Válido até ${timestamp(completed.expiresAt)}.` : "");
+}
+
+function discordErrorCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  const code = Number(error.code);
+  return Number.isInteger(code) ? code : undefined;
 }

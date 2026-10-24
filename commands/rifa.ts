@@ -1,15 +1,16 @@
-const { SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 
 const { playRifa } = require("../utils/cookieEconomy");
+const emoji = require("../utils/emojis");
 const {
   amount,
   buildErrorEmbed,
   buildContext,
   buildRifaEmbed,
-  COOKIE_EMOJI,
 } = require("../utils/cookieViews");
 
-module.exports = {
+module.exports = defineCommand({
   category: "economy",
 
   data: new SlashCommandBuilder()
@@ -32,7 +33,7 @@ module.exports = {
         embeds: [buildErrorEmbed(
           interaction,
           "\uD83C\uDF9F\uFE0F RIFA BLOQUEADA",
-          `Você não tem ${COOKIE_EMOJI} **${amount(result.amount)} cookies** para apostar.`
+          `Você não tem ${emoji.cookie} **${amount(result.amount)} cookies** para apostar.`
         )],
         flags: 64,
       });
@@ -40,4 +41,4 @@ module.exports = {
 
     return interaction.reply({ embeds: [buildRifaEmbed(interaction, result)] });
   },
-};
+});

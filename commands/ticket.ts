@@ -1,3 +1,4 @@
+import { defineCommand } from "../types/command";
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -7,7 +8,7 @@ const {
   PermissionFlagsBits,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
 const store = require("../utils/ticketStore");
@@ -17,8 +18,10 @@ const { ACCESS_LEVELS } = require("../utils/permissions");
 const SUPPORT_CATEGORY_NAME = "Atendimento";
 const PANEL_CHANNEL_NAME = "tickets";
 const PANEL_COLOR = 0x2b2d31;
-const CLOSE_EMOJI = emoji.crossed;
-const CLAIM_EMOJI = emoji.correct;
+const ICONS = {
+  get close() { return emoji.crossed; },
+  get claim() { return emoji.correct; },
+};
 const QUESTION_EMOJI = "<a:procurando:1502138545488531518>";
 const POLICE_EMOJI = "<:panda_police:1502138488290676856>";
 
@@ -39,7 +42,7 @@ const ticketTypes = {
   },
   bug: {
     label: "Reportar bug",
-    emoji: emoji.bugHunterLed,
+    get emoji() { return emoji.bugHunterLed; },
     color: 0xf5a623,
     description: "Falhas, erros ou comportamentos estranhos do bot.",
     prompt: "Descreva o comando, o erro, o horario aproximado e o que voce esperava.",
@@ -147,7 +150,7 @@ function panelEmbed(guild) {
     .setTitle(`${emoji.ticket} Abrir ticket`)
     .setDescription(
       [
-        "Selecione a categoria correta no menu abaixo. Um canal privado sera criado para voce e a equipe.",
+        "Selecione a categoria correta no menu abaixo. Um canal privado será criado para você e a equipe.",
         "",
         `${QUESTION_EMOJI} **Suporte** - duvidas e orientacoes gerais.`,
         `${POLICE_EMOJI} **Denuncia** - relatos que precisam de analise da equipe.`,
@@ -222,13 +225,13 @@ function ticketButtons(disabled = false) {
       new ButtonBuilder()
         .setCustomId("ticket|claim")
         .setLabel("Assumir")
-        .setEmoji(parseEmoji(CLAIM_EMOJI))
+        .setEmoji(parseEmoji(ICONS.claim))
         .setStyle(ButtonStyle.Primary)
         .setDisabled(disabled),
       new ButtonBuilder()
         .setCustomId("ticket|close")
         .setLabel("Fechar")
-        .setEmoji(parseEmoji(CLOSE_EMOJI))
+        .setEmoji(parseEmoji(ICONS.close))
         .setStyle(ButtonStyle.Danger)
         .setDisabled(disabled)
     ),
@@ -354,7 +357,7 @@ async function createTicket(interaction, typeKey) {
   });
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "staff",
   access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageChannels },
 
@@ -419,8 +422,8 @@ module.exports = {
         embeds: [
           new EmbedBuilder()
             .setColor(0x57f287)
-            .setTitle(`${CLAIM_EMOJI} Atendimento assumido`)
-            .setDescription(`${interaction.user} assumiu este ticket e sera responsavel pelo acompanhamento.`)
+            .setTitle(`${ICONS.claim} Atendimento assumido`)
+            .setDescription(`${interaction.user} assumiu este ticket e será responsável pelo acompanhamento.`)
             .setTimestamp(),
         ],
       });
@@ -446,11 +449,11 @@ module.exports = {
         embeds: [
           new EmbedBuilder()
             .setColor(0xed4245)
-            .setTitle(`${CLOSE_EMOJI} Ticket encerrado`)
+            .setTitle(`${ICONS.close} Ticket encerrado`)
             .setDescription(
               [
                 `Encerrado por ${interaction.user}.`,
-                `${emoji.clock} Este canal sera removido em 10 segundos.`,
+                `${emoji.clock} Este canal será removido em 10 segundos.`,
               ].join("\n")
             )
             .setTimestamp(),
@@ -463,4 +466,4 @@ module.exports = {
       }, 10000);
     }
   },
-};
+});

@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 
 const {
   buildScheduledEmbed,
@@ -43,12 +44,12 @@ function parseDuration(input) {
   return ms;
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "utility",
 
   data: new SlashCommandBuilder()
     .setName("lembrete")
-    .setDescription("Agenda um lembrete e te notifica quando chegar a hora")
+    .setDescription("Agenda um lembrete e envia uma notificação quando chegar a hora")
     .addStringOption(option =>
       option
         .setName("tempo")
@@ -92,4 +93,4 @@ module.exports = {
       flags: 64,
     });
   },
-};
+});

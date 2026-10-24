@@ -5,7 +5,9 @@ const Database = require("better-sqlite3");
 
 const logger = require("./logger");
 
-const dataDir = path.join(__dirname, "../data");
+const dataDir = process.env.BOT_DATA_DIR
+  ? path.resolve(process.env.BOT_DATA_DIR)
+  : path.resolve(process.cwd(), "data");
 const dbFile = path.join(dataDir, "database.sqlite");
 const legacyCookiesFile = path.join(dataDir, "cookies.json");
 
@@ -16,6 +18,7 @@ if (!fs.existsSync(dataDir)) {
 const db = new Database(dbFile);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
+db.pragma("secure_delete = ON");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS usuarios (
@@ -34,6 +37,11 @@ db.exec(`
     daily_claims INTEGER NOT NULL DEFAULT 0,
     daily_streak INTEGER NOT NULL DEFAULT 0,
     best_daily_streak INTEGER NOT NULL DEFAULT 0,
+    cooldown_daily INTEGER NOT NULL DEFAULT 0,
+    cooldown_trabalhar INTEGER NOT NULL DEFAULT 0,
+    cooldown_roubar INTEGER NOT NULL DEFAULT 0,
+    cooldown_bonus INTEGER NOT NULL DEFAULT 0,
+    cooldown_rep INTEGER NOT NULL DEFAULT 0,
     work_count INTEGER NOT NULL DEFAULT 0,
     rob_count INTEGER NOT NULL DEFAULT 0,
     rob_wins INTEGER NOT NULL DEFAULT 0,
@@ -82,6 +90,24 @@ db.exec(`
     PRIMARY KEY (guild_id, user_id, week_key)
   );
 
+  CREATE TABLE IF NOT EXISTS transmission_weekly_stats (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    week_key TEXT NOT NULL,
+    seconds INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id, week_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS voice_daily_stats (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    day_key TEXT NOT NULL,
+    seconds INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id, day_key)
+  );
+
   CREATE TABLE IF NOT EXISTS rank_reward_claims (
     guild_id TEXT NOT NULL,
     week_key TEXT NOT NULL,
@@ -122,6 +148,23 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS stats_jogos (
+    user_id TEXT PRIMARY KEY,
+    vitorias INTEGER NOT NULL DEFAULT 0,
+    derrotas INTEGER NOT NULL DEFAULT 0,
+    empates INTEGER NOT NULL DEFAULT 0,
+    partidas INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS game_bet_holds (
+    game_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    stake INTEGER NOT NULL CHECK (stake > 0),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (game_id, user_id)
+  );
+
   CREATE TABLE IF NOT EXISTS cookie_shop_inventory (
     user_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
@@ -130,16 +173,299 @@ db.exec(`
     PRIMARY KEY (user_id, item_id)
   );
 
+  CREATE TABLE IF NOT EXISTS guild_shop_role_purchases (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    price INTEGER NOT NULL,
+    benefit_percent INTEGER NOT NULL DEFAULT 0,
+    purchased_at INTEGER NOT NULL,
+    expires_at INTEGER,
+    PRIMARY KEY (guild_id, user_id, role_id, kind)
+  );
+
+  CREATE TABLE IF NOT EXISTS shop_role_purchase_reservations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE,
+    guild_id TEXT NOT NULL,
+    guild_name TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    role_name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('color', 'vip')),
+    price INTEGER NOT NULL CHECK (price > 0),
+    benefit_percent INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER,
+    transaction_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS cooldown_notifications (
+    user_id TEXT NOT NULL,
+    command TEXT NOT NULL,
+    notify_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL,
+    notified_at INTEGER,
+    PRIMARY KEY (user_id, command)
+  );
+
+  CREATE TABLE IF NOT EXISTS message_monthly_stats (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    messages INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id, month_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS voice_monthly_stats (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    seconds INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id, month_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS monthly_top_posts (
+    guild_id TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    posted_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, month_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS monthly_tax_runs (
+    month_key TEXT PRIMARY KEY,
+    completed_at INTEGER NOT NULL,
+    taxed_accounts INTEGER NOT NULL DEFAULT 0,
+    exempt_accounts INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS monthly_tax_accounts (
+    month_key TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0,
+    processed_at INTEGER NOT NULL,
+    PRIMARY KEY (month_key, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS voice_reward_state (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    eligible_since INTEGER,
+    last_reward_at INTEGER,
+    PRIMARY KEY (guild_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS guild_memberships (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    joined_at INTEGER,
+    left_at INTEGER,
+    PRIMARY KEY (guild_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS giveaways (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT,
+    created_by TEXT NOT NULL,
+    prize TEXT NOT NULL,
+    winner_count INTEGER NOT NULL DEFAULT 1,
+    ends_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    winner_ids TEXT NOT NULL DEFAULT '[]',
+    announcement_sent INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS giveaway_participants (
+    giveaway_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    joined_at INTEGER NOT NULL,
+    PRIMARY KEY (giveaway_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS moderation_guild_settings (
+    guild_id TEXT PRIMARY KEY,
+    log_channel_id TEXT,
+    gif_banir TEXT,
+    gif_mute TEXT,
+    gif_castigo TEXT,
+    gif_aviso TEXT,
+    updated_by TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS moderation_punishments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    guild_name TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    target_username TEXT NOT NULL,
+    moderator_id TEXT NOT NULL,
+    moderator_username TEXT NOT NULL,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    duration_ms INTEGER,
+    issued_at INTEGER NOT NULL,
+    expires_at INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending',
+    log_channel_id TEXT,
+    log_message_id TEXT,
+    error TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS raid_join_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    is_bot INTEGER NOT NULL DEFAULT 0,
+    joined_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS raid_lockdowns (
+    guild_id TEXT PRIMARY KEY,
+    enabled_at INTEGER NOT NULL,
+    activated_by TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    verification_level INTEGER,
+    status TEXT NOT NULL DEFAULT 'active'
+  );
+
+  CREATE TABLE IF NOT EXISTS raid_lockdown_channel_state (
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    send_messages TEXT NOT NULL,
+    create_instant_invite TEXT NOT NULL,
+    PRIMARY KEY (guild_id, channel_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS weekly_lottery_settings (
+    guild_id TEXT PRIMARY KEY,
+    announcement_channel_id TEXT,
+    updated_by TEXT,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS weekly_lottery_pools (
+    guild_id TEXT NOT NULL,
+    draw_key TEXT NOT NULL,
+    draw_at INTEGER NOT NULL,
+    pot_cookies INTEGER NOT NULL DEFAULT 0,
+    ticket_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'drawn', 'empty')),
+    created_at INTEGER NOT NULL,
+    drawn_at INTEGER,
+    PRIMARY KEY (guild_id, draw_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS weekly_lottery_tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    draw_key TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    purchased_at INTEGER NOT NULL,
+    price INTEGER NOT NULL,
+    FOREIGN KEY (guild_id, draw_key) REFERENCES weekly_lottery_pools(guild_id, draw_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS weekly_lottery_draws (
+    guild_id TEXT NOT NULL,
+    draw_key TEXT NOT NULL,
+    winner_user_id TEXT NOT NULL,
+    winning_ticket_id INTEGER NOT NULL,
+    pot_cookies INTEGER NOT NULL,
+    ticket_count INTEGER NOT NULL,
+    drawn_at INTEGER NOT NULL,
+    announced_at INTEGER,
+    announcement_error TEXT,
+    PRIMARY KEY (guild_id, draw_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS scratch_games (
+    id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT,
+    grid_json TEXT NOT NULL,
+    picks_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'open', 'won', 'lost', 'refunded')),
+    price INTEGER NOT NULL,
+    prize INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    finished_at INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS black_market_inventory (
+    user_id TEXT NOT NULL,
+    item_key TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, item_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS black_market_prison (
+    user_id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    jailed_at INTEGER NOT NULL,
+    release_at INTEGER NOT NULL,
+    bail_amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'jailed' CHECK (status IN ('jailed', 'bailed', 'released')),
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS server_boost_rewards (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    awarded_at INTEGER NOT NULL,
+    bonus_cookies INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_usuarios_xp ON usuarios (xp DESC, messages_count DESC);
   CREATE INDEX IF NOT EXISTS idx_message_weekly_rank ON message_weekly_stats (guild_id, week_key, messages DESC);
   CREATE INDEX IF NOT EXISTS idx_voice_weekly_rank ON voice_weekly_stats (guild_id, week_key, seconds DESC);
+  CREATE INDEX IF NOT EXISTS idx_voice_daily_user ON voice_daily_stats (guild_id, user_id, day_key);
   CREATE INDEX IF NOT EXISTS idx_birthdays_due ON birthdays (day, month, last_sent_year);
   CREATE INDEX IF NOT EXISTS idx_cooldowns_expira_em ON cooldowns (expira_em);
+  CREATE INDEX IF NOT EXISTS idx_cooldown_notifications_due ON cooldown_notifications (status, notify_at);
+  CREATE INDEX IF NOT EXISTS idx_guild_memberships_left ON guild_memberships (user_id, left_at);
+  CREATE INDEX IF NOT EXISTS idx_giveaways_due ON giveaways (status, ends_at);
+  CREATE INDEX IF NOT EXISTS idx_message_monthly_rank ON message_monthly_stats (guild_id, month_key, messages DESC);
+  CREATE INDEX IF NOT EXISTS idx_voice_monthly_rank ON voice_monthly_stats (guild_id, month_key, seconds DESC);
+  CREATE INDEX IF NOT EXISTS idx_transmission_weekly_rank ON transmission_weekly_stats (guild_id, week_key, seconds DESC);
+  CREATE INDEX IF NOT EXISTS idx_monthly_tax_accounts_status ON monthly_tax_accounts (month_key, status);
+  CREATE INDEX IF NOT EXISTS idx_moderation_target ON moderation_punishments (guild_id, target_id, issued_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_moderation_moderator ON moderation_punishments (guild_id, moderator_id, issued_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_raid_join_window ON raid_join_events (guild_id, joined_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_shop_role_reservations_created ON shop_role_purchase_reservations (created_at);
+  CREATE INDEX IF NOT EXISTS idx_lottery_pools_due ON weekly_lottery_pools (status, draw_at);
+  CREATE INDEX IF NOT EXISTS idx_lottery_tickets_draw ON weekly_lottery_tickets (guild_id, draw_key, id);
+  CREATE INDEX IF NOT EXISTS idx_lottery_draws_pending_announcement ON weekly_lottery_draws (announced_at, drawn_at);
+  CREATE INDEX IF NOT EXISTS idx_scratch_games_expiration ON scratch_games (status, expires_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_scratch_one_open_per_user
+    ON scratch_games (guild_id, user_id) WHERE status IN ('pending', 'open');
+  CREATE INDEX IF NOT EXISTS idx_black_market_prison_status ON black_market_prison (status, release_at);
 `);
 
 const userColumns = db.prepare("PRAGMA table_info(usuarios)").all().map(column => column.name);
 if (!userColumns.includes("last_tax_at")) {
   db.prepare("ALTER TABLE usuarios ADD COLUMN last_tax_at INTEGER").run();
+}
+if (!userColumns.includes("inactivity_tax_periods")) {
+  db.prepare("ALTER TABLE usuarios ADD COLUMN inactivity_tax_periods INTEGER NOT NULL DEFAULT 0").run();
 }
 if (!userColumns.includes("xp")) {
   db.prepare("ALTER TABLE usuarios ADD COLUMN xp INTEGER NOT NULL DEFAULT 0").run();
@@ -156,10 +482,45 @@ if (!userColumns.includes("vip")) {
 if (!userColumns.includes("cookie_boost_until")) {
   db.prepare("ALTER TABLE usuarios ADD COLUMN cookie_boost_until INTEGER NOT NULL DEFAULT 0").run();
 }
+for (const column of [
+  "cooldown_daily",
+  "cooldown_trabalhar",
+  "cooldown_roubar",
+  "cooldown_bonus",
+  "cooldown_rep",
+]) {
+  if (!userColumns.includes(column)) {
+    db.prepare(`ALTER TABLE usuarios ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();
+  }
+}
+
+// Mantém as colunas legíveis no perfil atualizadas com os timestamps já salvos no schema legado.
+for (const [command, column] of [
+  ["daily", "cooldown_daily"],
+  ["trabalhar", "cooldown_trabalhar"],
+  ["roubar", "cooldown_roubar"],
+  ["bonus", "cooldown_bonus"],
+  ["rep", "cooldown_rep"],
+]) {
+  db.prepare(`
+    UPDATE usuarios
+    SET ${column} = COALESCE((
+      SELECT expira_em FROM cooldowns
+      WHERE cooldowns.user_id = usuarios.id AND cooldowns.comando = ?
+    ), ${column})
+  `).run(command);
+}
 
 const shopColumns = db.prepare("PRAGMA table_info(cookie_shop_inventory)").all().map(column => column.name);
 if (!shopColumns.includes("quantity")) {
   db.prepare("ALTER TABLE cookie_shop_inventory ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1").run();
+}
+
+for (const table of ["guild_shop_role_purchases", "shop_role_purchase_reservations"]) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all().map(column => column.name);
+  if (!columns.includes("benefit_percent")) {
+    db.prepare(`ALTER TABLE ${table} ADD COLUMN benefit_percent INTEGER NOT NULL DEFAULT 0`).run();
+  }
 }
 
 function integer(value, fallback = 0) {

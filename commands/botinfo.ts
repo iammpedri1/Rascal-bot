@@ -1,117 +1,80 @@
-const {
-  EmbedBuilder,
-  SlashCommandBuilder,
-} = require("discord.js");
-const path = require("path");
+import { EmbedBuilder, SlashCommandBuilder } from "discord.js";
+import type { CommandChatInputInteraction } from "../types/command";
+import { defineCommand } from "../types/command";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-const emoji = require("../utils/emojis");
-const pkg = require(path.join(process.cwd(), "package.json"));
+interface PackageMetadata {
+  version: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}
 
-const ARTIST_EMOJI = process.env.ARTIST_EMOJI || "🎨";
+interface EmojiCatalog {
+  application(name: string, fallback?: string): string;
+  clock: string;
+  online: string;
+  calendar: string;
+  server: string;
+  ping: string;
+}
+
+const emoji = require("../utils/emojis") as EmojiCatalog;
+const { randomColor } = require("../utils/embedStyle") as { randomColor: () => number };
+const pkg = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as PackageMetadata;
 const CREATOR_NAME = process.env.BOT_CREATOR || "amillenium";
 const ARTIST_NAME = process.env.BOT_ARTIST || "leobrissxx";
-const HONORABLE_MENTION = process.env.BOT_HONORABLE_MENTION || "Rascal Team";
 
-function formatUptime(totalSeconds) {
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor(totalSeconds / 3600) % 24;
+function cleanVersion(value: string | undefined, fallback: string): string {
+  return String(value || fallback).replace(/^[^\d]*/, "");
+}
+
+function formatUptime(totalSeconds: number): string {
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor(totalSeconds / 3_600) % 24;
   const minutes = Math.floor(totalSeconds / 60) % 60;
-
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  const parts = [days ? `${days}d` : "", hours ? `${hours}h` : "", `${minutes}m`].filter(Boolean);
+  return parts.join(" ");
 }
 
-function codeLine(value) {
-  return `\`${String(value).replace(/`/g, "'")}\``;
+function getHostLabel(): string {
+  if (process.env.SERVICE_HOST) return process.env.SERVICE_HOST;
+  return process.platform === "linux" ? "Linux · local" : `Node.js · ${process.platform}`;
 }
 
-function getHostLabel() {
-  if (process.env.SERVICE_HOST === "node-windows") return "node-windows";
-  return "Node.js local";
-}
-
-function formatCreatedAt(timestamp) {
-  return new Date(timestamp).toLocaleString("pt-BR", {
-    dateStyle: "long",
-    timeStyle: "short",
-  });
-}
-
-module.exports = {
+module.exports = defineCommand({
   category: "info",
-
   data: new SlashCommandBuilder()
     .setName("bot")
-    .setDescription("Comandos de informacoes do bot")
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName("info")
-        .setDescription("Mostra informacoes tecnicas do bot")
-    ),
+    .setDescription("Comandos de informações do bot")
+    .addSubcommand(subcommand => subcommand
+      .setName("info")
+      .setDescription("Mostra informações técnicas do bot")),
 
-  async execute(interaction) {
+  async execute(interaction: CommandChatInputInteraction) {
     await interaction.deferReply();
+    const botUser = interaction.client.user;
+    if (!botUser) return interaction.editReply({ content: "As informações do bot ainda não estão disponíveis." });
 
-    const client = interaction.client;
-    const botUser = await client.user.fetch({ force: true });
-    const createdTimestamp = Math.floor(botUser.createdTimestamp / 1000);
-    const uptimeSeconds = Math.floor((client.uptime ?? process.uptime() * 1000) / 1000);
-    const uptimeStr = formatUptime(uptimeSeconds);
-    const ping = client.ws.ping;
-
+    const uptimeSeconds = Math.floor((interaction.client.uptime ?? process.uptime() * 1000) / 1000);
+    const ping = interaction.client.ws.ping;
+    const createdAt = Math.floor(botUser.createdTimestamp / 1000);
+    const typescriptVersion = cleanVersion(pkg.devDependencies?.typescript, "5");
+    const discordVersion = cleanVersion(pkg.dependencies?.["discord.js"], "14");
     const embed = new EmbedBuilder()
-      .setColor(0xff8a3d)
-      .setThumbnail(botUser.displayAvatarURL({ size: 256 }))
+      .setColor(randomColor())
       .addFields(
-        {
-          name: `${emoji.devs} Criadores`,
-          value: `**${CREATOR_NAME}**`,
-          inline: true,
-        },
-        {
-          name: `${emoji.js} Linguagem`,
-          value: "**JavaScript & Node.js**",
-          inline: true,
-        },
-        {
-          name: `${ARTIST_EMOJI} Designer`,
-          value: `**${ARTIST_NAME}**`,
-          inline: true,
-        },
-        {
-          name: `${emoji.clock} Ontime`,
-          value: codeLine(uptimeStr),
-          inline: true,
-        },
-        {
-          name: `${emoji.settingsIcon} Versão`,
-          value: codeLine(pkg.version),
-          inline: true,
-        },
-        {
-          name: `${emoji.online} Host`,
-          value: codeLine(getHostLabel()),
-          inline: true,
-        },
-        {
-          name: `${emoji.botFlag} Ping`,
-          value: codeLine(ping >= 0 ? `${Math.round(ping)} ms` : "Reconectando…"),
-          inline: true,
-        },
-        {
-          name: `${emoji.calendar} Criado em`,
-          value: codeLine(formatCreatedAt(botUser.createdTimestamp)),
-          inline: true,
-        },
-        {
-          name: `${emoji.owner} Menção Honrosa`,
-          value: `**${HONORABLE_MENTION}**`,
-          inline: true,
-        }
+        { name: `${emoji.application("devs", "👥")} Criadores`, value: CREATOR_NAME, inline: true },
+        { name: `${emoji.application("typescript", "🟦")} Linguagem`, value: `TypeScript ${typescriptVersion}`, inline: true },
+        { name: `${emoji.application("palette", "🎨")} Designer`, value: ARTIST_NAME, inline: true },
+        { name: `${emoji.clock} Online`, value: formatUptime(uptimeSeconds), inline: true },
+        { name: `${emoji.application("discord", "🛠️")} Versão`, value: `discord.js ${discordVersion} · Rascal ${pkg.version}`, inline: true },
+        { name: `${emoji.online} Host`, value: `Node.js ${process.version} · ${getHostLabel()}`, inline: true },
+        { name: `${emoji.ping} Ping`, value: ping >= 0 ? `${Math.round(ping)} ms` : "Reconectando…", inline: true },
+        { name: `${emoji.calendar} Criado em`, value: `<t:${createdAt}:D> às <t:${createdAt}:t>`, inline: true },
       )
-      .setFooter({ text: "Copyright © 2022 Discord Network. All Rights Reserved." });
-
+      .setThumbnail(botUser.displayAvatarURL({ size: 256 }))
+      .setFooter({ text: "© 2026 Discord Network · Rascal" });
     return interaction.editReply({ embeds: [embed] });
   },
-};
+});

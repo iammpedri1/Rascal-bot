@@ -1,3 +1,4 @@
+import { defineCommand } from "../types/command";
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -5,135 +6,140 @@ const {
   ComponentType,
   EmbedBuilder,
   SlashCommandBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
-const emoji = require("../utils/emojis");
+const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
+const logger = require("../utils/logger");
+const { randomColor } = require("../utils/embedStyle");
 const {
   getWeeklyVoiceLeaderboard,
   syncActiveVoiceSessions,
 } = require("../utils/voiceStats");
 
-const RANK_COLOR = 0x5865f2;
-const RANK_LIMIT = 10;
+const PAGE_SIZE = 10;
+const RANK_LIMIT = 500;
 
-function medal(position) {
-  if (position === 1) return "\uD83E\uDD47";
-  if (position === 2) return "\uD83E\uDD48";
-  if (position === 3) return "\uD83E\uDD49";
+function medal(position: number): string {
   return `#${position}`;
 }
 
-function shortName(profile) {
-  return (profile.username || `usuario-${profile.id}`).slice(0, 18);
-}
-
-function formatDuration(totalSeconds) {
-  const seconds = Math.max(0, Number(totalSeconds) || 0);
+function formatDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (hours > 0) return `${hours}h ${minutes}min`;
-  if (minutes > 0) return `${minutes}min`;
-  return `${seconds}s`;
+  return hours ? `${hours}h ${minutes}min` : `${minutes}min`;
 }
 
-function buildRankEmbed(interaction, rank) {
-  const lines = rank.map(profile => [
-    `${medal(profile.position)} \u00bb \`${shortName(profile)}\``,
-    `\u2514 ${formatDuration(profile.seconds)} em voz`,
+function buildRankEmbed(interaction, rank, page: number) {
+  const maxPage = Math.max(1, Math.ceil(rank.length / PAGE_SIZE));
+  const start = page * PAGE_SIZE;
+  const visible = rank.slice(start, start + PAGE_SIZE);
+  const from = rank.length ? start + 1 : 0;
+  const to = start + visible.length;
+  const arrow = emoji.getGuildEmoji(interaction.guild, "next", "");
+  const lines = visible.map((profile, index) => [
+    `> ${medal(start + index + 1)} » **${profile.username}**`,
+    `> ${arrow ? `${arrow} ` : ""}**${formatDuration(profile.seconds)}** em voz`,
   ].join("\n"));
 
   return new EmbedBuilder()
-    .setColor(RANK_COLOR)
-    .setTitle("\uD83C\uDFC6 \u00bb Ranking Semanal de Voz")
+    .setColor(randomColor())
+    .setTitle(`${emoji.getGuildEmoji(interaction.guild, "voice", "")} » RANKING DE VOZ ${from}-${to}`)
     .setThumbnail(interaction.guild.iconURL({ size: 256, extension: "gif" }) || interaction.guild.iconURL({ size: 256 }))
-    .setDescription(
-      lines.length
-        ? lines.join("\n")
-        : `${emoji.peepSad} Ningu\u00e9m ficou em call suficiente nesta semana.`
-    )
+    .setDescription(lines.length ? lines.join("\n\n") : `${emoji.getEmoji("peepSad", "")} Ninguém entrou em voz esta semana ainda.`)
     .setFooter({
-      text: interaction.client.user?.username || "Bot",
+      text: `Página ${page + 1} de ${maxPage} · ${rank.length} membros no ranking`,
       iconURL: interaction.client.user?.displayAvatarURL({ size: 64 }) || undefined,
-    })
-    .setTimestamp();
+    });
 }
 
-function buildRefreshRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("rankvoz_refresh")
-      .setLabel("Atualizar")
-      .setEmoji("\uD83D\uDD04")
+function buildButtons(
+  interaction,
+  page: number,
+  maxPage: number,
+): import("discord.js").ActionRowBuilder<import("discord.js").ButtonBuilder> {
+  return new ActionRowBuilder<import("discord.js").ButtonBuilder>().addComponents(
+    emoji.setGuildButtonEmoji(new ButtonBuilder()
+      .setCustomId("rankvoz|previous")
+      .setLabel("Anterior")
       .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page <= 0), interaction.guild, "previous", ""),
+    emoji.setGuildButtonEmoji(new ButtonBuilder()
+      .setCustomId("rankvoz|refresh")
+      .setLabel("Atualizar")
+      .setStyle(ButtonStyle.Primary), interaction.guild, "refresh", ""),
+    emoji.setGuildButtonEmoji(new ButtonBuilder()
+      .setCustomId("rankvoz|next")
+      .setLabel("Próxima")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page >= maxPage - 1), interaction.guild, "next", ""),
   );
 }
 
 async function getLiveRank(interaction) {
   syncActiveVoiceSessions(interaction.guild);
-  const rank = getWeeklyVoiceLeaderboard(interaction.guildId, RANK_LIMIT);
+  return getWeeklyVoiceLeaderboard(interaction.guildId, RANK_LIMIT);
+}
 
-  await Promise.all(rank.map(async profile => {
+async function resolvePageNames(interaction, rank, page: number) {
+  const visible = rank.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  await Promise.all(visible.map(async profile => {
     const member = interaction.guild.members.cache.get(profile.id) ||
       await interaction.guild.members.fetch(profile.id).catch(() => null);
     if (member?.user?.username) profile.username = member.user.username;
   }));
-
-  return rank;
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "utility",
 
   data: new SlashCommandBuilder()
     .setName("rankvoz")
-    .setDescription("Mostra o ranking semanal de tempo em voz do servidor"),
+    .setDescription("Veja o ranking semanal de tempo em canais de voz"),
 
   async execute(interaction) {
     if (!interaction.guild) {
-      return interaction.reply({
-        content: "Use esse comando em um servidor.",
-        flags: 64,
-      });
+      return interaction.reply({ content: "Use esse comando em um servidor.", flags: 64 });
     }
 
+    await interaction.deferReply();
+    let page = 0;
     const rank = await getLiveRank(interaction);
-
-    await interaction.reply({
-      embeds: [buildRankEmbed(interaction, rank)],
-      components: [buildRefreshRow()],
+    await resolvePageNames(interaction, rank, page);
+    const response = await interaction.editReply({
+      embeds: [buildRankEmbed(interaction, rank, page)],
+      components: [buildButtons(interaction, page, Math.max(1, Math.ceil(rank.length / PAGE_SIZE)))],
     });
-
-    const response = await interaction.fetchReply();
-
-    const refreshMessage = async () => {
-      const nextRank = await getLiveRank(interaction);
-
-      return response.edit({
-        embeds: [buildRankEmbed(interaction, nextRank)],
-        components: [buildRefreshRow()],
-      });
-    };
 
     const collector = response.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: 120000,
+      time: 10 * 60 * 1000,
     });
 
     collector.on("collect", async buttonInteraction => {
       if (buttonInteraction.user.id !== interaction.user.id) {
-        return buttonInteraction.reply({
-          content: "Esse ranking pertence a outra pessoa.",
-          flags: 64,
-        });
+        return buttonInteraction.reply({ content: "Este ranking está aberto para outra pessoa.", flags: 64 });
       }
 
       await buttonInteraction.deferUpdate();
-      return refreshMessage();
+      try {
+        const nextRank = await getLiveRank(interaction);
+        const maxPage = Math.max(1, Math.ceil(nextRank.length / PAGE_SIZE));
+        if (buttonInteraction.customId.endsWith("|previous")) page = Math.max(0, page - 1);
+        if (buttonInteraction.customId.endsWith("|next")) page = Math.min(maxPage - 1, page + 1);
+        await resolvePageNames(interaction, nextRank, page);
+        await response.edit({
+          embeds: [buildRankEmbed(interaction, nextRank, page)],
+          components: [buildButtons(interaction, page, maxPage)],
+        });
+      } catch (error) {
+        logger.error("Falha ao atualizar /rankvoz", error);
+        await buttonInteraction.followUp({ content: "Não consegui atualizar este ranking agora.", flags: 64 }).catch(() => {});
+      }
     });
 
     collector.on("end", () => {
       response.edit({ components: [] }).catch(() => {});
     });
   },
-};
+});

@@ -1,3 +1,4 @@
+import { defineCommand } from "../types/command";
 const {
   ActivityType,
   ApplicationIntegrationType,
@@ -9,8 +10,10 @@ const {
   EmbedBuilder,
   MessageFlags,
   SlashCommandBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
+
+const emoji = require("../utils/emojis");
 
 const CARD_WIDTH = 600;
 const CARD_HEIGHT = 250;
@@ -47,8 +50,22 @@ function spotifyTrackUrl(activity) {
     : null;
 }
 
+function parseEmoji(value) {
+  const match = String(value || "").match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
+  if (!match) return value;
+
+  return {
+    name: match[1],
+    id: match[2],
+    animated: value.startsWith("<a:"),
+  };
+}
+
 function getSpotifyActivity(interaction) {
-  const activities = interaction.member?.presence?.activities || [];
+  const activities =
+    interaction.member?.presence?.activities ||
+    interaction.guild?.members.cache.get(interaction.user.id)?.presence?.activities ||
+    [];
   return activities.find(activity =>
     activity.type === ActivityType.Listening &&
     activity.name?.toLowerCase() === "spotify"
@@ -167,19 +184,12 @@ function buildButtons(activity) {
         .setURL(trackUrl)
     );
   }
-
-  buttons.push(
-    new ButtonBuilder()
-      .setCustomId("tocando|like")
-      .setEmoji("❤️")
-      .setLabel("0")
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  return new ActionRowBuilder().addComponents(buttons);
+  return buttons.length
+    ? new ActionRowBuilder().addComponents(buttons)
+    : undefined;
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "utility",
 
   data: new SlashCommandBuilder()
@@ -193,18 +203,18 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    await interaction.deferReply();
+
     if (String(process.env.DISCORD_PRESENCE_INTENT).toLowerCase() !== "true") {
-      return interaction.reply({
+      return interaction.editReply({
         content: "Habilite o Presence Intent no Developer Portal e defina DISCORD_PRESENCE_INTENT=true no .env.",
-        flags: MessageFlags.Ephemeral,
       });
     }
 
     const activity = getSpotifyActivity(interaction);
     if (!activity) {
-      return interaction.reply({
+      return interaction.editReply({
         content: "Você não está ouvindo uma música no Spotify agora.",
-        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -212,29 +222,18 @@ module.exports = {
     const attachment = new AttachmentBuilder(image, { name: "spotify-card.png" });
     const embed = new EmbedBuilder()
       .setColor(0x1db954)
-      .setAuthor({
-        name: "Tocando agora • Spotify",
-        iconURL: interaction.client.user.displayAvatarURL({ size: 128 }),
-      })
-      .setImage("attachment://spotify-card.png")
-      .setFooter({ text: "Reprodução atual do Spotify" });
+      .setDescription(
+        `${emoji.spotify} » **Tocando agora no Spotify de ${interaction.user.username}!**`
+      )
+      .setImage("attachment://spotify-card.png");
+    const buttons = buildButtons(activity);
 
-    return interaction.reply({
+    return interaction.editReply({
       embeds: [embed],
       files: [attachment],
-      components: [buildButtons(activity)],
+      ...(buttons ? { components: [buttons] } : {}),
     });
   },
-
-  async handleButton(interaction) {
-    if (interaction.customId !== "tocando|like") return;
-
-    return interaction.reply({
-      content: "❤️ Curtida registrada!",
-      flags: MessageFlags.Ephemeral,
-    });
-  },
-};
-
+});
 module.exports.formatTime = formatTime;
 module.exports.createSpotifyCard = createSpotifyCard;

@@ -1,55 +1,46 @@
-const { SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
 
-function formatUptime(uptimeMs) {
-  let remaining = Math.floor((uptimeMs ?? 0) / 1000);
-  const units: Array<[number, string]> = [
-    [86400, "dia"],
-    [3600, "hora"],
-    [60, "minuto"],
+const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
+const { icon } = require("../utils/embedStyle");
+
+function formatUptime(uptimeMs: number | null | undefined): string {
+  let remaining = Math.floor(Math.max(0, uptimeMs ?? 0) / 1000);
+  const units: Array<[number, string, string]> = [
+    [30 * 86400, "mês", "meses"],
+    [7 * 86400, "semana", "semanas"],
+    [86400, "dia", "dias"],
+    [3600, "hora", "horas"],
+    [60, "minuto", "minutos"],
+    [1, "segundo", "segundos"],
   ];
-  const parts = [];
-
-  for (const [seconds, label] of units) {
+  const parts: string[] = [];
+  for (const [seconds, singular, plural] of units) {
     const value = Math.floor(remaining / seconds);
     remaining %= seconds;
-    if (value) parts.push(`${value} ${label}${value === 1 ? "" : "s"}`);
+    if (value) parts.push(`${value} ${value === 1 ? singular : plural}`);
   }
-
-  parts.push(`${remaining} segundo${remaining === 1 ? "" : "s"}`);
-  return parts.join(", ");
+  return parts.join(", ") || "0 segundos";
 }
 
-function connectionStatus(apiPing, responseTime) {
-  const highestPing = Math.max(apiPing, responseTime);
-  if (highestPing < 150) return { label: "Excelente", color: 0x57f287 };
-  if (highestPing < 350) return { label: "Estável", color: 0xfee75c };
-  return { label: "Latência alta", color: 0xed4245 };
-}
-
-module.exports = {
+module.exports = defineCommand({
   category: "system",
 
   data: new SlashCommandBuilder()
     .setName("ping")
-    .setDescription("Mostra latência, uptime e estado da conexão"),
+    .setDescription("Mostra a latência e o tempo ativo do bot"),
 
   async execute(interaction) {
-    const client = interaction.client;
-
-    await interaction.reply({ content: "Medindo a conexão..." });
-    const response = await interaction.fetchReply();
-    const responseTime = Math.max(0, response.createdTimestamp - interaction.createdTimestamp);
-    const apiPing = Math.round(client.ws.ping);
-    const status = connectionStatus(apiPing, responseTime);
-
-    const statusIcon = status.label === "Excelente" ? "🟢" : status.label === "Estável" ? "🟡" : "🔴";
-    return interaction.editReply({
-      content: [
-        `${client.user} ${statusIcon} **${status.label}**`,
-        `> 🟣 **Uptime:** ${formatUptime(client.uptime)}`,
-        `> 🔵 **API Ping:** ${apiPing >= 0 ? `${apiPing}ms` : "Reconectando…"}`,
-        `> ⚪ **BOT Ping:** ${responseTime}ms`,
-      ].join("\n"),
-    });
+    const startedAt = Date.now();
+    await interaction.deferReply();
+    const responseTime = Math.max(0, Date.now() - startedAt);
+    const rawApiPing = Number(interaction.client.ws.ping);
+    const apiPing = Number.isFinite(rawApiPing) && rawApiPing >= 0 ? Math.round(rawApiPing) : -1;
+    const content = [
+      `${icon("ping", "🏓")} ${interaction.user} pong! Yay!`,
+      `${icon("clock", "🗓️")} **Uptime:** \`${formatUptime(interaction.client.uptime)}\``,
+      `${icon("server", "🌐")} **API Ping:** ${apiPing >= 0 ? `${apiPing}ms` : "reconectando"}`,
+      `${icon("botFlag", "💬")} **BOT Ping:** ${responseTime}ms`,
+    ].join("\n");
+    return interaction.editReply({ content, allowedMentions: { users: [interaction.user.id] } });
   },
-};
+});

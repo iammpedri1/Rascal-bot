@@ -1,3 +1,4 @@
+import { defineCommand } from "../types/command";
 const {
   SlashCommandBuilder,
   EmbedBuilder,
@@ -5,18 +6,23 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
+const { randomColor } = require("../utils/embedStyle");
 const {
   getNetProfit,
   getRank,
 } = require("../utils/cookieEconomy");
-const { getXpLeaderboard } = require("../utils/xpSystem");
 
-const COOKIE_EMOJI = emoji.cookie;
 const PAGE_SIZE = 10;
-const RANK_THUMBNAIL = emojiImageUrl(emoji.cookie) || emojiImageUrl(emoji.party);
+const RANK_TYPES = [
+  { value: "balance", label: "Cookies", icon: () => emoji.cookie },
+  { value: "earned", label: "Ganhos", icon: () => emoji.gift },
+  { value: "wins", label: "Vitórias", icon: () => emoji.trophy },
+  { value: "played", label: "Partidas", icon: () => emoji.gamesIcon },
+  { value: "profit", label: "Lucro", icon: () => emoji.cookie },
+];
 
 function amount(value) {
   return Number(value || 0).toLocaleString("pt-BR");
@@ -30,10 +36,20 @@ function metricValue(profile, type) {
   return profile.balance;
 }
 
-function metric(profile, type) {
-  if (type === "wins") return `\`${amount(metricValue(profile, type))}\` vitórias`;
-  if (type === "played") return `\`${amount(metricValue(profile, type))}\` partidas`;
-  return `\`${amount(metricValue(profile, type))}\` cookies`;
+function metricLabel(type) {
+  if (type === "earned") return "cookies ganhos";
+  if (type === "profit") return "lucro em cookies";
+  if (type === "wins") return "vitórias";
+  if (type === "played") return "partidas";
+  return "cookies";
+}
+
+function metricTitle(type) {
+  if (type === "earned") return "GANHOS";
+  if (type === "profit") return "LUCRO";
+  if (type === "wins") return "VITÓRIAS";
+  if (type === "played") return "PARTIDAS";
+  return "COOKIES";
 }
 
 function emojiImageUrl(customEmoji) {
@@ -44,15 +60,10 @@ function emojiImageUrl(customEmoji) {
   return `https://cdn.discordapp.com/emojis/${match[1]}.${extension}?quality=lossless`;
 }
 
-function rankMedal(position) {
-  if (position === 1) return "\uD83E\uDD47";
-  if (position === 2) return "\uD83E\uDD48";
-  if (position === 3) return "\uD83E\uDD49";
-  return `#${position}`;
-}
-
 function rankName(profile) {
-  return profile.username || `usuario-${profile.id}`;
+  return String(profile.username || `usuario-${profile.id}`)
+    .replace(/[\r\n`]/g, " ")
+    .slice(0, 64);
 }
 
 function buildRankEmbed(interaction, rank, type, page) {
@@ -61,77 +72,81 @@ function buildRankEmbed(interaction, rank, type, page) {
   const current = rank.slice(start, start + PAGE_SIZE);
   const from = rank.length ? start + 1 : 0;
   const to = start + current.length;
+  const arrow = emoji.getEmoji("seta", emoji.getEmoji("arrow", emoji.next || "↳"));
   const lines = current.map((profile, index) => {
     const position = start + index + 1;
 
     return [
-      `${rankMedal(position)} \u00bb **${rankName(profile)}**`,
-      `\u2514 ${metric(profile, type)}`,
+      `> #${position} \u00bb \`${rankName(profile)}\``,
+      `> ${arrow} \`${amount(metricValue(profile, type))}\` ${metricLabel(type)}`,
     ].join("\n");
   });
 
   return new EmbedBuilder()
-    .setColor(0xf5a623)
-    .setTitle(`${COOKIE_EMOJI} RANKING DE COOKIES ${from}-${to} ${COOKIE_EMOJI}`)
-    .setThumbnail(RANK_THUMBNAIL)
+    .setColor(randomColor())
+    .setTitle(`${emoji.cookie} » RANKING DE ${metricTitle(type)} ${from}-${to} ${emoji.cookie}`)
+    .setThumbnail(interaction.client.user?.displayAvatarURL({ size: 256 }) || emojiImageUrl(emoji.cookie))
     .setDescription(
       [
         lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguém apareceu por aqui ainda.`,
       ].join("\n")
     )
     .setFooter({
-      text: interaction.client.user?.username || "Bot",
+      text: `${emoji.cookie} Página ${page + 1} de ${maxPage}`,
       iconURL: interaction.client.user?.displayAvatarURL() || undefined,
-    })
-    .setTimestamp();
+    });
 }
 
-function buildXpRankEmbed(interaction, rank, page) {
-  const maxPage = Math.max(1, Math.ceil(rank.length / PAGE_SIZE));
-  const start = page * PAGE_SIZE;
-  const current = rank.slice(start, start + PAGE_SIZE);
-  const from = rank.length ? start + 1 : 0;
-  const to = start + current.length;
-  const lines = current.map((profile, index) => {
-    const position = start + index + 1;
-
-    return [
-      `${rankMedal(position)} \u00bb **${rankName(profile)}**`,
-      `\u2514 Level \`${profile.level}\` \u2022 \`${amount(profile.totalXp)} XP\` \u2022 \`${amount(profile.messagesCount)}\` mensagens`,
-    ].join("\n");
-  });
-
-  return new EmbedBuilder()
-    .setColor(0xff6a00)
-    .setTitle(`${emoji.likeLed} RANKING DE XP ${from}-${to}`)
-    .setDescription(lines.length ? lines.join("\n\n") : `${emoji.peepSad} Ninguém apareceu por aqui ainda.`)
-    .setFooter({
-      text: interaction.client.user?.username || "Bot",
-      iconURL: interaction.client.user?.displayAvatarURL() || undefined,
-    })
-    .setTimestamp();
-}
-
-function buildRankButtons(page, maxPage) {
-  if (maxPage <= 1) return [];
-
+function buildRankButtons(page, maxPage): Array<import("discord.js").ActionRowBuilder<import("discord.js").ButtonBuilder>> {
   return [
-    new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("rank_cookies_back")
-      .setEmoji("\u2B05\uFE0F")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page <= 0),
-    new ButtonBuilder()
-      .setCustomId("rank_cookies_next")
-      .setEmoji("\u27A1\uFE0F")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page >= maxPage - 1)
+    new ActionRowBuilder<import("discord.js").ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("rank_cookies_back")
+        .setLabel("Anterior")
+        .setEmoji(emoji.toComponentEmoji(emoji.previous || "◀️"))
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(page <= 0),
+      new ButtonBuilder()
+        .setCustomId("rank_cookies_next")
+        .setLabel("Próxima")
+        .setEmoji(emoji.toComponentEmoji(emoji.next || "▶️"))
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(page >= maxPage - 1)
+    ),
+    new ActionRowBuilder<import("discord.js").ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("rank_cookies_home")
+        .setLabel("Voltar ao Menu Principal")
+        .setEmoji(emoji.toComponentEmoji(emoji.homeIcon || "🏠"))
+        .setStyle(ButtonStyle.Primary)
     ),
   ];
 }
 
-module.exports = {
+function buildRankHomeEmbed(interaction) {
+  return new EmbedBuilder()
+    .setColor(randomColor())
+    .setTitle(`${emoji.trophy} » MENU PRINCIPAL DE RANKINGS`)
+    .setThumbnail(interaction.client.user?.displayAvatarURL({ size: 256 }) || null)
+    .setDescription(RANK_TYPES.map(type =>
+      `${type.icon()} » **${type.label}**\n↳ Veja quem está no topo do ranking global.`
+    ).join("\n\n"))
+    .setFooter({ text: "Escolha um ranking nos botões abaixo." });
+}
+
+function buildRankHomeButtons(): Array<import("discord.js").ActionRowBuilder<import("discord.js").ButtonBuilder>> {
+  return [
+    new ActionRowBuilder<import("discord.js").ButtonBuilder>().addComponents(
+      ...RANK_TYPES.map(type => new ButtonBuilder()
+        .setCustomId(`rank_cookies_type|${type.value}`)
+        .setLabel(type.label)
+        .setEmoji(emoji.toComponentEmoji(type.icon()))
+        .setStyle(ButtonStyle.Primary))
+    ),
+  ];
+}
+
+module.exports = defineCommand({
   category: "economy",
 
   data: new SlashCommandBuilder()
@@ -154,34 +169,27 @@ module.exports = {
               { name: "Lucro", value: "profit" }
             )
         )
-    )
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName("xp")
-        .setDescription("Mostra o ranking global de XP")
     ),
 
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
 
-    if (subcommand !== "cookies" && subcommand !== "xp") {
+    if (subcommand !== "cookies") {
       return interaction.reply({
         content: "Subcomando desconhecido.",
         flags: 64,
       });
     }
 
-    const type = subcommand === "cookies" ? interaction.options.getString("tipo") || "balance" : "xp";
-    const rank = subcommand === "xp" ? getXpLeaderboard(1000) : getRank(1000, type);
-    const maxPage = Math.max(1, Math.ceil(rank.length / PAGE_SIZE));
+    let type = interaction.options.getString("tipo") || "balance";
+    let rank = getRank(1000, type);
+    let maxPage = Math.max(1, Math.ceil(rank.length / PAGE_SIZE));
     let page = 0;
     const components = buildRankButtons(page, maxPage);
 
     await interaction.reply({
       embeds: [
-        subcommand === "xp"
-          ? buildXpRankEmbed(interaction, rank, page)
-          : buildRankEmbed(interaction, rank, type, page),
+        buildRankEmbed(interaction, rank, type, page),
       ],
       components,
     });
@@ -202,6 +210,24 @@ module.exports = {
         });
       }
 
+      if (buttonInteraction.customId === "rank_cookies_home") {
+        return buttonInteraction.update({
+          embeds: [buildRankHomeEmbed(interaction)],
+          components: buildRankHomeButtons(),
+        });
+      }
+
+      if (buttonInteraction.customId.startsWith("rank_cookies_type|")) {
+        type = buttonInteraction.customId.split("|")[1] || "balance";
+        rank = getRank(1000, type);
+        maxPage = Math.max(1, Math.ceil(rank.length / PAGE_SIZE));
+        page = 0;
+        return buttonInteraction.update({
+          embeds: [buildRankEmbed(interaction, rank, type, page)],
+          components: buildRankButtons(page, maxPage),
+        });
+      }
+
       if (buttonInteraction.customId === "rank_cookies_back") page--;
       if (buttonInteraction.customId === "rank_cookies_next") page++;
 
@@ -209,9 +235,7 @@ module.exports = {
 
       return buttonInteraction.update({
         embeds: [
-          subcommand === "xp"
-            ? buildXpRankEmbed(interaction, rank, page)
-            : buildRankEmbed(interaction, rank, type, page),
+          buildRankEmbed(interaction, rank, type, page),
         ],
         components: buildRankButtons(page, maxPage),
       });
@@ -221,4 +245,4 @@ module.exports = {
       message.edit({ components: [] }).catch(() => {});
     });
   },
-};
+});

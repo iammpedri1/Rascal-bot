@@ -5,7 +5,8 @@ const {
   updateStats,
 } = require("./cookieEconomy");
 const logger = require("./logger");
-const { syncActiveVoiceSessions } = require("./voiceStats");
+const { persistActiveVoiceSessions, syncActiveVoiceSessions } = require("./voiceStats");
+const { getPrimaryGuild } = require("./primaryGuild");
 
 const PRIZES = [15000, 10000, 5000];
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -90,6 +91,20 @@ function getVoiceTop(guildId, weekKey) {
   `).all(String(guildId), weekKey);
 }
 
+function getTransmissionTop(guildId, weekKey) {
+  return db.prepare(`
+    SELECT
+      stats.user_id AS id,
+      users.username AS username,
+      stats.seconds AS score
+    FROM transmission_weekly_stats stats
+    LEFT JOIN usuarios users ON users.id = stats.user_id
+    WHERE stats.guild_id = ? AND stats.week_key = ? AND stats.seconds > 0
+    ORDER BY stats.seconds DESC, users.username COLLATE NOCASE ASC
+    LIMIT 3
+  `).all(String(guildId), weekKey);
+}
+
 async function awardRank(client, guild, rankType, weekKey, rows) {
   if (!rows.length || hasAwarded(guild.id, weekKey, rankType)) return [];
 
@@ -135,12 +150,15 @@ async function awardRank(client, guild, rankType, weekKey, rows) {
 async function awardPreviousWeekRanks(client) {
   const weekKey = previousWeekKey();
 
-  for (const guild of client.guilds.cache.values()) {
+  const guild = getPrimaryGuild(client);
+  if (guild) {
     try {
       syncActiveVoiceSessions(guild);
+      persistActiveVoiceSessions(guild);
 
       await awardRank(client, guild, "messages", weekKey, getMessageTop(guild.id, weekKey));
       await awardRank(client, guild, "voice", weekKey, getVoiceTop(guild.id, weekKey));
+      await awardRank(client, guild, "transmission", weekKey, getTransmissionTop(guild.id, weekKey));
     } catch (err) {
       logger.error(`Erro ao pagar premios semanais em ${guild.name}`, err);
     }

@@ -1,0 +1,35 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noEmit": true
+  },
+  "include": [
+    "index.ts",
+    "core/**/*.ts",
+    "handlers/**/*.ts",
+    "types/**/*.ts",
+    "events/interactionCreate.ts",
+    "events/guildMemberUpdate.ts",
+    "utils/embedStyle.ts",
+    "utils/shopRolePurchases.ts",
+    "utils/activeGames.ts",
+    "utils/gameEconomy.ts",
+    "utils/gameUi.ts",
+    "utils/blackMarket.ts",
+    "utils/scratchCards.ts",
+    "utils/serverBoosts.ts",
+    "utils/weeklyLottery.ts",
+    "utils/primaryGuild.ts",
+    "commands/apostar.ts",
+    "commands/jokenpo.ts",
+    "commands/jogodavelha.ts",
+    "commands/roletarussa.ts",
+    "commands/ping.ts",
+    "commands/fianca.ts",
+    "commands/loteria.ts",
+    "commands/raspadinha.ts"
+  ],
+  "exclude": ["node_modules", "dist", "data"]
+}

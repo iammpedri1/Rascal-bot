@@ -1,3 +1,4 @@
+import { defineCommand } from "../types/command";
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -5,10 +6,10 @@ const {
   ComponentType,
   EmbedBuilder,
   SlashCommandBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
-const { getWeeklyMessageLeaderboard } = require("../utils/xpSystem");
+const { getWeeklyMessageLeaderboard } = require("../utils/messageStats");
 
 const RANK_COLOR = 0xf5a623;
 const RANK_LIMIT = 10;
@@ -50,12 +51,12 @@ function buildRankEmbed(interaction, rank) {
     .setTimestamp();
 }
 
-function buildRefreshRow() {
-  return new ActionRowBuilder().addComponents(
+function buildRefreshRow(): import("discord.js").ActionRowBuilder<import("discord.js").ButtonBuilder> {
+  return new ActionRowBuilder<import("discord.js").ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("rankmensagens_refresh")
       .setLabel("Atualizar")
-      .setEmoji("\uD83D\uDD04")
+      .setEmoji(emoji.toComponentEmoji("\uD83D\uDD04"))
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -72,7 +73,7 @@ async function getLiveRank(interaction) {
   return rank;
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "utility",
 
   data: new SlashCommandBuilder()
@@ -125,4 +126,4 @@ module.exports = {
       response.edit({ components: [] }).catch(() => {});
     });
   },
-};
+});

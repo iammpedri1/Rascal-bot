@@ -1,170 +1,130 @@
-const {
-  ChannelType,
-  EmbedBuilder,
-  SlashCommandBuilder,
-} = require("discord.js");
-
-const emoji = require("../utils/emojis");
-
-const icons = {
-  server: "<:1000106076:1499822871667540121>",
-  created: "<:1000106075:1499822894077710497>",
-  voice: emoji.voice,
-  channel: emoji.channel,
-  thread: emoji.thread,
-  roles: emoji.roles,
-  owner: emoji.owner,
-  booster: emoji.booster,
-  bot: emoji.botFlag,
-};
-
-function code(value) {
-  return `\`${String(value ?? "Indisponivel").replace(/`/g, "'")}\``;
-}
-
-function formatNumber(value) {
-  return Number(value || 0).toLocaleString("pt-BR");
-}
+import { defineCommand } from "../types/command";
+const { ChannelType, EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
+const { COLORS, formatNumber, icon } = require("../utils/embedStyle");
 
 function countChannels(channels, types) {
   return channels.filter(channel => types.includes(channel.type)).size;
 }
 
 function verificationLabel(level) {
-  return ({
-    0: "Nenhuma",
-    1: "Baixa",
-    2: "Media",
-    3: "Alta",
-    4: "Maxima",
-  })[level] || String(level);
+  return ({ 0: "Nenhuma", 1: "Baixa", 2: "Média", 3: "Alta", 4: "Máxima" })[level] || "Padrão";
 }
 
 function boostTierLabel(tier) {
-  return tier ? `Nivel ${tier}` : "Sem nivel";
+  return tier ? `Nível ${tier}` : "Sem nível";
 }
 
-module.exports = {
+function featureLabels(features) {
+  const labels = {
+    COMMUNITY: "Comunidade",
+    DISCOVERABLE: "Descoberta",
+    NEWS: "Anúncios",
+    PARTNERED: "Parceiro",
+    VANITY_URL: "URL personalizada",
+    ANIMATED_ICON: "Ícone animado",
+    BANNER: "Banner",
+    WELCOME_SCREEN_ENABLED: "Tela de boas-vindas",
+    MEMBER_VERIFICATION_GATE_ENABLED: "Triagem de membros",
+    PREMIUM_TIER_3_OVERRIDE: "Recursos premium",
+  };
+  const names = features.map(feature => labels[feature]).filter(Boolean).slice(0, 5);
+  return names.length ? names.join(" · ") : "Recursos de comunidade padrão";
+}
+
+module.exports = defineCommand({
   category: "info",
 
   data: new SlashCommandBuilder()
     .setName("server")
-    .setDescription("Comandos de informacoes do servidor")
+    .setDescription("Mostra informações do servidor")
     .addSubcommand(subcommand =>
       subcommand
         .setName("info")
-        .setDescription("Mostra informacoes profissionais do servidor")
+        .setDescription("Mostra um resumo da comunidade e da estrutura do servidor")
     ),
 
   async execute(interaction) {
     if (!interaction.guild) {
-      return interaction.reply({
-        content: "Esse comando so pode ser usado em um servidor.",
-        flags: 64,
-      });
+      return interaction.reply({ content: "Use este comando dentro de um servidor.", flags: 64 });
     }
 
     await interaction.deferReply();
-
     const guild = await interaction.guild.fetch();
     const owner = await guild.fetchOwner().catch(() => null);
     const channels = guild.channels.cache;
-    const roles = guild.roles.cache.filter(role => role.name !== "@everyone");
-    const createdTimestamp = Math.floor(guild.createdAt.getTime() / 1000);
-    const icon = guild.iconURL({ size: 1024 });
-    const banner = guild.bannerURL({ size: 2048, extension: "png" });
-    const splash = guild.splashURL({ size: 2048, extension: "png" });
+    const iconURL = guild.iconURL({ size: 512 });
+    const roleCount = guild.roles.cache.filter(role => role.id !== guild.id).size;
+    const createdAt = Math.floor(guild.createdTimestamp / 1000);
+    const features = guild.features || [];
+
     const textChannels = countChannels(channels, [
       ChannelType.GuildText,
       ChannelType.GuildAnnouncement,
       ChannelType.GuildForum,
       ChannelType.GuildMedia,
     ]);
-    const voiceChannels = countChannels(channels, [
-      ChannelType.GuildVoice,
-      ChannelType.GuildStageVoice,
-    ]);
+    const voiceChannels = countChannels(channels, [ChannelType.GuildVoice, ChannelType.GuildStageVoice]);
     const threadChannels = countChannels(channels, [
       ChannelType.PublicThread,
       ChannelType.PrivateThread,
       ChannelType.AnnouncementThread,
     ]);
-    const categoryChannels = countChannels(channels, [ChannelType.GuildCategory]);
-    const cachedBots = guild.members.cache.filter(member => member.user.bot).size;
-    const cachedHumans = Math.max(guild.members.cache.size - cachedBots, 0);
-    const topRoles = roles
-      .sort((a, b) => b.position - a.position)
-      .first(5)
-      .map(role => `${role}`)
-      .join(" ");
+    const categories = countChannels(channels, [ChannelType.GuildCategory]);
 
     const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
+      .setColor(COLORS.brand)
       .setAuthor({
-        name: guild.name,
-        iconURL: icon || interaction.client.user.displayAvatarURL({ size: 128 }),
+        name: "PAINEL DO SERVIDOR",
+        ...(iconURL ? { iconURL } : {}),
       })
-      .setTitle(`${icons.server} Painel do servidor`)
-      .setThumbnail(icon || interaction.client.user.displayAvatarURL({ size: 256 }))
-      .setDescription(
-        [
-          `${icons.owner} **Dono:** ${owner ? `${owner.user}` : code("Nao encontrado")}`,
-          `${icons.created} **Criado:** <t:${createdTimestamp}:F> (<t:${createdTimestamp}:R>)`,
-        ].join("\n")
-      )
+      .setTitle(`${guild.name} · informações`)
+      .setThumbnail(iconURL || interaction.client.user.displayAvatarURL({ size: 256 }))
+      .setDescription([
+        `${icon("owner", "👑")} » **Dono:** ${owner ? `${owner}` : "Não disponível"}`,
+        `${icon("identity", "🪪")} » **ID:** \`${guild.id}\``,
+        `${icon("created", "📅")} » **Criado:** <t:${createdAt}:D> · <t:${createdAt}:R>`,
+      ].join("\n"))
       .addFields(
         {
-          name: "Comunidade",
+          name: `${icon("member", "👥")} » Comunidade`,
+          value: `**${formatNumber(guild.memberCount)}** membros\n**${formatNumber(roleCount)}** cargos`,
+          inline: true,
+        },
+        {
+          name: `${icon("channel", "#️⃣")} » Estrutura`,
           value: [
-            `${emoji.online} Membros: ${code(formatNumber(guild.memberCount))}`,
-            `${icons.bot} Bots em cache: ${code(formatNumber(cachedBots))}`,
-            `${emoji.humanIcon || "👥"} Humanos em cache: ${code(formatNumber(cachedHumans))}`,
+            `${formatNumber(textChannels)} texto/fórum`,
+            `${formatNumber(voiceChannels)} voz/palco`,
+            `${formatNumber(categories)} categorias · ${formatNumber(threadChannels)} threads`,
           ].join("\n"),
           inline: true,
         },
         {
-          name: "Canais",
-          value: [
-            `${icons.channel} Texto: ${code(formatNumber(textChannels))}`,
-            `${icons.voice} Voz: ${code(formatNumber(voiceChannels))}`,
-            `${icons.thread} Threads: ${code(formatNumber(threadChannels))}`,
-            `${emoji.menuIcon} Categorias: ${code(formatNumber(categoryChannels))}`,
-          ].join("\n"),
+          name: `${icon("booster", "🚀")} » Impulsos`,
+          value: `**${formatNumber(guild.premiumSubscriptionCount || 0)}** boosts\n${boostTierLabel(guild.premiumTier)}`,
           inline: true,
         },
         {
-          name: "Servidor",
-          value: [
-            `${icons.roles} Cargos: ${code(formatNumber(roles.size))}`,
-            `${icons.booster} Boosts: ${code(formatNumber(guild.premiumSubscriptionCount || 0))}`,
-            `${icons.booster} Tier: ${code(boostTierLabel(guild.premiumTier))}`,
-            `${emoji.shield || "🛡️"} Verificacao: ${code(verificationLabel(guild.verificationLevel))}`,
-          ].join("\n"),
+          name: `${icon("verification", "🛡️")} » Segurança`,
+          value: `Verificação: **${verificationLabel(guild.verificationLevel)}**\n2FA da equipe: **${guild.mfaLevel ? "Ativo" : "Não ativo"}**`,
           inline: true,
         },
         {
-          name: "Identidade",
+          name: `${icon("community", "🏘️")} » Recursos do servidor`,
           value: [
-            `ID: ${code(guild.id)}`,
-            `Locale: ${code(guild.preferredLocale || "pt-BR")}`,
-            `NSFW: ${code(guild.nsfwLevel || "Default")}`,
+            features.includes("COMMUNITY") ? "Servidor da comunidade" : "Servidor padrão",
+            featureLabels(features),
+            `Idioma: ${guild.preferredLocale || "não definido"}`,
           ].join("\n"),
-          inline: false,
+          inline: true,
         },
-        {
-          name: "Cargos em destaque",
-          value: topRoles || "Nenhum cargo em cache.",
-          inline: false,
-        }
       )
       .setFooter({
-        text: `Solicitado por ${interaction.user.username}`,
-        iconURL: interaction.user.displayAvatarURL({ size: 64 }),
+        text: `Solicitado por ${interaction.user.username} · ${guild.name}`,
+        ...(iconURL ? { iconURL } : {}),
       })
       .setTimestamp();
 
-    if (banner || splash) embed.setImage(banner || splash);
-
     return interaction.editReply({ embeds: [embed] });
   },
-};
+});

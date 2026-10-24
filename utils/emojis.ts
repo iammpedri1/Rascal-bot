@@ -1,159 +1,430 @@
-const applicationEmojis = new Map();
-const applicationAliases = {
-  idle: "1370everythingisstable",
-  online: "entrada",
-  offline: "saida",
-  channel: "Channel",
-  dnd: "PingAlto",
-  booster: "188222levelboost",
-  party: "blobpart",
-  sad: "blobno",
-  roles: "User",
-  thread: "discordthreadwhite",
-  owner: "4102owner",
-  devs: "1646discordboten",
-  botFlag: "Info",
-  clap: "Like",
-  work: "blobWowo",
-  clock: "clock",
+import type {
+  APIMessageComponentEmoji,
+  ButtonBuilder,
+  Client,
+  Guild,
+  GuildEmoji,
+  StringSelectMenuOptionBuilder,
+} from "discord.js";
+
+// Catálogo em memória. A troca do mapa é atômica para manter a última versão
+// válida enquanto uma atualização de rede está em andamento.
+let emojiMap = new Map<string, string>();
+let applicationEmojiAssets = new Map<string, ApplicationEmojiAsset>();
+let refreshInFlight: Promise<void> | null = null;
+export const REFRESH_INTERVAL_MS = 60 * 1000;
+
+export interface ApplicationEmojiAsset {
+  name: string;
+  emoji: string;
+  imageUrl: string;
+  animated: boolean;
+}
+
+interface ApplicationEmojiLike {
+  name?: string | null;
+  toString(): string;
+  imageURL?(): string;
+  animated?: boolean;
+}
+
+function normalizedName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function portalNameFor(name: string): string {
+  return normalizedAliases.get(normalizedName(name)) || name;
+}
+
+function portalEmojiFor(name: string): string | undefined {
+  const normalized = normalizedName(portalNameFor(name));
+  return emojiMap.get(normalized) ?? emojiMap.get(normalizedName(name));
+}
+
+const guildNameAliases: Record<string, string[]> = {
+  pand_police: ["panda_police", "5117blobpolice"],
+  policePanda: ["panda_police", "5117blobpolice"],
+  blobPolice: ["panda_police", "5117blobpolice"],
+  peepSad: ["peepsad", "peep_sad"],
+};
+
+function buildEmojiMap(emojis: Iterable<{ name?: string | null; toString(): string }>): Map<string, string> {
+  const next = new Map<string, string>();
+  for (const entry of emojis) {
+    if (entry.name) next.set(normalizedName(entry.name), entry.toString());
+  }
+  return next;
+}
+
+function buildEmojiAssets(emojis: Iterable<ApplicationEmojiLike>): Map<string, ApplicationEmojiAsset> {
+  const next = new Map<string, ApplicationEmojiAsset>();
+  for (const entry of emojis) {
+    const imageUrl = entry.imageURL?.();
+    if (!entry.name || !imageUrl) continue;
+    next.set(normalizedName(entry.name), {
+      name: entry.name,
+      emoji: entry.toString(),
+      imageUrl,
+      animated: Boolean(entry.animated),
+    });
+  }
+  return next;
+}
+
+/** Busca todos os emojis cadastrados no Developer Portal para esta aplicação. */
+export async function loadEmojis(client: Client): Promise<void> {
+  if (!client.isReady()) return;
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = client.application.emojis.fetch()
+    .then(applicationEmojis => {
+      const entries = [...applicationEmojis.values()];
+      emojiMap = buildEmojiMap(entries);
+      applicationEmojiAssets = buildEmojiAssets(entries);
+    })
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  return refreshInFlight;
+}
+
+/** Retorna um emoji pelo nome. Se não existir, retorna o fallback informado. */
+export function getEmoji(name: string, fallback = "❔"): string {
+  return portalEmojiFor(name) ?? fallback;
+}
+
+/** Metadados reais do emoji de aplicação, inclusive nome e URL da imagem do Portal. */
+export function getEmojiDetails(name: string): ApplicationEmojiAsset | null {
+  return applicationEmojiAssets.get(normalizedName(portalNameFor(name))) ?? null;
+}
+
+/** Prioriza o cache do servidor e usa os emojis da aplicação como segunda opção. */
+export function getGuildEmoji(
+  guild: Pick<Guild, "emojis"> | null | undefined,
+  name: string,
+  fallback = "",
+): string {
+  // Os emojis do Developer Portal são a identidade padrão do bot; o cache do
+  // servidor entra apenas como alternativa quando o catálogo da aplicação não
+  // contém o nome solicitado.
+  const portalEmoji = portalEmojiFor(name);
+  if (portalEmoji) return portalEmoji;
+
+  const wantedNames = new Set([
+    normalizedName(name),
+    normalizedName(portalNameFor(name)),
+    ...(guildNameAliases[normalizedName(name)] || []).map(normalizedName),
+  ]);
+  const guildEmoji: GuildEmoji | undefined = guild?.emojis.cache.find(entry =>
+    entry.name !== null && wantedNames.has(normalizedName(entry.name))
+  );
+
+  return guildEmoji?.toString() ?? fallback;
+}
+
+/** Lista os emojis carregados para consumidores internos e validações. */
+export function getEmojiEntries(): Array<[string, string]> {
+  return Array.from(emojiMap.values())
+    .map(mention => [mention.match(/^<a?:([^:]+):\d+>$/)?.[1] || mention, mention] as [string, string])
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
+export function getEmojiCount(): number {
+  return emojiMap.size;
+}
+
+/** Converte uma menção ou emoji Unicode para o formato que os componentes do Discord aceitam. */
+export function toComponentEmoji(value: string): APIMessageComponentEmoji {
+  const mention = String(value || "").match(/^<(a?):([a-zA-Z0-9_]+):(\d+)>$/);
+  if (mention) {
+    return {
+      name: mention[2],
+      id: mention[3],
+      ...(mention[1] ? { animated: true } : {}),
+    };
+  }
+  return { name: String(value || "▫️") };
+}
+
+/** Aplica emoji do servidor/aplicação em um botão, preservando animações. */
+export function setGuildButtonEmoji(
+  button: ButtonBuilder,
+  guild: Pick<Guild, "emojis"> | null | undefined,
+  name: string,
+  fallback = "",
+): ButtonBuilder {
+  const value = getEmoji(name, "") || getGuildEmoji(guild, name, "") || fallback;
+  return value ? button.setEmoji(toComponentEmoji(value)) : button;
+}
+
+/** Aplica diretamente um emoji do Developer Portal em um botão. */
+export function setApplicationButtonEmoji(
+  button: ButtonBuilder,
+  name: string,
+  fallback = "",
+): ButtonBuilder {
+  const value = getEmojiDetails(name)?.emoji ?? getEmoji(name, fallback);
+  return value ? button.setEmoji(toComponentEmoji(value)) : button;
+}
+
+/** Aplica emoji do servidor/aplicação em uma opção de menu de seleção. */
+export function setGuildOptionEmoji(
+  option: StringSelectMenuOptionBuilder,
+  guild: Pick<Guild, "emojis"> | null | undefined,
+  name: string,
+  fallback = "",
+): StringSelectMenuOptionBuilder {
+  const value = getEmoji(name, "") || getGuildEmoji(guild, name, "") || fallback;
+  return value ? option.setEmoji(toComponentEmoji(value)) : option;
+}
+
+const legacyAliases: Record<string, string> = {
+  typescript: "TypeScript",
+  node: "NodeJS",
+  discord: "DiscordIcon",
+  database: "Database",
+  rock: "Stone",
+  paper: "Page",
+  scissors: "Scissors",
+  revolver: "Gun",
+  trigger: "Gun",
+  roulette: "Casino",
+  cashout: "CookieStar",
+  handshake: "HeartRep",
+  minigame: "Game",
+  circle: "Circle",
+  cross: "ban",
+  search: "Pesquisa",
+  shield: "1178verified",
+  coin: "Coin",
   cookie: "BlobCookies",
-  palette: "1arte",
-  oldCookie: "CookieStar",
-  sino: "Sino",
-  peepSad: "blobno",
+  work: "blobWowo",
   gift: "blobgift",
-  thinking: "Pesquisa",
-  redTick: "Crossed",
-  greenTick: "Correct",
-  crossed: "Crossed",
-  correct: "Correct",
-  js: "96295javascript",
-  shop: "7182shopw",
-  ticket: "4645reportmessage",
-  lorittaMegafone: "9786discordannouncementdark",
-  lorittaCafune: "HeartRep",
-  staffLed: "4360discordstaffexperimental",
-  likeLed: "Like",
-  dislikeLed: "Dislike",
-  bugHunterLed: "9148discordgoldbughunter",
-  police: "blobPolice",
-  blobBan: "Castigo",
-  pandaCientista: "Info",
+  peepSad: "blobno",
+  sino: "Sino",
+  correct: "BlobYe",
+  crossed: "ban",
+  spotify: "Spotify",
+  heartmine: "heartmine",
+  peep_boxing: "peep_Fight",
   homeIcon: "50738home",
-  humanIcon: "User",
   menuIcon: "Menu",
   settingsIcon: "Configg",
   gamesIcon: "Game",
   voice: "Voice",
-  identity: "User",
-  trash: "in_lixeira",
+  identity: "Id",
+  humanIcon: "1users",
+  previous: "voltar",
+  next: "avancar",
+  pand_police: "blobPolice",
+  pand_happy: "pand_happy",
+  peep_police: "peep_police",
+  moneyIcon: "BlobCookies",
+  magicWand: "Menu",
+  sparkles: "CookieStar",
+  streaming: "Voice",
+  clipboard: "4645reportmessage",
+  ticket: "4645reportmessage",
   staff: "4360discordstaffexperimental",
-  punishment: "Castigo",
-  link: "7926copymessagelink",
+  lorittaCafune: "HeartRep",
+  lorittaMegafone: "Megaphone",
+  thinking: "Pesquisa",
+  browser: "World",
+  calendar: "2373events",
   announcement: "9786discordannouncementdark",
-  clipboard: "993667bag",
+  policePanda: "blobPolice",
+  miner: "Game",
+  punishment: "Castigo",
   warning: "UserPerigo",
+  clock: "2373events",
   yes: "blobYeyeye",
   no: "blobno",
-  calendar: "2373events",
-  browser: "World",
-  miner: "Game",
-  policePanda: "blobPolice",
+  party: "pand_happy",
+  roles: "1users",
+  shop: "7182shopw",
+  clap: "Like",
+  likeLed: "Like",
+  dislikeLed: "Dislike",
   slashCommand: "Slashcommand",
-  deafened: "70324soundmutea",
-  banHammer: "Castigo",
-  spotify: "Spotify",
+  deafened: "muteed",
+  online: "On",
+  idle: "blobsleep",
+  dnd: "muteed",
+  channel: "Channel",
+  thread: "discordthreadwhite",
+  botFlag: "Bot",
+  keyboardWumpus: "peep_keyboard",
+  booster: "188222levelboost",
+  greenTick: "BlobYe",
+  redTick: "No",
+  pandaCientista: "Pesquisa",
+  pepeReeeee: "blobno",
+  blobBan: "ban",
+  bugHunterLed: "9148discordgoldbughunter",
+  palette: "1arte",
+  owner: "4102owner",
+  devs: "Discord_developer",
+  js: "96295javascript",
+  gg: "Like",
+  oldCookie: "BlobCookies",
+  info: "Info",
+  server: "Server",
+  member: "1users",
+  ping: "PingAlto",
+  trophy: "Trofeu",
+  community: "Server",
+  created: "2373events",
+  verification: "1178verified",
+  badge: "1178verified",
+  discriminator: "DiscordIcon",
+  badge_staff: "4360discordstaffexperimental",
+  badge_partner: "4902partner",
+  badge_hypesquad: "hypesquad",
+  badge_bravery: "8495hypesquadhouseofbravery",
+  badge_brilliance: "7693hypesquadhouseofbrilliance",
+  badge_balance: "1050hypesquadhouseofbalance",
+  badge_bug_hunter_2: "9148discordgoldbughunter",
+  badge_verified_bot: "Discord_bot",
+  badge_verified_developer: "6587earlyverifiedbotdevelopera",
+  badge_certified_moderator: "2731certifiedmoderator",
 };
 
-function setApplicationEmojis(emojis) {
-  applicationEmojis.clear();
+const normalizedAliases = new Map(
+  Object.entries(legacyAliases).map(([alias, portalName]) => [normalizedName(alias), portalName])
+);
 
-  for (const emoji of emojis.values()) {
-    if (emoji.name) applicationEmojis.set(emoji.name.toLowerCase(), emoji.toString());
-  }
-
-  for (const [alias, name] of Object.entries(applicationAliases)) {
-    const value = applicationEmojis.get(name.toLowerCase());
-    if (value) module.exports[alias] = value;
-  }
-
-  return {
-    total: applicationEmojis.size,
-    replaced: Object.keys(applicationAliases)
-      .filter(alias => applicationEmojis.has(applicationAliases[alias].toLowerCase())),
-  };
-}
-
-function application(name, fallback = "") {
-  return applicationEmojis.get(String(name).toLowerCase()) || fallback;
-}
-
-module.exports = {
-  idle: "<:idle:1501260201234403338>",
-  online: "<:online1:1501259879204257812>",
-  offline: "<:offline1:1501260159446548540>",
-  channel: "<:Channel:1501637686698447041>",
-  dnd: "<:dnd1:1501260181953056990>",
-  booster: "<:booster:1501637030973669386>",
-  party: "<a:blobpart:1501260216732356649>",
-  sad: "<a:peepsad:1501627001730105435>",
-  roles: "<:Roles:1501259876767105188>",
-  thread: "<:ThreadChannel:1501259874862891048>",
-  owner: "<:CrownOwner:1501637696173510736>",
-  devs: "<:devs:1501259871062855710>",
-  botFlag: "<:Bot_Flag:1501259798484615289>",
-  clap: "<a:palmaa:1501255966463627264>",
-  work: "<a:work:1501255930770231379>",
-  clock: "<a:clock:1500276315981353021>",
-  cookie: "<a:59632cookie:1501627055148761250>",
-  palette: "<:1arte:1506439875354820658>",
-  oldCookie: "<a:cookiesemoji:1500946522118950943>",
-  sino: "<a:Sino:1501626669473992775>",
-  peepSad: "<a:peepsad:1501627001730105435>",
-  pepeReeeee: "<a:PepeReeeee:1501638350019235981>",
-  gift: "<a:ablobgift:1500896903263551510>",
-  thinking: "<a:in_pensandoLed:1499814138866700480>",
-  keyboardWumpus: "<a:1000106074:1499822505966440518>",
-  redTick: "<a:Crossed:1501637659305705516>",
-  greenTick: "<a:Correct:1501637592817602630>",
-  crossed: "<a:Crossed:1501637659305705516>",
-  correct: "<a:Correct:1501637592817602630>",
-  js: "<:js:1501265152933232690>",
-  shop: "<:loja:1501267230795497503>",
-  ticket: "<:ticket:1501636986274971760>",
-  lorittaMegafone: "<:1015055154157977630:1502141996880629870>",
-  lorittaCafune: "<a:1209206680202510424:1502141971303763979>",
-  staffLed: "<a:in_staffLed:1499799637702348902>",
-  likeLed: "<a:in_likeLed:1499814130570363102>",
-  dislikeLed: "<a:in_deslikeLed:1499814134890369195>",
-  bugHunterLed: "<a:in_bugHunterLed:1499799348840628385>",
-  police: "<a:545931639314841601:1500207574161817650>",
-  blobBan: "<a:blob_ban:1502348528159031418>",
-  pandaCientista: "<:Panda_cientista:1502773603568193557>",
-  homeIcon: "<:icons_home:1500922691614675004>",
-  humanIcon: "<:icons_human:1500922689072926980>",
-  menuIcon: "<:icons_menu:1500922698111516842>",
-  settingsIcon: "<:icons_settings:1500922701512970304>",
-  gamesIcon: "<:icons_games:1500934580125962312>",
-  voice: "<:voice:1500936427373072394>",
-  identity: "<:in_identidade:1499799189125857410>",
-  trash: "<:in_lixeira:1499799192611323935>",
-  staff: "<:in_staff:1499799208650211451>",
-  punishment: "<:in_castigo:1499799234327871628>",
-  link: "<:in_link:1499799262614126765>",
-  announcement: "<:in_megafone1:1499799274387669002>",
-  clipboard: "<:in_prancheta3:1499799285510836414>",
-  warning: "<:in_exclamacao3:1499799293702438922>",
-  yes: "<a:in_yesLed:1499799494999670986>",
-  no: "<a:in_noLed:1499814132176650260>",
-  calendar: "<:in_calendario:1499814035728629962>",
-  browser: "<:browser:1500936385182433362>",
-  miner: "<a:panda_minerador:1502141985295831211>",
-  policePanda: "<:panda_police:1502138488290676856>",
-  slashCommand: "<:5710slashcommand:1502773644848402626>",
-  deafened: "<:4529undeafened:1502773663802462248>",
-  banHammer: "<a:1711neonblobbanhammer:1501627067966423120>",
-  spotify: "<:Spotify:1506439858451644496>",
-  application,
-  setApplicationEmojis,
+const fallbacks: Record<string, string> = {
+  typescript: "🟦",
+  node: "🟩",
+  discord: "💬",
+  database: "🗄️",
+  rock: "🪨",
+  paper: "📄",
+  scissors: "✂️",
+  revolver: "🔫",
+  trigger: "💥",
+  roulette: "🎰",
+  cashout: "💰",
+  handshake: "🤝",
+  minigame: "🎮",
+  circle: "⭕",
+  cross: "❌",
+  search: "🔎",
+  shield: "🛡️",
+  coin: "🪙",
+  cookie: "🍪",
+  server: "🌐",
+  member: "👤",
+  humanIcon: "👤",
+  identity: "🪪",
+  created: "📅",
+  calendar: "📅",
+  trophy: "🏆",
+  clipboard: "📋",
+  announcement: "📣",
+  channel: "#️⃣",
+  thread: "🧵",
+  roles: "🎭",
+  owner: "👑",
+  devs: "🧑‍💻",
+  botFlag: "🤖",
+  ping: "🏓",
+  community: "🏘️",
+  verification: "🛡️",
+  staff: "🛡️",
+  ticket: "🎫",
+  shop: "🛍️",
+  clap: "👏",
+  likeLed: "👍",
+  dislikeLed: "👎",
+  policePanda: "👮",
+  punishment: "⚖️",
+  warning: "⚠️",
+  miner: "⛏️",
+  palette: "🎨",
+  lorittaCafune: "🫶",
+  lorittaMegafone: "📣",
+  thinking: "🤔",
+  info: "ℹ️",
+  party: "🎉",
+  work: "💼",
+  gift: "🎁",
+  clock: "⏰",
+  peepSad: "😔",
+  sino: "🔔",
+  correct: "✅",
+  crossed: "❌",
+  spotify: "🎵",
+  heartmine: "❤️",
+  peep_boxing: "🥊",
+  menuIcon: "📋",
+  settingsIcon: "⚙️",
+  gamesIcon: "🎮",
+  voice: "🔊",
+  homeIcon: "🏠",
+  previous: "◀️",
+  next: "▶️",
+  moneyIcon: "💸",
+  magicWand: "🪄",
+  sparkles: "✨",
+  slashCommand: "📋",
+  deafened: "🔇",
+  online: "🟢",
+  idle: "🌙",
+  dnd: "⛔",
+  keyboardWumpus: "🎮",
+  booster: "🚀",
+  greenTick: "✅",
+  redTick: "❌",
+  pandaCientista: "🔬",
+  pepeReeeee: "😔",
+  blobBan: "🔨",
+  bugHunterLed: "🐛",
+  js: "🟨",
+  gg: "👍",
+  oldCookie: "🍪",
 };
+
+export function application(name: string, fallback = ""): string {
+  return getEmojiDetails(name)?.emoji ?? getEmoji(name, fallback);
+}
+
+export async function fetchPortalEmojis(client: Client<true>): Promise<void> {
+  return loadEmojis(client);
+}
+
+export function setApplicationEmojis(emojis: Map<string, { name?: string | null; toString(): string }>): void {
+  const entries = [...emojis.values()];
+  emojiMap = buildEmojiMap(entries);
+  applicationEmojiAssets = buildEmojiAssets(entries);
+}
+
+const compatibilityExports = new Proxy(
+  {
+    REFRESH_INTERVAL_MS,
+    loadEmojis,
+    getEmoji,
+    getEmojiDetails,
+    getGuildEmoji,
+    getEmojiEntries,
+    getEmojiCount,
+    toComponentEmoji,
+    setGuildButtonEmoji,
+    setApplicationButtonEmoji,
+    setGuildOptionEmoji,
+    application,
+    fetchPortalEmojis,
+    setApplicationEmojis,
+  },
+  {
+    get(target, property: string | symbol) {
+      if (typeof property !== "string") return Reflect.get(target, property);
+      if (property in target) return target[property as keyof typeof target];
+      const portalName = portalNameFor(property);
+      return getEmoji(portalName, fallbacks[property] || "▫️");
+    },
+  }
+);
+
+module.exports = compatibilityExports;

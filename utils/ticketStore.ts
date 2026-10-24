@@ -1,6 +1,10 @@
 const { readJson, writeJson } = require("./jsonStore");
 
-const DATA_FILE = require("path").join(__dirname, "../data/tickets.json");
+const path = require("path");
+const DATA_DIR = process.env.BOT_DATA_DIR
+  ? path.resolve(process.env.BOT_DATA_DIR)
+  : path.resolve(process.cwd(), "data");
+const DATA_FILE = path.join(DATA_DIR, "tickets.json");
 
 function readData() {
   return readJson(DATA_FILE, { guilds: {} }, value =>

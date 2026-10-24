@@ -1,9 +1,10 @@
-const { MessageFlags, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { MessageFlags, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { ACCESS_LEVELS } = require("../utils/permissions");
 
 const cooldowns = new Map();
 
-module.exports = {
+module.exports = defineCommand({
   category: "staff",
   access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageMessages },
 
@@ -62,4 +63,4 @@ module.exports = {
       }).catch(() => {});
     }
   },
-};
+});

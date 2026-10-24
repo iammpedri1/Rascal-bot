@@ -1,4 +1,5 @@
-const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { buildInlineErrorEmbed } = require("../utils/cookieViews");
 const emoji = require("../utils/emojis");
 
@@ -105,7 +106,7 @@ function buildMemeEmbed(data, tipo) {
   return embed;
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "fun",
 
   data: new SlashCommandBuilder()
@@ -143,4 +144,4 @@ module.exports = {
       });
     }
   },
-};
+});

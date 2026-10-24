@@ -1,11 +1,12 @@
 const emoji = require("./emojis");
+const { PRIMARY_GUILD_ID } = require("./primaryGuild");
 
 const COLOR_ITEMS = [
   {
     id: "trabalho",
     kind: "color",
     name: "Dourado",
-    emoji: emoji.work,
+    get emoji() { return emoji.work; },
     description: "Uma cor dourada para destacar seu inventário.",
     price: 1800,
     color: 0xf1c40f,
@@ -14,7 +15,7 @@ const COLOR_ITEMS = [
     id: "festa",
     kind: "color",
     name: "Rosa Neon",
-    emoji: emoji.party,
+    get emoji() { return emoji.party; },
     description: "Um rosa vibrante para deixar seu perfil em evidência.",
     price: 2200,
     color: 0xeb459e,
@@ -23,7 +24,7 @@ const COLOR_ITEMS = [
     id: "arcade",
     kind: "color",
     name: "Azul Arcade",
-    emoji: emoji.gamesIcon,
+    get emoji() { return emoji.gamesIcon; },
     description: "Azul inspirado nos jogos e desafios da comunidade.",
     price: 2600,
     color: 0x5865f2,
@@ -32,7 +33,7 @@ const COLOR_ITEMS = [
     id: "voz",
     kind: "color",
     name: "Turquesa",
-    emoji: emoji.voice,
+    get emoji() { return emoji.voice; },
     description: "Um tom leve inspirado nos canais de voz.",
     price: 3200,
     color: 0x1abc9c,
@@ -41,7 +42,7 @@ const COLOR_ITEMS = [
     id: "presente",
     kind: "color",
     name: "Esmeralda",
-    emoji: emoji.gift,
+    get emoji() { return emoji.gift; },
     description: "Verde esmeralda para seu inventário.",
     price: 3500,
     color: 0x57f287,
@@ -50,7 +51,7 @@ const COLOR_ITEMS = [
     id: "cientista",
     kind: "color",
     name: "Safira",
-    emoji: emoji.pandaCientista,
+    get emoji() { return emoji.pandaCientista; },
     description: "Azul profundo com um toque científico.",
     price: 4200,
     color: 0x3498db,
@@ -62,7 +63,7 @@ const CHEST_ITEMS = [
     id: "bau_bolso",
     kind: "chest",
     name: "Baú de Bolso",
-    emoji: emoji.cookie,
+    get emoji() { return emoji.cookie; },
     description: "Contém de 300 a 2.400 cookies. Sem chance de cor bônus.",
     price: 1500,
     minReward: 300,
@@ -75,7 +76,7 @@ const CHEST_ITEMS = [
     id: "bau_cromatico",
     kind: "chest",
     name: "Baú Cromático",
-    emoji: emoji.ticket,
+    get emoji() { return emoji.ticket; },
     description: "Contém de 1.000 a 7.000 cookies e 10% de chance de liberar uma cor.",
     price: 4500,
     minReward: 1000,
@@ -88,7 +89,7 @@ const CHEST_ITEMS = [
     id: "bau_lendario",
     kind: "chest",
     name: "Baú Lendário",
-    emoji: emoji.booster,
+    get emoji() { return emoji.booster; },
     description: "Contém de 2.500 a 16.000 cookies e 25% de chance de liberar uma cor.",
     price: 10000,
     minReward: 2500,
@@ -99,24 +100,15 @@ const CHEST_ITEMS = [
   },
 ];
 
-const VIP_ITEMS = [
-  {
-    id: "vip_permanente",
-    kind: "vip",
-    name: "VIP permanente",
-    emoji: emoji.owner,
-    description: "Compra única: +10% em recompensas de daily, trabalho, bônus semanal e baús.",
-    price: 18000,
-    color: 0xf1c40f,
-  },
-];
+// VIPs are server roles and are loaded from the primary guild at runtime.
+const VIP_ITEMS = [];
 
 const BOOST_ITEMS = [
   {
     id: "boost_cookies",
     kind: "cookie_boost",
     name: "Boost de cookies",
-    emoji: emoji.booster,
+    get emoji() { return emoji.booster; },
     description: "Aumenta em 50% as recompensas elegíveis por 1 hora. Ativações extras estendem o tempo.",
     price: 4000,
     duration: 60 * 60 * 1000,
@@ -130,8 +122,8 @@ const UTILITY_ITEMS = [
     id: "passe_cooldown",
     kind: "cooldown_pass",
     name: "Removedor de cooldown",
-    emoji: emoji.clock,
-    description: "Use em um cooldown de economia ativo. O passe não é consumido se ele já terminou.",
+    get emoji() { return emoji.clock; },
+    description: "Libera um turno, bônus semanal ou reputação em cooldown. Não pode zerar o daily nem o roubo.",
     price: 3500,
     color: 0x58b9ff,
   },
@@ -141,49 +133,158 @@ const SHOP_SECTIONS = [
   {
     id: "cores",
     name: "Cores",
-    emoji: emoji.palette,
-    description: "Cores permanentes para personalizar o inventário.",
-    items: COLOR_ITEMS,
+    get emoji() { return emoji.palette; },
+    description: "Cargos numerados de cor do servidor.",
   },
   {
     id: "vip",
-    name: "VIP",
-    emoji: emoji.owner,
-    description: "Benefício permanente para aumentar recompensas elegíveis.",
-    items: VIP_ITEMS,
+    name: "VIPs",
+    get emoji() { return emoji.owner; },
+    description: "Compre os cargos VIP configurados neste servidor usando cookies.",
   },
   {
-    id: "boost",
-    name: "Boost de cookies",
-    emoji: emoji.booster,
-    description: "Ative um multiplicador temporário para suas recompensas.",
-    items: BOOST_ITEMS,
-  },
-  {
-    id: "caixas",
-    name: "Caixas",
-    emoji: emoji.gift,
-    description: "Abra caixas para tentar ganhar cookies e uma cor bônus.",
-    items: CHEST_ITEMS,
-  },
-  {
-    id: "utilidades",
-    name: "Removedor de cooldown",
-    emoji: emoji.clock,
-    description: "Libere um cooldown ativo usando um item consumível.",
-    items: UTILITY_ITEMS,
+    id: "aceleradores",
+    name: "Aceleradores de tempo",
+    get emoji() { return emoji.clock; },
+    description: "Desbloqueie daily, roubo ou trabalho na hora.",
   },
 ];
 
-const SHOP_ITEMS = [...COLOR_ITEMS, ...VIP_ITEMS, ...BOOST_ITEMS, ...CHEST_ITEMS, ...UTILITY_ITEMS];
-const SHOP_ITEMS_BY_ID = Object.fromEntries(SHOP_ITEMS.map(item => [item.id, item]));
+const DEFAULT_VIP_ROLE_PRICES = [12000, 30000, 60000];
+const configuredColorPrice = Number(process.env.SHOP_COLOR_ROLE_PRICE);
+const COLOR_ROLE_PRICE = Number.isSafeInteger(configuredColorPrice) && configuredColorPrice > 0
+  ? configuredColorPrice
+  : 6000;
+const VIP_ROLE_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+const configuredVipPrices = String(process.env.SHOP_VIP_ROLE_PRICES || "")
+  .split(",")
+  .map(value => Number(value.trim()));
+const VIP_ROLE_PRICES = configuredVipPrices.length >= 3 && configuredVipPrices.every(price =>
+  Number.isSafeInteger(price) && price > 0
+) ? configuredVipPrices : DEFAULT_VIP_ROLE_PRICES;
+const VIP_ROLE_PRICES_BY_ID = new Map(
+  String(process.env.SHOP_VIP_ROLE_PRICE_MAP || "")
+    .split(",")
+    .map(entry => entry.trim().split(":"))
+    .filter(([roleId, price]) => /^\d{17,20}$/.test(roleId || "") && Number.isSafeInteger(Number(price)) && Number(price) > 0)
+    .map(([roleId, price]) => [roleId, Number(price)]),
+);
+const configuredColorRoleIds = new Set(
+  String(process.env.SHOP_COLOR_ROLE_IDS || "").split(",").map(id => id.trim()).filter(id => /^\d{17,20}$/.test(id)),
+);
+const configuredVipRoleIds = new Set(
+  String(process.env.SHOP_VIP_ROLE_IDS || "").split(",").map(id => id.trim()).filter(id => /^\d{17,20}$/.test(id)),
+);
+const RESERVED_COLOR_ROLE_NAMES = /admin|mod|staff|equipe|suporte|bot|nitro|booster|boost|premium|vip|mestre|owner|dono/i;
+const RESTRICTED_ROLE_PERMISSIONS = new Set([
+  "Administrator", "ManageGuild", "ManageRoles", "ManageChannels", "ManageMessages",
+  "ManageWebhooks", "ManageEmojisAndStickers", "ManageNicknames", "KickMembers",
+  "BanMembers", "ModerateMembers",
+]);
+
+function normalizedRoleName(roleName) {
+  return String(roleName || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, " $1 ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function colorRoleNumber(roleName) {
+  // Cargos de cor do servidor seguem o padrão 🎨 ・1 até 🎨 ・15.
+  const match = String(roleName || "").trim().match(/^🎨\s*[・·•]\s*(1[0-5]|[1-9])$/u);
+  return match ? Number(match[1]) : null;
+}
+
+function vipTier(roleName) {
+  const name = normalizedRoleName(roleName);
+  if (name === "star vip") return 0;
+  if (name === "elite vip") return 1;
+  if (name === "super vip") return 2;
+  return -1;
+}
+
+function vipBenefitPercent(roleOrName, fallback = 5) {
+  const name = typeof roleOrName === "string" ? roleOrName : roleOrName?.name;
+  const tier = vipTier(name);
+  if (tier >= 0) return [5, 10, 15][tier];
+  const configured = Number(roleOrName?.benefitPercent);
+  return Number.isSafeInteger(configured) && configured >= 0 ? configured : fallback;
+}
+
+function numberedColorRole(roleName) {
+  return colorRoleNumber(roleName);
+}
+
+function guildRoleOffers(guild, kind) {
+  if (!guild || guild.id !== PRIMARY_GUILD_ID || !["color", "vip"].includes(kind)) return [];
+  const botMember = guild.members.me;
+  if (!botMember?.permissions.has("ManageRoles")) return [];
+
+  const roles = [...guild.roles.cache.values()]
+    .filter(role => {
+      if (role.id === guild.id || role.managed || !role.editable) return false;
+      if (role.permissions.toArray().some(permission => RESTRICTED_ROLE_PERMISSIONS.has(permission))) return false;
+      const isVip = configuredVipRoleIds.size > 0
+        ? configuredVipRoleIds.has(role.id)
+        : vipTier(role.name) >= 0;
+      if (kind === "vip") return isVip;
+      if (configuredColorRoleIds.size > 0) {
+        return configuredColorRoleIds.has(role.id) && role.color !== 0 && !isVip;
+      }
+      return colorRoleNumber(role.name) !== null && role.color !== 0 && !isVip && !RESERVED_COLOR_ROLE_NAMES.test(role.name);
+    })
+    .sort((a, b) => {
+      if (kind === "color") {
+        const aNumber = numberedColorRole(a.name);
+        const bNumber = numberedColorRole(b.name);
+        if (aNumber !== null && bNumber !== null) return aNumber - bNumber;
+        if (aNumber !== null) return -1;
+        if (bNumber !== null) return 1;
+      }
+      return a.position - b.position || a.name.localeCompare(b.name, "pt-BR");
+    });
+
+  return roles.map((role, index) => {
+    let price = COLOR_ROLE_PRICE;
+    let benefitPercent = 0;
+    if (kind === "vip") {
+      const explicitPrice = VIP_ROLE_PRICES_BY_ID.get(role.id);
+      const detectedTier = vipTier(role.name);
+      const tier = detectedTier >= 0 ? detectedTier : Math.min(index, VIP_ROLE_PRICES.length - 1);
+      if (explicitPrice) price = explicitPrice;
+      else price = VIP_ROLE_PRICES[tier];
+      benefitPercent = detectedTier >= 0 ? [5, 10, 15][detectedTier] : [5, 10, 15][tier];
+    }
+    return {
+      guildId: guild.id,
+      roleId: role.id,
+      name: role.name,
+      mention: role.toString(),
+      kind,
+      price,
+      benefitPercent,
+      duration: kind === "vip" ? VIP_ROLE_DURATION_MS : null,
+      role,
+    };
+  });
+}
+
+function vipBenefitsFor(roleOrOffer) {
+  const benefitPercent = vipBenefitPercent(roleOrOffer);
+  return `+${benefitPercent}% em cookies no /daily, /trabalhar e /bonus; acesso ao Mercado Negro VIP.`;
+}
+
+const SHOP_ITEMS = [...COLOR_ITEMS, ...VIP_ITEMS, ...BOOST_ITEMS, ...UTILITY_ITEMS];
+// Mantém itens antigos utilizáveis, sem oferecê-los no catálogo atual da loja.
+const SHOP_ITEMS_BY_ID = Object.fromEntries([...SHOP_ITEMS, ...CHEST_ITEMS].map(item => [item.id, item]));
 
 const COOLDOWN_TARGETS = [
-  { id: "daily", name: "Recompensa diária", emoji: emoji.cookie },
-  { id: "trabalhar", name: "Trabalhar", emoji: emoji.work },
-  { id: "roubar", name: "Roubar", emoji: emoji.policePanda },
-  { id: "bonus", name: "Bônus semanal", emoji: emoji.sino },
-  { id: "rep", name: "Reputação", emoji: emoji.yes },
+  { id: "trabalhar", name: "Trabalhar", get emoji() { return emoji.work; } },
+  { id: "bonus", name: "Bônus semanal", get emoji() { return emoji.sino; } },
+  { id: "rep", name: "Reputação", get emoji() { return emoji.yes; } },
 ];
 
 module.exports = {
@@ -196,4 +297,10 @@ module.exports = {
   SHOP_SECTIONS,
   VIP_ITEMS,
   UTILITY_ITEMS,
+  COLOR_ROLE_PRICE,
+  VIP_ROLE_DURATION_MS,
+  VIP_ROLE_PRICES,
+  guildRoleOffers,
+  vipBenefitsFor,
+  vipBenefitPercent,
 };

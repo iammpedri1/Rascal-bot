@@ -1,10 +1,11 @@
+import { defineCommand } from "../types/command";
 const {
   SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const emoji = "<:blobhug2:1500896963317600276>";
 
@@ -18,7 +19,7 @@ async function getGif() {
   }
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "action",
 
   data: new SlashCommandBuilder()
@@ -99,4 +100,4 @@ module.exports = {
       console.error(err);
     }
   },
-};
+});

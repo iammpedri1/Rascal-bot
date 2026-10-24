@@ -6,22 +6,20 @@
   },
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/clean-dist.cjs && tsc && npm run typecheck:strict",
+    "typecheck:strict": "tsc -p tsconfig.strict.json",
     "start": "npm run build && node dist/index.js",
     "register": "npm run build && node dist/slash-commands.js",
     "test": "npm run build && node --test dist/test",
     "security:check": "npm run build && node dist/scripts/security-check.js",
     "service:install": "npm run build && node dist/scripts/install-service.js",
-    "service:uninstall": "node dist/scripts/uninstall-service.js"
+    "service:uninstall": "npm run build && node dist/scripts/uninstall-service.js"
   },
   "dependencies": {
-    "@discordjs/voice": "^0.19.2",
     "@napi-rs/canvas": "^1.0.0",
     "better-sqlite3": "^13.0.3",
-    "discord.js": "^14.26.4",
-    "dotenv": "^17.4.2",
-    "ffmpeg-static": "^5.3.0",
-    "opusscript": "^0.0.8"
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

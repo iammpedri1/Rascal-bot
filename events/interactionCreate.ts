@@ -1,112 +1,235 @@
-const logger = require("../utils/logger");
-const { buildErrorEmbed } = require("../utils/cookieViews");
-const { hasAccess } = require("../utils/permissions");
+import type {
+  ButtonInteraction,
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+  Interaction,
+  ModalSubmitInteraction,
+  StringSelectMenuInteraction,
+} from "discord.js";
+import type { RascalClient } from "../core/RascalClient";
+import { withBrandedResponses } from "../core/InteractionResponseFormatter";
+import type {
+  BotClient,
+  CommandAccess,
+  CommandButtonInteraction,
+  CommandChatInputInteraction,
+  CommandModalInteraction,
+  CommandSelectInteraction,
+} from "../types/command";
+import type { Logger } from "../types/logger";
+const { isPrimaryGuild } = require("../utils/primaryGuild") as typeof import("../utils/primaryGuild");
+const blackMarket = require("../utils/blackMarket") as typeof import("../utils/blackMarket");
+const { buildErrorEmbed } = require("../utils/cookieViews") as {
+  buildErrorEmbed(source: RepliableInteraction, title: string, message: string): EmbedBuilder;
+};
+const { hasAccess } = require("../utils/permissions") as {
+  hasAccess(interaction: ChatInputCommandInteraction, access: CommandAccess): Promise<boolean>;
+};
+const { handleButton: handleCooldownNotification } = require("../utils/cooldownNotifications") as {
+  handleButton(interaction: ButtonInteraction): Promise<unknown>;
+};
+const logger = require("../utils/logger") as Logger;
 
-async function reportInteractionError(interaction, context, error) {
+type RepliableInteraction =
+  | ChatInputCommandInteraction
+  | ButtonInteraction
+  | StringSelectMenuInteraction
+  | ModalSubmitInteraction;
+
+function discordErrorCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  const code = error.code;
+  return typeof code === "number" ? code : undefined;
+}
+
+function interactionCustomId(interaction: Interaction): string | undefined {
+  return "customId" in interaction ? interaction.customId : undefined;
+}
+
+async function reportInteractionError(
+  interaction: RepliableInteraction,
+  client: RascalClient,
+  context: string,
+  error: unknown,
+): Promise<void> {
+  const customId = interactionCustomId(interaction);
   logger.error(context, error, {
-    user: interaction.user?.id,
+    user: interaction.user.id,
     guild: interaction.guildId,
-    customId: interaction.customId,
+    ...(customId ? { customId } : {}),
   });
 
+  if ([10062, 10015].includes(discordErrorCode(error) ?? 0)) return;
+
+  const response = withBrandedResponses(interaction, client);
   const payload = {
     embeds: [buildErrorEmbed(
       interaction,
-      "\u274C Erro ao executar ação",
-      "Não foi possível concluir essa ação. Tente novamente em alguns instantes."
+      "❌ Erro ao executar ação",
+      "Não foi possível concluir essa ação. Tente novamente em alguns instantes.",
     )],
     flags: 64,
   };
 
   try {
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(payload);
-    } else {
-      await interaction.reply(payload);
-    }
+    if (interaction.deferred || interaction.replied) await response.followUp(payload);
+    else await response.reply(payload);
   } catch (responseError) {
+    if ([10062, 10015].includes(discordErrorCode(responseError) ?? 0)) return;
     logger.error("Falha ao responder erro de interação", responseError, {
-      user: interaction.user?.id,
+      user: interaction.user.id,
       guild: interaction.guildId,
-      customId: interaction.customId,
+      ...(customId ? { customId } : {}),
     });
+  }
+}
+
+async function dispatchCommand(
+  interaction: ChatInputCommandInteraction,
+  client: RascalClient,
+): Promise<void> {
+  const command = client.commands.get(interaction.commandName);
+  const response = withBrandedResponses(interaction, client);
+
+  if (!command) {
+    await response.reply({
+      content: "Esse comando não está mais disponível. Atualize os comandos do bot e tente novamente.",
+      flags: 64,
+    }).catch((error: unknown) => {
+      if (![10062, 10015].includes(discordErrorCode(error) ?? 0)) {
+        logger.error("Falha ao informar comando indisponível", error);
+      }
+    });
+    return;
+  }
+
+  if (command.category === "economy" && interaction.commandName !== "fianca") {
+    const prison = blackMarket.getActivePrisonStatus(interaction.user.id);
+    if (prison) {
+      await response.reply({
+        embeds: [buildErrorEmbed(
+          interaction,
+          "🚓 Você está na prisão",
+          `Você poderá sair <t:${Math.floor(prison.releaseAt / 1000)}:R>, ou pagar **${prison.bailAmount.toLocaleString("pt-BR")} cookies** com **/fianca**.`,
+        )],
+        flags: 64,
+      });
+      return;
+    }
+  }
+
+  try {
+    if (command.access && !(await hasAccess(interaction, command.access))) {
+      await response.reply({
+        content: "Você não tem permissão para usar este comando.",
+        flags: 64,
+      });
+      return;
+    }
+
+    logger.debug("Comando usado", {
+      command: interaction.commandName,
+      user: interaction.user.id,
+      guild: interaction.guildId,
+    });
+
+    await command.execute(response as unknown as CommandChatInputInteraction, client as BotClient);
+  } catch (error) {
+    await reportInteractionError(
+      interaction,
+      client,
+      `Erro ao executar /${interaction.commandName}`,
+      error,
+    );
+  }
+}
+
+async function dispatchComponent(
+  interaction: ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction,
+  client: RascalClient,
+): Promise<void> {
+  const customId = interaction.customId;
+  const commandName = customId.split("|")[0];
+  const command = client.commands.get(commandName);
+
+  if (command?.category === "economy" && commandName !== "fianca") {
+    const prison = blackMarket.getActivePrisonStatus(interaction.user.id);
+    if (prison) {
+      await withBrandedResponses(interaction, client).reply({
+        embeds: [buildErrorEmbed(
+          interaction,
+          "🚓 Você está na prisão",
+          `Você poderá sair <t:${Math.floor(prison.releaseAt / 1000)}:R>, ou pagar **${prison.bailAmount.toLocaleString("pt-BR")} cookies** com **/fianca**.`,
+        )],
+        flags: 64,
+      });
+      return;
+    }
+  }
+
+  if (interaction.isButton()) {
+    try {
+      if (customId.startsWith("cooldownnotify|")) {
+        await handleCooldownNotification(withBrandedResponses(interaction, client));
+      } else if (command?.handleButton) {
+        await command.handleButton(
+          withBrandedResponses(interaction, client) as unknown as CommandButtonInteraction,
+          client as BotClient,
+        );
+      }
+    } catch (error) {
+      await reportInteractionError(interaction, client, `Erro ao processar componente ${customId}`, error);
+    }
+    return;
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    try {
+      if (command?.handleSelect) {
+        await command.handleSelect(
+          withBrandedResponses(interaction, client) as unknown as CommandSelectInteraction,
+          client as BotClient,
+        );
+      }
+    } catch (error) {
+      await reportInteractionError(interaction, client, `Erro ao processar componente ${customId}`, error);
+    }
+    return;
+  }
+
+  try {
+    if (command?.handleModal) {
+      await command.handleModal(
+        withBrandedResponses(interaction, client) as unknown as CommandModalInteraction,
+        client as BotClient,
+      );
+    }
+  } catch (error) {
+    await reportInteractionError(interaction, client, `Erro ao processar componente ${customId}`, error);
   }
 }
 
 module.exports = {
   name: "interactionCreate",
 
-  async execute(interaction, client) {
+  async execute(interaction: Interaction, client: RascalClient): Promise<void> {
+    if (!isPrimaryGuild(interaction.guildId)) {
+      if (interaction.isRepliable()) {
+        await interaction.reply({
+          content: "O Rascal é exclusivo do servidor configurado e só pode ser usado nele.",
+          flags: 64,
+        }).catch(() => undefined);
+      }
+      return;
+    }
+
     if (interaction.isChatInputCommand()) {
-      const command = client.commands.get(interaction.commandName);
-      if (!command) return;
-
-      try {
-        if (command.access && !(await hasAccess(interaction, command.access))) {
-          return interaction.reply({
-            content: "Você não tem permissão para usar este comando.",
-            flags: 64,
-          });
-        }
-
-        logger.debug("Comando usado", {
-          command: interaction.commandName,
-          user: interaction.user.id,
-          guild: interaction.guildId,
-        });
-
-        await command.execute(interaction, client);
-      } catch (err) {
-        logger.error(`Erro ao executar /${interaction.commandName}`, err, {
-          user: interaction.user.id,
-          guild: interaction.guildId,
-        });
-
-        return reportInteractionError(
-          interaction,
-          `Erro ao executar /${interaction.commandName}`,
-          err
-        );
-      }
+      await dispatchCommand(interaction, client);
+      return;
     }
 
-    if (interaction.isButton()) {
-      const name = interaction.customId.split("|")[0];
-      const command = client.commands.get(name);
-
-      if (!command?.handleButton) return;
-
-      try {
-        await command.handleButton(interaction, client);
-      } catch (err) {
-        await reportInteractionError(interaction, `Erro ao processar botao ${interaction.customId}`, err);
-      }
-    }
-
-    if (interaction.isStringSelectMenu()) {
-      const name = interaction.customId.split("|")[0];
-      const command = client.commands.get(name);
-
-      if (!command?.handleSelect) return;
-
-      try {
-        await command.handleSelect(interaction, client);
-      } catch (err) {
-        await reportInteractionError(interaction, `Erro ao processar menu ${interaction.customId}`, err);
-      }
-    }
-
-    if (interaction.isModalSubmit()) {
-      const name = interaction.customId.split("|")[0];
-      const command = client.commands.get(name);
-
-      if (!command?.handleModal) return;
-
-      try {
-        await command.handleModal(interaction, client);
-      } catch (err) {
-        await reportInteractionError(interaction, `Erro ao processar modal ${interaction.customId}`, err);
-      }
+    if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) {
+      await dispatchComponent(interaction, client);
     }
   },
 };

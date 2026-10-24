@@ -1,385 +1,314 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
+import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-} = require("discord.js");
+  SlashCommandBuilder,
+  type ButtonInteraction,
+  type Message,
+} from "discord.js";
+import { defineCommand } from "../types/command";
+import type { CommandChatInputInteraction } from "../types/command";
+import type { Logger } from "../types/logger";
+import { activeGames } from "../utils/activeGames";
+import { refundGameBets, reserveStakes, resolveGame } from "../utils/gameEconomy";
+import {
+  buttonRow,
+  contextFor,
+  formatCookies,
+  gameButton,
+  gameEmbed,
+  icon,
+  IDLE_TIMEOUT_MS,
+  LOSS_COLOR,
+  WIN_COLOR,
+  DRAW_COLOR,
+} from "../utils/gameUi";
 
-const { canBet, settleDraw, settleDuel } = require("../utils/cookieEconomy");
+const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
+const logger = require("../utils/logger") as Logger;
 
-const COOKIE_EMOJI = "\u{1F36A}";
-const DRUM_EMOJI = "\u{1F389}";
+type Move = "pedra" | "papel" | "tesoura";
+type DuelWinner = "challenger" | "opponent" | "draw";
 
-const choices = {
-  pedra: {
-    label: "Pedra",
-    emoji: "\uD83E\uDEA8",
-    beats: "tesoura",
-  },
-  papel: {
-    label: "Papel",
-    emoji: "\uD83D\uDCC4",
-    beats: "pedra",
-  },
-  tesoura: {
-    label: "Tesoura",
-    emoji: "\u2702\uFE0F",
-    beats: "papel",
-  },
+const MOVE_DATA: Record<Move, { label: string; emoji: string; icon: string; beats: Move }> = {
+  pedra: { label: "Pedra", emoji: "🪨", icon: "rock", beats: "tesoura" },
+  papel: { label: "Papel", emoji: "📄", icon: "paper", beats: "pedra" },
+  tesoura: { label: "Tesoura", emoji: "✂️", icon: "scissors", beats: "papel" },
 };
 
-const choiceIds = Object.keys(choices);
-
-function randomChoice() {
-  return choiceIds[Math.floor(Math.random() * choiceIds.length)];
-}
-
-function getWinner(choiceA, choiceB) {
-  if (choiceA === choiceB) return "draw";
-  return choices[choiceA].beats === choiceB ? "challenger" : "opponent";
-}
-
-function isHouseBot(interaction, user) {
-  return user?.bot && user.id === interaction.client.user?.id;
-}
-
-function balanceText(user, profile, houseId) {
-  return user.id === houseId ? "infinito" : profile.balance.toLocaleString("pt-BR");
-}
-
-function buildRematchRow(challengerId, opponentId, amount) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`jokenpo|rematch|${challengerId}|${opponentId}|${amount}`)
-      .setLabel("Revanche")
-      .setEmoji("🔁")
-      .setStyle(ButtonStyle.Secondary)
+function invitationRow(gameId: string): ActionRowBuilder<ButtonBuilder> {
+  return buttonRow(
+    gameButton(`jokenpo|aceitar|${gameId}`, "Aceitar", "correct", "✅", ButtonStyle.Success),
+    gameButton(`jokenpo|recusar|${gameId}`, "Recusar", "crossed", "❌", ButtonStyle.Danger),
   );
 }
 
-module.exports = {
-  category: "games",
+function moveRow(gameId: string): ActionRowBuilder<ButtonBuilder> {
+  return buttonRow(
+    gameButton(`jokenpo|jogada|${gameId}|pedra`, "Pedra", "rock", "🪨", ButtonStyle.Secondary),
+    gameButton(`jokenpo|jogada|${gameId}|papel`, "Papel", "paper", "📄", ButtonStyle.Secondary),
+    gameButton(`jokenpo|jogada|${gameId}|tesoura`, "Tesoura", "scissors", "✂️", ButtonStyle.Secondary),
+  );
+}
 
-  data: new SlashCommandBuilder()
-    .setName("jokenpo")
-    .setDescription("Desafie alguém em um Jokenpo aleatório valendo cookies")
-    .addUserOption(option =>
-      option
-        .setName("usuario")
-        .setDescription("Usuário que você quer desafiar")
-        .setRequired(true)
-    )
-    .addIntegerOption(option =>
-      option
-        .setName("aposta")
-        .setDescription("Quantidade de cookies para apostar")
-        .setRequired(true)
-        .setMinValue(1)
-    )
-    .addIntegerOption(option =>
-      option
-        .setName("duracao")
-        .setDescription("Tempo para aceitar o desafio")
-        .setRequired(true)
-        .addChoices(
-          { name: "30 segundos", value: 30 },
-          { name: "1 minuto", value: 60 },
-          { name: "2 minutos", value: 120 },
-          { name: "5 minutos", value: 300 }
-        )
-    ),
+function winnerFor(first: Move, second: Move): DuelWinner {
+  if (first === second) return "draw";
+  return MOVE_DATA[first].beats === second ? "challenger" : "opponent";
+}
 
-  async execute(interaction) {
-    if (!interaction.guild) {
-      return interaction.reply({
-        content: "Esse comando só pode ser usado em um servidor.",
-        flags: 64,
-      });
-    }
+async function executeJokenpo(interaction: CommandChatInputInteraction): Promise<void> {
+  const opponent = interaction.options.getUser("usuario", true);
+  const bet = interaction.options.getInteger("aposta") ?? 0;
+  const challenger = interaction.user;
+  const gameId = randomUUID();
+  const context = contextFor(interaction);
 
-    const opponent = interaction.options.getUser("usuario");
-    const amount = interaction.options.getInteger("aposta");
-    const duration = interaction.options.getInteger("duracao");
-    const houseBot = isHouseBot(interaction, opponent);
-    const houseId = interaction.client.user?.id;
-    const economyContext = {
-      guildId: interaction.guild.id,
-      guildName: interaction.guild.name,
-    };
-
-    if (opponent.id === interaction.user.id) {
-      return interaction.reply({
-        content: "Você não pode desafiar você mesmo.",
-        flags: 64,
-      });
-    }
-
-    if (opponent.bot && !houseBot) {
-      return interaction.reply({
-        content: "Escolha uma pessoa ou aposte contra mim.",
-        flags: 64,
-      });
-    }
-
-    if (!canBet(interaction.user, amount)) {
-      return interaction.reply({
-        content: `Você não tem ${COOKIE_EMOJI} cookies suficientes para apostar ${amount}. Use /cookies saldo.`,
-        flags: 64,
-      });
-    }
-
-    if (houseBot) {
-      const challengerChoice = randomChoice();
-      const opponentChoice = randomChoice();
-      const winner = getWinner(challengerChoice, opponentChoice);
-      const challengerPlay = choices[challengerChoice];
-      const opponentPlay = choices[opponentChoice];
-      const resultLines = [];
-
-      if (winner === "draw") {
-        const { profileA, profileB } = settleDraw(interaction.user, opponent, economyContext);
-
-        resultLines.push(
-          `${DRUM_EMOJI} | \uD83E\uDD1D | <@${interaction.user.id}> escolheu ${challengerPlay.emoji}, <@${opponent.id}> escolheu ${opponentPlay.emoji}`,
-          "Empate! Ninguém perdeu cookies.",
-          "",
-          `${COOKIE_EMOJI} | Aposta cancelada: **${amount.toLocaleString("pt-BR")} cookies**`,
-          `\uD83D\uDCCA | <@${interaction.user.id}> saldo: ${COOKIE_EMOJI} **${balanceText(interaction.user, profileA, houseId)}**`,
-          `\uD83D\uDCCA | <@${opponent.id}> saldo: ${COOKIE_EMOJI} **${balanceText(opponent, profileB, houseId)}**`
-        );
-      } else {
-        const winnerUser = winner === "challenger" ? interaction.user : opponent;
-        const loserUser = winner === "challenger" ? opponent : interaction.user;
-        const winnerChoice = winner === "challenger" ? challengerPlay : opponentPlay;
-        const loserChoice = winner === "challenger" ? opponentPlay : challengerPlay;
-        const { winner: winnerProfile, loser: loserProfile } = settleDuel(winnerUser, loserUser, amount, economyContext);
-
-        resultLines.push(
-          `${DRUM_EMOJI} | \uD83C\uDF89 | <@${winnerUser.id}> escolheu ${winnerChoice.emoji}, <@${loserUser.id}> escolheu ${loserChoice.emoji}`,
-          `Parabéns, <@${winnerUser.id}>, você ganhou!`,
-          "",
-          `\uD83C\uDFC6 | Vencedor: <@${winnerUser.id}>`,
-          `${COOKIE_EMOJI} | Prêmio: **${amount.toLocaleString("pt-BR")} cookies**`,
-          `\uD83D\uDCCA | <@${winnerUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(winnerUser, winnerProfile, houseId)}**`,
-          `\uD83D\uDCCA | <@${loserUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(loserUser, loserProfile, houseId)}**`
-        );
-      }
-
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(winner === "draw" ? 0xfaa61a : 0x57f287)
-            .setTitle(`${DRUM_EMOJI} Resultado do Jokenpo`)
-            .setDescription(
-              [
-                `\uD83E\uDEA8 \u2022 \uD83D\uDCC4 \u2022 \u2702\uFE0F`,
-                `<@${interaction.user.id}>: ${challengerPlay.emoji} **${challengerPlay.label}**`,
-                `<@${opponent.id}>: ${opponentPlay.emoji} **${opponentPlay.label}**`,
-                "",
-                ...resultLines,
-              ].join("\n")
-            ),
-        ],
-        components: [buildRematchRow(interaction.user.id, opponent.id, amount)],
-      });
-    }
-
-    const endsAt = Math.floor((Date.now() + duration * 1000) / 1000);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`jkp_accept|${interaction.user.id}|${opponent.id}|${amount}`)
-        .setLabel("Aceitar")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`jkp_decline|${interaction.user.id}|${opponent.id}|${amount}`)
-        .setLabel("Recusar")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    const inviteEmbed = new EmbedBuilder()
-      .setColor(0xfaa61a)
-      .setTitle("Jokenpo")
-      .setDescription(
-        [
-          `<@${interaction.user.id}> desafiou <@${opponent.id}>.`,
-          `Aposta: ${COOKIE_EMOJI} **${amount} cookies**`,
-          `Expira: <t:${endsAt}:R>`,
-          "",
-          "\uD83E\uDEA8 Pedra  \u2022  \uD83D\uDCC4 Papel  \u2022  \u2702\uFE0F Tesoura",
-          `<@${opponent.id}>, aceite para o bot sortear as jogadas.`,
-        ].join("\n")
-      );
-
+  if (!interaction.guild) {
+    await interaction.reply({ content: "Este jogo só pode ser iniciado em um servidor.", flags: 64 });
+    return;
+  }
+  if (opponent.id === challenger.id || opponent.bot) {
+    await interaction.reply({ content: "Desafie outra pessoa. O /jokenpo é uma partida entre dois membros.", flags: 64 });
+    return;
+  }
+  if (!activeGames.reserveNew([challenger.id, opponent.id], gameId)) {
     await interaction.reply({
-      content: `<@${opponent.id}>`,
-      embeds: [inviteEmbed],
-      components: [row],
+      content: `${icon("crossed", "❌")} Um dos jogadores já está em outro minijogo.`,
+      flags: 64,
     });
-    const message = await interaction.fetchReply();
+    return;
+  }
 
+  const moves = new Map<string, Move>();
+  let phase: "invite" | "playing" = "invite";
+  let stakeReserved = false;
+  let settled = false;
+  let finished = false;
+  let processing = false;
+
+  try {
+    await interaction.reply({
+      content: `${opponent}`,
+      embeds: [gameEmbed(
+        `${icon("gamesIcon", "🎮")} Pedra, Papel e Tesoura`,
+        [
+          `${challenger} desafiou ${opponent}.`,
+          bet > 0 ? `${icon("cookie", "🍪")} Aposta por jogador: **${formatCookies(bet)} cookies**.` : "Partida amistosa, sem aposta.",
+          `${opponent}, aceite para escolher sua jogada.`,
+        ].join("\n\n"),
+      )],
+      components: [invitationRow(gameId)],
+    });
+    const message: Message = await interaction.fetchReply();
     const collector = message.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: duration * 1000,
+      idle: IDLE_TIMEOUT_MS,
     });
 
-    let finished = false;
+    collector.on("collect", async (button: ButtonInteraction) => {
+      if (processing) {
+        await button.reply({ content: "Aguarde a jogada atual ser processada.", flags: 64 }).catch(() => undefined);
+        return;
+      }
+      const [command, action, id, rawMove] = button.customId.split("|");
+      if (command !== "jokenpo" || id !== gameId) return;
 
-    collector.on("collect", async buttonInteraction => {
-      const [action, challengerId, opponentId, betValue] = buttonInteraction.customId.split("|");
-      const bet = Number(betValue);
-
-      if (buttonInteraction.user.id !== opponentId && buttonInteraction.user.id !== challengerId) {
-        return buttonInteraction.reply({
-          content: "Esse desafio pertence a outros jogadores.",
-          flags: 64,
-        });
+      if (![challenger.id, opponent.id].includes(button.user.id)) {
+        await button.reply({ content: "Esta partida pertence a outros jogadores.", flags: 64 });
+        return;
       }
 
-      if (buttonInteraction.user.id !== opponentId) {
-        return buttonInteraction.reply({
-          content: "Só quem foi desafiado pode aceitar ou recusar.",
-          flags: 64,
-        });
-      }
+      processing = true;
+      try {
+        if (phase === "invite") {
+          if (button.user.id !== opponent.id) {
+            await button.reply({ content: "Somente a pessoa desafiada pode responder.", flags: 64 });
+            return;
+          }
+          if (action === "recusar") {
+            finished = true;
+            collector.stop("declined");
+            activeGames.releaseGame(gameId);
+            await button.update({
+              content: "",
+              embeds: [gameEmbed("Desafio recusado", `${opponent} recusou a partida.`, LOSS_COLOR)],
+              components: [],
+            });
+            return;
+          }
+          if (action !== "aceitar") return;
 
-      if (action === "jkp_decline") {
-        finished = true;
-        collector.stop("declined");
+          if (bet > 0) {
+            const reservation = reserveStakes(gameId, [
+              { userId: challenger.id, username: challenger.username, amount: bet },
+              { userId: opponent.id, username: opponent.username, amount: bet },
+            ], context);
+            if (!reservation.ok) {
+              finished = true;
+              collector.stop("balance");
+              activeGames.releaseGame(gameId);
+              await button.update({
+                content: "",
+                embeds: [gameEmbed("Aposta cancelada", "Um dos jogadores não tem cookies suficientes.", LOSS_COLOR)],
+                components: [],
+              });
+              return;
+            }
+            stakeReserved = true;
+          }
 
-        return buttonInteraction.update({
-          content: "",
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0xed4245)
-              .setTitle("Jokenpo recusado")
-              .setDescription(`<@${opponentId}> recusou a aposta de ${COOKIE_EMOJI} **${bet} cookies**.`),
-          ],
-          components: [],
-        });
-      }
-
-      if (!canBet(interaction.user, bet) || !canBet(opponent, bet)) {
-        finished = true;
-        collector.stop("no_balance");
-
-        return buttonInteraction.update({
-          content: "",
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0xed4245)
-              .setTitle("Aposta cancelada")
-              .setDescription("Um dos jogadores não tem cookies suficientes para essa aposta."),
-          ],
-          components: [],
-        });
-      }
-
-      const challengerChoice = randomChoice();
-      const opponentChoice = randomChoice();
-      const winner = getWinner(challengerChoice, opponentChoice);
-      const challengerPlay = choices[challengerChoice];
-      const opponentPlay = choices[opponentChoice];
-      const resultLines = [];
-
-      if (winner === "draw") {
-        const { profileA, profileB } = settleDraw(interaction.user, opponent, economyContext);
-
-        resultLines.push(
-          `${DRUM_EMOJI} | \uD83E\uDD1D | <@${challengerId}> escolheu ${challengerPlay.emoji}, <@${opponentId}> escolheu ${opponentPlay.emoji}`,
-          `Empate! Ninguém perdeu cookies.`,
-          "",
-          `${COOKIE_EMOJI} | Aposta cancelada: **${bet} cookies**`,
-          `\uD83D\uDCCA | <@${challengerId}> saldo: ${COOKIE_EMOJI} **${balanceText(interaction.user, profileA, houseId)}**`,
-          `\uD83D\uDCCA | <@${opponentId}> saldo: ${COOKIE_EMOJI} **${balanceText(opponent, profileB, houseId)}**`
-        );
-      } else {
-        const winnerUser = winner === "challenger" ? interaction.user : opponent;
-        const loserUser = winner === "challenger" ? opponent : interaction.user;
-        const winnerChoice = winner === "challenger" ? challengerPlay : opponentPlay;
-        const loserChoice = winner === "challenger" ? opponentPlay : challengerPlay;
-        const { winner: winnerProfile, loser: loserProfile } = settleDuel(winnerUser, loserUser, bet, economyContext);
-
-        resultLines.push(
-          `${DRUM_EMOJI} | \uD83C\uDF89 | <@${winnerUser.id}> escolheu ${winnerChoice.emoji}, <@${loserUser.id}> escolheu ${loserChoice.emoji}`,
-          `Parabéns, <@${winnerUser.id}>, você ganhou!`,
-          "",
-          `\uD83C\uDFC6 | Vencedor: <@${winnerUser.id}>`,
-          `${COOKIE_EMOJI} | Prêmio: **${bet} cookies**`,
-          `\uD83D\uDCCA | <@${winnerUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(winnerUser, winnerProfile, houseId)}**`,
-          `\uD83D\uDCCA | <@${loserUser.id}> saldo: ${COOKIE_EMOJI} **${balanceText(loserUser, loserProfile, houseId)}**`
-        );
-      }
-
-      finished = true;
-      collector.stop("finished");
-
-      return buttonInteraction.update({
-        content: "",
-        embeds: [
-          new EmbedBuilder()
-            .setColor(winner === "draw" ? 0xfaa61a : 0x57f287)
-            .setTitle(`${DRUM_EMOJI} Resultado do Jokenpo`)
-            .setDescription(
+          phase = "playing";
+          await button.update({
+            content: "",
+            embeds: [gameEmbed(
+              `${icon("gamesIcon", "🎮")} Escolham sem revelar a jogada`,
               [
-                `\uD83E\uDEA8 \u2022 \uD83D\uDCC4 \u2022 \u2702\uFE0F`,
-                `<@${challengerId}>: ${challengerPlay.emoji} **${challengerPlay.label}**`,
-                `<@${opponentId}>: ${opponentPlay.emoji} **${opponentPlay.label}**`,
-                "",
-                ...resultLines,
-              ].join("\n")
-            ),
-        ],
-        components: [buildRematchRow(challengerId, opponentId, bet)],
-      });
+                `${challenger} e ${opponent}, façam uma escolha nos botões.`,
+                "As escolhas ficam ocultas até os dois confirmarem.",
+                bet > 0 ? `${icon("cookie", "🍪")} Aposta total: **${formatCookies(bet * 2)} cookies**.` : "Partida amistosa, sem aposta.",
+              ].join("\n\n"),
+            )],
+            components: [moveRow(gameId)],
+          });
+          return;
+        }
+
+        if (phase !== "playing" || action !== "jogada") return;
+        if (moves.has(button.user.id)) {
+          await button.reply({ content: "Sua jogada já foi registrada e está oculta.", flags: 64 });
+          return;
+        }
+        if (!(rawMove in MOVE_DATA)) {
+          await button.reply({ content: "Essa jogada não é válida.", flags: 64 });
+          return;
+        }
+
+        moves.set(button.user.id, rawMove as Move);
+        await button.deferUpdate();
+        if (moves.size < 2) {
+          await button.followUp({ content: "Sua escolha foi registrada em segredo.", flags: 64 });
+          return;
+        }
+
+        const challengerMove = moves.get(challenger.id);
+        const opponentMove = moves.get(opponent.id);
+        if (!challengerMove || !opponentMove) throw new Error("Uma das jogadas não foi encontrada.");
+        const outcome = winnerFor(challengerMove, opponentMove);
+        const results = outcome === "draw"
+          ? [
+            { userId: challenger.id, username: challenger.username, outcome: "draw" as const, payout: bet, note: "/jokenpo empatado" },
+            { userId: opponent.id, username: opponent.username, outcome: "draw" as const, payout: bet, note: "/jokenpo empatado" },
+          ]
+          : [
+            {
+              userId: challenger.id,
+              username: challenger.username,
+              outcome: outcome === "challenger" ? "win" as const : "loss" as const,
+              payout: outcome === "challenger" ? bet * 2 : 0,
+              note: "/jokenpo",
+            },
+            {
+              userId: opponent.id,
+              username: opponent.username,
+              outcome: outcome === "opponent" ? "win" as const : "loss" as const,
+              payout: outcome === "opponent" ? bet * 2 : 0,
+              note: "/jokenpo",
+            },
+          ];
+        const balances = resolveGame(gameId, results, context);
+        settled = true;
+        finished = true;
+        collector.stop("finished");
+
+        const winnerId = outcome === "challenger" ? challenger.id : outcome === "opponent" ? opponent.id : null;
+        const description = [
+          `${challenger}: ${icon(MOVE_DATA[challengerMove].icon, MOVE_DATA[challengerMove].emoji)} **${MOVE_DATA[challengerMove].label}**`,
+          `${opponent}: ${icon(MOVE_DATA[opponentMove].icon, MOVE_DATA[opponentMove].emoji)} **${MOVE_DATA[opponentMove].label}**`,
+          "",
+          outcome === "draw"
+            ? `${icon("handshake", "🤝")} Empate! As apostas foram devolvidas.`
+            : `${icon("trophy", "🏆")} ${winnerId === challenger.id ? challenger : opponent} venceu e recebeu **${formatCookies(bet * 2)} cookies**.`,
+          ...(bet > 0 ? balances.map((balance) => `${icon("cookie", "🍪")} <@${balance.userId}>: **${formatCookies(balance.balance)} cookies**`) : []),
+        ].join("\n");
+
+        await message.edit({
+          content: "",
+          embeds: [gameEmbed(
+            outcome === "draw" ? "Pedra, Papel e Tesoura · Empate" : "Pedra, Papel e Tesoura · Resultado",
+            description,
+            outcome === "draw" ? DRAW_COLOR : winnerId ? WIN_COLOR : LOSS_COLOR,
+          )],
+          components: [],
+        });
+      } catch (error) {
+        logger.error("Falha durante partida de /jokenpo", error, { gameId, userId: button.user.id });
+        if (stakeReserved && !settled) {
+          try { refundGameBets(gameId, context); } catch (refundError) {
+            logger.error("Falha ao devolver aposta do /jokenpo", refundError, { gameId });
+          }
+        }
+        finished = true;
+        collector.stop("error");
+        activeGames.releaseGame(gameId);
+        await message.edit({
+          content: "",
+          embeds: [gameEmbed("Partida cancelada", "Não consegui concluir o jogo. As apostas reservadas foram devolvidas.", LOSS_COLOR)],
+          components: [],
+        }).catch(() => undefined);
+        if (button.deferred || button.replied) {
+          await button.followUp({ content: "A partida foi cancelada. Se houve aposta, ela foi devolvida.", flags: 64 }).catch(() => undefined);
+        }
+      } finally {
+        processing = false;
+      }
     });
 
-    collector.on("end", () => {
+    collector.on("end", (collected, reason) => {
       if (finished) return;
-
-      message.edit({
+      finished = true;
+      if (stakeReserved && !settled) {
+        try { refundGameBets(gameId, context); } catch (error) {
+          logger.error("Falha ao devolver aposta após expiração do /jokenpo", error, { gameId });
+        }
+      }
+      activeGames.releaseGame(gameId);
+      const wasPlaying = phase === "playing";
+      void message.edit({
         content: "",
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x747f8d)
-            .setTitle("Jokenpo expirado")
-            .setDescription(`Tempo esgotado. A aposta de ${COOKIE_EMOJI} **${amount} cookies** foi cancelada.`),
-        ],
+        embeds: [gameEmbed(
+          wasPlaying ? "Partida cancelada por inatividade" : "Desafio expirado",
+          wasPlaying
+            ? "O tempo de inatividade terminou. A aposta foi devolvida."
+            : "O desafio expirou sem começar.",
+          0x747f8d,
+        )],
         components: [],
-      }).catch(() => {});
+      }).catch((error: unknown) => logger.warn("Não consegui atualizar o desafio expirado", { error, reason, collected: collected.size }));
     });
+  } catch (error) {
+    activeGames.releaseGame(gameId);
+    logger.error("Falha ao criar desafio de /jokenpo", error, { gameId });
+    throw error;
+  }
+}
+
+module.exports = defineCommand({
+  category: "games",
+  data: new SlashCommandBuilder()
+    .setName("jokenpo")
+    .setDescription("Desafie outro membro para Pedra, Papel e Tesoura")
+    .addUserOption((option) => option
+      .setName("usuario")
+      .setDescription("Pessoa que você quer desafiar")
+      .setRequired(true))
+    .addIntegerOption((option) => option
+      .setName("aposta")
+      .setDescription("Aposta opcional por jogador")
+      .setMinValue(1)
+      .setMaxValue(1_000_000_000)
+      .setRequired(false)),
+  async execute(interaction: CommandChatInputInteraction): Promise<void> {
+    await executeJokenpo(interaction);
   },
-
-  async handleButton(interaction) {
-    const [command, action, challengerId, opponentId, amountRaw] = interaction.customId.split("|");
-    if (command !== "jokenpo" || action !== "rematch") return;
-
-    if (![challengerId, opponentId].includes(interaction.user.id)) {
-      return interaction.reply({
-        content: "Essa revanche pertence a outros jogadores.",
-        flags: 64,
-      });
-    }
-
-    const nextOpponentId = interaction.user.id === challengerId ? opponentId : challengerId;
-    const opponent = await interaction.client.users.fetch(nextOpponentId).catch(() => null);
-    const amount = Number(amountRaw);
-
-    if (!opponent || !Number.isFinite(amount) || amount < 1) {
-      return interaction.reply({
-        content: "Não consegui iniciar a revanche.",
-        flags: 64,
-      });
-    }
-
-    const rematchInteraction = Object.create(interaction);
-    rematchInteraction.options = {
-      getUser: () => opponent,
-      getInteger: name => (name === "duracao" ? 60 : amount),
-    };
-
-    return module.exports.execute(rematchInteraction);
-  },
-};
+});

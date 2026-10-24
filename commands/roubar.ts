@@ -1,10 +1,11 @@
+import { defineCommand } from "../types/command";
 // @ts-nocheck
 const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   SlashCommandBuilder,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const { rob } = require("../utils/cookieEconomy");
 const emoji = require("../utils/emojis");
@@ -19,14 +20,14 @@ function buildRevengeButton(robberId, victimId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`roubar|revenge|${robberId}|${victimId}`)
-      .setEmoji(emoji.pepeReeeee)
+      .setEmoji(emoji.toComponentEmoji(emoji.pepeReeeee))
       .setLabel("Roubar de volta")
       .setStyle(ButtonStyle.Danger)
   );
 }
 
 function replyPayload(interaction, target, result) {
-  const payload = {
+  const payload: { embeds: unknown[]; components?: unknown[] } = {
     embeds: [buildRobEmbed(interaction, target, result)],
   };
 
@@ -51,7 +52,7 @@ function cooldown(result) {
   };
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "economy",
 
   data: new SlashCommandBuilder()
@@ -75,6 +76,10 @@ module.exports = {
 
     if (!result.ok && result.reason === "self") {
       return interaction.reply(blocked("Você não pode roubar você mesmo!"));
+    }
+
+    if (!result.ok && result.reason === "prison") {
+      return interaction.reply(blocked(`Você está preso(a) até <t:${Math.floor(result.prison.releaseAt / 1000)}:R>. Use /fianca para pagar a fiança.`));
     }
 
     if (!result.ok && result.reason === "target_balance") {
@@ -113,4 +118,4 @@ module.exports = {
 
     return interaction.reply(replyPayload(interaction, target, result));
   },
-};
+});

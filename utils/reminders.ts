@@ -3,10 +3,13 @@ const { EmbedBuilder } = require("discord.js");
 
 const emoji = require("./emojis");
 const { readJson, writeJson } = require("./jsonStore");
+const { randomColor } = require("./embedStyle") as { randomColor: () => number };
+const { isPrimaryGuild } = require("./primaryGuild");
 
-const dataDir = path.join(__dirname, "../data");
+const dataDir = process.env.BOT_DATA_DIR
+  ? path.resolve(process.env.BOT_DATA_DIR)
+  : path.resolve(process.cwd(), "data");
 const dataFile = path.join(dataDir, "reminders.json");
-const CLOCK_EMOJI = emoji.calendar;
 const MAX_DONE_REMINDERS = 50;
 const DUPLICATE_WINDOW_MS = 5 * 1000;
 const DELIVERY_LOCK_MS = 2 * 60 * 1000;
@@ -75,10 +78,18 @@ function createReminder({ userId, channelId, guildId, message, dueAt }) {
   return reminder;
 }
 
+function removeUserReminders(userId) {
+  const store = readStore();
+  const before = store.reminders.length;
+  store.reminders = store.reminders.filter(reminder => String(reminder.userId) !== String(userId));
+  if (store.reminders.length !== before) writeStore(store);
+  return before - store.reminders.length;
+}
+
 function buildScheduledEmbed(user, reminder) {
   return new EmbedBuilder()
-    .setColor(0x2ad4d9)
-    .setTitle(`${CLOCK_EMOJI} Seus Lembretes`)
+    .setColor(randomColor())
+    .setTitle(`${emoji.calendar} Seus Lembretes`)
     .setThumbnail(user.displayAvatarURL({ size: 128 }))
     .setDescription(
       [
@@ -86,7 +97,7 @@ function buildScheduledEmbed(user, reminder) {
         `${emoji.channel} \u00bb **${reminder.message}** está salvo.`,
         `\u21B3 Eu vou te chamar quando chegar a hora. \uD83D\uDD14`,
         "",
-        `${CLOCK_EMOJI} \u00bb Marcado para ${absoluteTimestamp(reminder.dueAt)}.`,
+        `${emoji.calendar} \u00bb Marcado para ${absoluteTimestamp(reminder.dueAt)}.`,
         `${emoji.thinking} \u00bb Dica: use lembretes para /work, /daily ou tarefas importantes.`,
       ].join("\n")
     );
@@ -94,14 +105,14 @@ function buildScheduledEmbed(user, reminder) {
 
 function buildReminderEmbed(reminder) {
   return new EmbedBuilder()
-    .setColor(0x2ad4d9)
-    .setTitle(`${CLOCK_EMOJI} Seus Lembretes`)
+    .setColor(randomColor())
+    .setTitle(`${emoji.calendar} Seus Lembretes`)
     .setDescription(
       [
         `${emoji.cookie} \u00bb **Lembrete** está pronto! \uD83D\uDD14`,
         `\u21B3 ${reminder.message}`,
         "",
-        `${CLOCK_EMOJI} \u00bb Criado ${timestamp(reminder.createdAt)}.`,
+        `${emoji.calendar} \u00bb Criado ${timestamp(reminder.createdAt)}.`,
         `${emoji.thinking} \u00bb Use **/lembrete** para agendar outro aviso.`,
       ].join("\n")
     );
@@ -139,6 +150,7 @@ async function deliverDueReminders(client) {
     const store = readStore();
     const now = Date.now();
     const due = store.reminders.filter(reminder => {
+      if (!isPrimaryGuild(reminder.guildId)) return false;
       if (reminder.deliveredAt || reminder.dueAt > now) return false;
       if (!reminder.deliveringAt) return true;
       return now - reminder.deliveringAt > DELIVERY_LOCK_MS;
@@ -166,14 +178,16 @@ function startReminderScheduler(client) {
   schedulerStarted = true;
 
   deliverDueReminders(client).catch(console.error);
-  setInterval(() => {
+  const timer = setInterval(() => {
     deliverDueReminders(client).catch(console.error);
   }, 30 * 1000);
+  timer.unref?.();
 }
 
 module.exports = {
-  CLOCK_EMOJI,
+  get CLOCK_EMOJI() { return emoji.calendar; },
   buildScheduledEmbed,
   createReminder,
+  removeUserReminders,
   startReminderScheduler,
 };

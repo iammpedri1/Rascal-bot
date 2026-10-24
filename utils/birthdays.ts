@@ -1,9 +1,11 @@
 import type { Client, User } from "discord.js";
 
 const { EmbedBuilder } = require("discord.js");
+const { randomColor } = require("./embedStyle") as { randomColor: () => number };
 const db = require("./db");
 const emoji = require("./emojis");
 const logger = require("./logger");
+const { PRIMARY_GUILD_ID } = require("./primaryGuild");
 
 export interface BirthdayRecord {
   guildId: string;
@@ -133,8 +135,8 @@ function dueBirthdays(date = new Date()): BirthdayRecord[] {
       month,
       last_sent_year AS lastSentYear
     FROM birthdays
-    WHERE day = ? AND month = ? AND COALESCE(last_sent_year, 0) != ?
-  `).all(day, month, year) as BirthdayRecord[];
+    WHERE guild_id = ? AND day = ? AND month = ? AND COALESCE(last_sent_year, 0) != ?
+  `).all(PRIMARY_GUILD_ID, day, month, year) as BirthdayRecord[];
 }
 
 function markBirthdaySent(guildId: string, userId: string, year: number): void {
@@ -147,7 +149,7 @@ function markBirthdaySent(guildId: string, userId: string, year: number): void {
 
 function buildBirthdayEmbed(user: User) {
   return new EmbedBuilder()
-    .setColor(0xff9ac7)
+    .setColor(randomColor())
     .setTitle(`${emoji.calendar} Feliz aniversário!`)
     .setDescription([
       `${emoji.party} Hoje é o aniversário de ${user}!`,
@@ -236,9 +238,10 @@ export function startBirthdayScheduler(client: Client): void {
   deliverDueBirthdays(client).catch(error =>
     logger.error("Falha no scheduler de aniversários", error)
   );
-  setInterval(() => {
+  const timer = setInterval(() => {
     deliverDueBirthdays(client).catch(error =>
       logger.error("Falha no scheduler de aniversários", error)
     );
   }, 60 * 60 * 1000);
+  timer.unref?.();
 }

@@ -1,4 +1,5 @@
-const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { buildInlineErrorEmbed } = require("../utils/cookieViews");
 const emoji = require("../utils/emojis");
 
@@ -123,7 +124,7 @@ function buildMoedaEmbed(valor, de, para, resultado, taxa) {
     .setTimestamp();
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "utility",
 
   data: new SlashCommandBuilder()
@@ -188,4 +189,4 @@ module.exports = {
       });
     }
   },
-}
+})

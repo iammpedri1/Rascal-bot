@@ -1,3 +1,4 @@
+import { defineCommand } from "../types/command";
 const {
   SlashCommandBuilder,
   EmbedBuilder,
@@ -5,10 +6,11 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-} = require("discord.js");
+} = require("discord.js") as typeof import("discord.js");
 
 const { canBet, settleDuel } = require("../utils/cookieEconomy");
 const { getAnimeGif } = require("../utils/animeGifs");
+const emoji = require("../utils/emojis");
 const logger = require("../utils/logger");
 
 const COOKIE_EMOJI = "\u{1F36A}";
@@ -40,17 +42,17 @@ function balanceText(user, profile, houseId) {
   return user.id === houseId ? "infinito" : profile.balance.toLocaleString("pt-BR");
 }
 
-function buildRematchRow(challengerId, opponentId, amount) {
-  return new ActionRowBuilder().addComponents(
+function buildRematchRow(challengerId, opponentId, amount): import("discord.js").ActionRowBuilder<import("discord.js").ButtonBuilder> {
+  return new ActionRowBuilder<import("discord.js").ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`cara-ou-coroa|rematch|${challengerId}|${opponentId}|${amount}`)
       .setLabel("Revanche")
-      .setEmoji("🔁")
+      .setEmoji(emoji.toComponentEmoji("🔁"))
       .setStyle(ButtonStyle.Secondary)
   );
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "games",
 
   data: new SlashCommandBuilder()
@@ -352,4 +354,4 @@ module.exports = {
 
     return module.exports.execute(rematchInteraction);
   },
-};
+});

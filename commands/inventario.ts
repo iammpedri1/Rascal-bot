@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
 const { SHOP_ITEMS_BY_ID } = require("../utils/cookieShop");
@@ -6,6 +7,7 @@ const {
   getNetProfit,
   getProfile,
   getShopInventory,
+  getGuildShopRolePurchases,
 } = require("../utils/cookieEconomy");
 
 function amount(value) {
@@ -20,7 +22,7 @@ function emojiImageUrl(customEmoji) {
   return `https://cdn.discordapp.com/emojis/${match[1]}.${extension}?quality=lossless`;
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "economy",
 
   data: new SlashCommandBuilder()
@@ -37,6 +39,9 @@ module.exports = {
     const user = interaction.options.getUser("usuario") || interaction.user;
     const profile = getProfile(user);
     const inventory = getShopInventory(user.id);
+    const guildRolePurchases = interaction.guild
+      ? getGuildShopRolePurchases(interaction.guildId, user.id)
+      : [];
     const ownedColors = inventory
       .map(entry => SHOP_ITEMS_BY_ID[entry.itemId])
       .filter(item => item?.kind === "color");
@@ -105,6 +110,20 @@ module.exports = {
         name: `${emoji.clock} Utilidades`,
         value: utilityCollection,
         inline: true,
+      }, {
+        name: `${emoji.roles} Cargos comprados neste servidor`,
+        value: guildRolePurchases.length
+          ? guildRolePurchases.map(purchase => {
+            const role = interaction.guild.roles.cache.get(purchase.roleId);
+            const roleName = role ? role.toString() : "cargo removido do servidor";
+            const kind = purchase.kind === "vip" ? "VIP" : "Cor";
+            const expiry = purchase.expiresAt
+              ? ` · expira <t:${Math.floor(purchase.expiresAt / 1000)}:R>`
+              : " · permanente";
+            return `• ${kind}: ${roleName}${expiry}`;
+          }).join("\n").slice(0, 1000)
+          : "Nenhum cargo comprado nesta loja ainda.",
+        inline: false,
       })
       .setFooter({
         text: interaction.client.user?.username || "Bot",
@@ -114,4 +133,4 @@ module.exports = {
 
     return interaction.reply({ embeds: [embed] });
   },
-};
+});

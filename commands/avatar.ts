@@ -1,10 +1,11 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js") as typeof import("discord.js");
 
 function randomColor() {
   return Math.floor(Math.random() * 0xffffff);
 }
 
-module.exports = {
+module.exports = defineCommand({
   category: "user",
 
   data: new SlashCommandBuilder()
@@ -28,4 +29,4 @@ module.exports = {
 
     await interaction.reply({ embeds: [embed] });
   },
-};
+});

@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+import { defineCommand } from "../types/command";
+const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 
 const emoji = require("../utils/emojis");
 const {
@@ -10,21 +11,21 @@ const {
 } = require("../utils/birthdays");
 
 const monthChoices = [
-  ["Janeiro", 1],
-  ["Fevereiro", 2],
-  ["Março", 3],
-  ["Abril", 4],
-  ["Maio", 5],
-  ["Junho", 6],
-  ["Julho", 7],
-  ["Agosto", 8],
-  ["Setembro", 9],
-  ["Outubro", 10],
-  ["Novembro", 11],
-  ["Dezembro", 12],
-].map(([name, value]) => ({ name, value }));
+  { name: "Janeiro", value: 1 },
+  { name: "Fevereiro", value: 2 },
+  { name: "Março", value: 3 },
+  { name: "Abril", value: 4 },
+  { name: "Maio", value: 5 },
+  { name: "Junho", value: 6 },
+  { name: "Julho", value: 7 },
+  { name: "Agosto", value: 8 },
+  { name: "Setembro", value: 9 },
+  { name: "Outubro", value: 10 },
+  { name: "Novembro", value: 11 },
+  { name: "Dezembro", value: 12 },
+];
 
-module.exports = {
+module.exports = defineCommand({
   category: "utility",
 
   data: new SlashCommandBuilder()
@@ -138,4 +139,4 @@ module.exports = {
       flags: 64,
     });
   },
-};
+});
