@@ -22,6 +22,7 @@
     "utils/serverBoosts.ts",
     "utils/weeklyLottery.ts",
     "utils/primaryGuild.ts",
+    "utils/transactionHistory.ts",
     "commands/apostar.ts",
     "commands/jokenpo.ts",
     "commands/jogodavelha.ts",
@@ -31,5 +32,9 @@
     "commands/loteria.ts",
     "commands/raspadinha.ts"
   ],
-  "exclude": ["node_modules", "dist", "data"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "data"
+  ]
 }
