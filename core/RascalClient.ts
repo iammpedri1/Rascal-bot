@@ -33,6 +33,15 @@ function buildClientOptions(): ClientOptions {
       ReactionManager: 0,
       ReactionUserManager: 0,
     }),
+    // Descarta mensagens antigas de canais ociosos, além do limite por canal
+    // aplicado acima; mantém o cache de mensagens baixo em execução contínua.
+    sweepers: {
+      ...Options.DefaultSweeperSettings,
+      messages: {
+        interval: 600,
+        lifetime: 1800,
+      },
+    },
   };
 }
 

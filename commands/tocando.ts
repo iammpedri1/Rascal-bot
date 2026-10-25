@@ -11,7 +11,7 @@ const {
   MessageFlags,
   SlashCommandBuilder,
 } = require("discord.js") as typeof import("discord.js");
-const { createCanvas, loadImage } = require("@napi-rs/canvas");
+const { loadCanvas } = require("../utils/canvas");
 
 const emoji = require("../utils/emojis");
 
@@ -126,6 +126,7 @@ function truncate(context, value, maxWidth) {
 }
 
 async function createSpotifyCard(activity) {
+  const { createCanvas, loadImage } = loadCanvas();
   const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   const context = canvas.getContext("2d");
   const coverUrl = spotifyCover(activity);

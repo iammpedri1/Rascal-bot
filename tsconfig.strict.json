@@ -25,6 +25,7 @@
     "utils/transactionHistory.ts",
     "utils/interactionRateLimit.ts",
     "utils/runtimeMetrics.ts",
+    "utils/canvas.ts",
     "commands/apostar.ts",
     "commands/jokenpo.ts",
     "commands/jogodavelha.ts",

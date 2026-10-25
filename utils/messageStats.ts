@@ -1,5 +1,20 @@
 const db = require("./db");
 
+// recordMessage roda a cada mensagem: as sentenças ficam preparadas uma única
+// vez para evitar recompilar SQL (CPU e alocação) no caminho mais quente.
+const recordWeeklyStmt = db.prepare(`
+  INSERT INTO message_weekly_stats (guild_id, user_id, week_key, messages, updated_at)
+  VALUES (?, ?, ?, 1, ?)
+  ON CONFLICT(guild_id, user_id, week_key)
+  DO UPDATE SET messages = messages + 1, updated_at = excluded.updated_at
+`);
+const recordMonthlyStmt = db.prepare(`
+  INSERT INTO message_monthly_stats (guild_id, user_id, month_key, messages, updated_at)
+  VALUES (?, ?, ?, 1, ?)
+  ON CONFLICT(guild_id, user_id, month_key)
+  DO UPDATE SET messages = messages + 1, updated_at = excluded.updated_at
+`);
+
 function weekKey(now = Date.now()) {
   const date = new Date(now);
   const dayFromMonday = (date.getUTCDay() + 6) % 7;
@@ -20,19 +35,8 @@ function monthKey(now = Date.now()) {
 }
 
 function recordMessage(guildId, userId, now = Date.now()) {
-  db.prepare(`
-    INSERT INTO message_weekly_stats (guild_id, user_id, week_key, messages, updated_at)
-    VALUES (?, ?, ?, 1, ?)
-    ON CONFLICT(guild_id, user_id, week_key)
-    DO UPDATE SET messages = messages + 1, updated_at = excluded.updated_at
-  `).run(String(guildId), String(userId), weekKey(now), now);
-
-  db.prepare(`
-    INSERT INTO message_monthly_stats (guild_id, user_id, month_key, messages, updated_at)
-    VALUES (?, ?, ?, 1, ?)
-    ON CONFLICT(guild_id, user_id, month_key)
-    DO UPDATE SET messages = messages + 1, updated_at = excluded.updated_at
-  `).run(String(guildId), String(userId), monthKey(now), now);
+  recordWeeklyStmt.run(String(guildId), String(userId), weekKey(now), now);
+  recordMonthlyStmt.run(String(guildId), String(userId), monthKey(now), now);
 }
 
 function getWeeklyMessageLeaderboard(guildId, limit = 10) {
