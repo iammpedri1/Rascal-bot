@@ -23,6 +23,7 @@
     "utils/weeklyLottery.ts",
     "utils/primaryGuild.ts",
     "utils/transactionHistory.ts",
+    "utils/canvas.ts",
     "commands/apostar.ts",
     "commands/jokenpo.ts",
     "commands/jogodavelha.ts",

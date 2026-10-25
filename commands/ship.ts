@@ -1,6 +1,6 @@
 import { defineCommand } from "../types/command";
 const { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
-const { createCanvas, loadImage } = require("@napi-rs/canvas");
+const { loadCanvas } = require("../utils/canvas");
 
 const emoji = require("../utils/emojis");
 const { COLORS, setBrandFooter } = require("../utils/embedStyle");
@@ -119,6 +119,7 @@ function drawCircleAvatar(ctx, image, x, y, size) {
 }
 
 async function loadAvatar(user) {
+  const { loadImage } = loadCanvas();
   try {
     return await loadImage(user.displayAvatarURL({ extension: "png", size: 256 }));
   } catch {
@@ -147,6 +148,7 @@ function drawProfileCard(ctx, user, image, x, align = "left") {
 }
 
 async function buildShipImage(userA, userB, percent, coupleName) {
+  const { createCanvas } = loadCanvas();
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
   const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
