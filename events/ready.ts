@@ -16,6 +16,7 @@ const { recoverPendingGameBets } = require("../utils/gameEconomy");
 const giveawayCommand = require("../commands/sorteio");
 const { initializeRaidLockdowns } = require("../utils/raidLockdown");
 const { isImageModerationConfigured } = require("../utils/imageModeration");
+const { startRuntimeMetrics } = require("../utils/runtimeMetrics");
 const emoji = require("../utils/emojis");
 const logger = require("../utils/logger");
 const { PRIMARY_GUILD_ID } = require("../utils/primaryGuild");
@@ -74,6 +75,7 @@ module.exports = {
     startRolePurchaseRecovery(client);
     startWeeklyLotteryScheduler(client);
     startScratchCleanupScheduler();
+    startRuntimeMetrics();
     try {
       const refundedGames = recoverPendingGameBets();
       if (refundedGames > 0) logger.warn("Apostas de minijogos devolvidas após reinicialização", { count: refundedGames });

@@ -24,6 +24,7 @@
     "utils/primaryGuild.ts",
     "utils/transactionHistory.ts",
     "utils/interactionRateLimit.ts",
+    "utils/runtimeMetrics.ts",
     "commands/apostar.ts",
     "commands/jokenpo.ts",
     "commands/jogodavelha.ts",

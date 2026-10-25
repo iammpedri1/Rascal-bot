@@ -2,6 +2,7 @@ import { defineCommand } from "../types/command";
 
 const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { icon } = require("../utils/embedStyle");
+const { collectRuntimeMetrics, formatBytes } = require("../utils/runtimeMetrics");
 
 function formatUptime(uptimeMs: number | null | undefined): string {
   let remaining = Math.floor(Math.max(0, uptimeMs ?? 0) / 1000);
@@ -35,11 +36,13 @@ module.exports = defineCommand({
     const responseTime = Math.max(0, Date.now() - startedAt);
     const rawApiPing = Number(interaction.client.ws.ping);
     const apiPing = Number.isFinite(rawApiPing) && rawApiPing >= 0 ? Math.round(rawApiPing) : -1;
+    const memory = collectRuntimeMetrics();
     const content = [
       `${icon("ping", "🏓")} ${interaction.user} pong! Yay!`,
       `${icon("clock", "🗓️")} **Uptime:** \`${formatUptime(interaction.client.uptime)}\``,
       `${icon("server", "🌐")} **API Ping:** ${apiPing >= 0 ? `${apiPing}ms` : "reconectando"}`,
       `${icon("botFlag", "💬")} **BOT Ping:** ${responseTime}ms`,
+      `${icon("botFlag", "💬")} **RAM:** ${formatBytes(memory.rssBytes)} (heap ${formatBytes(memory.heapUsedBytes)})`,
     ].join("\n");
     return interaction.editReply({ content, allowedMentions: { users: [interaction.user.id] } });
   },
