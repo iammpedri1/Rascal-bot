@@ -13,9 +13,18 @@ const secretPatterns = [
   { name: "Discord bot token", pattern: /[MN][A-Za-z\d_-]{23,27}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27,}/ },
   { name: "Discord env token", pattern: /DISCORD_TOKEN\s*=\s*["']?\S+/ },
   { name: "Gemini API key", pattern: /AIza[0-9A-Za-z_-]{20,}/ },
+  { name: "OpenAI API key", pattern: /\bsk-[A-Za-z0-9_-]{20,}/ },
+  {
+    name: "credencial de banco de dados",
+    pattern: /\bpostgres(?:ql)?:\/\/[^\s:@/]+:[^\s@/]+@/i,
+  },
+  {
+    name: "bloco de chave privada",
+    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/,
+  },
   {
     name: "generic secret assignment",
-    pattern: /\b(?:TOKEN|API_KEY|SECRET|PASSWORD|SENHA)\s*=\s*(?![^\r\n]*\bprocess\.env\b)["']?[^\s"']{12,}/i,
+    pattern: /\b(?:TOKEN|API_KEY|SECRET|PASSWORD|SENHA|DATABASE_URL|POSTGRES_URL|CONNECTION_STRING|DSN)\s*=\s*(?![^\r\n]*\bprocess\.env\b)["']?[^\s"']{12,}/i,
   },
 ];
 
