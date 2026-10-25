@@ -28,7 +28,11 @@ const { hasAccess } = require("../utils/permissions") as {
 const { handleButton: handleCooldownNotification } = require("../utils/cooldownNotifications") as {
   handleButton(interaction: ButtonInteraction): Promise<unknown>;
 };
+const { createRateLimiter } = require("../utils/interactionRateLimit") as typeof import("../utils/interactionRateLimit");
 const logger = require("../utils/logger") as Logger;
+
+// Limite generoso: barra apenas flood de comandos, sem atrapalhar o uso normal.
+const commandRateLimiter = createRateLimiter({ max: 10, windowMs: 10_000 });
 
 type RepliableInteraction =
   | ChatInputCommandInteraction
@@ -209,6 +213,17 @@ async function dispatchComponent(
   }
 }
 
+async function enforceCommandRateLimit(interaction: ChatInputCommandInteraction): Promise<boolean> {
+  const { allowed, retryAfterMs } = commandRateLimiter.check(interaction.user.id);
+  if (allowed) return true;
+
+  await interaction.reply({
+    content: `Calma lá! Você está usando comandos rápido demais. Tente novamente em ${Math.ceil(retryAfterMs / 1000)}s.`,
+    flags: 64,
+  }).catch(() => undefined);
+  return false;
+}
+
 module.exports = {
   name: "interactionCreate",
 
@@ -224,6 +239,7 @@ module.exports = {
     }
 
     if (interaction.isChatInputCommand()) {
+      if (!(await enforceCommandRateLimit(interaction))) return;
       await dispatchCommand(interaction, client);
       return;
     }
