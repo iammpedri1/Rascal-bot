@@ -1,38 +1,42 @@
 /** Keeps each user in at most one live minigame in this bot process. */
 export class ActiveGamesManager {
-  private readonly users = new Map<string, string>();
+  private readonly users = new Map<string, { gameId: string; type: string; startedAt: number }>();
 
-  reserveNew(userIds: readonly string[], gameId: string): boolean {
+  reserveNew(userIds: readonly string[], gameId: string, type: string = "generic"): boolean {
     const uniqueUserIds = [...new Set(userIds.map(String))];
     if (uniqueUserIds.length !== userIds.length) return false;
     if (uniqueUserIds.some((userId) => this.users.has(userId))) return false;
 
-    for (const userId of uniqueUserIds) this.users.set(userId, gameId);
+    for (const userId of uniqueUserIds) {
+      this.users.set(userId, { gameId, type, startedAt: Date.now() });
+    }
     return true;
   }
 
-  join(userId: string, gameId: string): boolean {
-    const currentGameId = this.users.get(String(userId));
-    if (currentGameId && currentGameId !== gameId) return false;
-    this.users.set(String(userId), gameId);
+  join(userId: string, gameId: string, type: string = "generic"): boolean {
+    const currentGame = this.users.get(String(userId));
+    if (currentGame && currentGame.gameId !== gameId) return false;
+    this.users.set(String(userId), { gameId, type, startedAt: Date.now() });
     return true;
   }
 
   owns(userId: string, gameId: string): boolean {
-    return this.users.get(String(userId)) === gameId;
+    const game = this.users.get(String(userId));
+    return game?.gameId === gameId;
   }
 
-  gameFor(userId: string): string | undefined {
+  gameFor(userId: string) {
     return this.users.get(String(userId));
   }
 
   releaseUser(userId: string, gameId: string): void {
-    if (this.users.get(String(userId)) === gameId) this.users.delete(String(userId));
+    const game = this.users.get(String(userId));
+    if (game?.gameId === gameId) this.users.delete(String(userId));
   }
 
   releaseGame(gameId: string): void {
-    for (const [userId, activeGameId] of this.users) {
-      if (activeGameId === gameId) this.users.delete(userId);
+    for (const [userId, game] of this.users) {
+      if (game.gameId === gameId) this.users.delete(userId);
     }
   }
 }

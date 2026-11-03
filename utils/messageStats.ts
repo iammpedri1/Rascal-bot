@@ -14,6 +14,11 @@ const recordMonthlyStmt = db.prepare(`
   ON CONFLICT(guild_id, user_id, month_key)
   DO UPDATE SET messages = messages + 1, updated_at = excluded.updated_at
 `);
+const monthFormatter = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  timeZone: "America/Sao_Paulo",
+});
 
 function weekKey(now = Date.now()) {
   const date = new Date(now);
@@ -25,11 +30,7 @@ function weekKey(now = Date.now()) {
 }
 
 function monthKey(now = Date.now()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    timeZone: "America/Sao_Paulo",
-  }).formatToParts(new Date(now));
+  const parts = monthFormatter.formatToParts(new Date(now));
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.year}-${values.month}`;
 }

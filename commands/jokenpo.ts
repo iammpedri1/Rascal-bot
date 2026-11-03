@@ -8,10 +8,12 @@ import {
   type Message,
 } from "discord.js";
 import { defineCommand } from "../types/command";
-import type { CommandChatInputInteraction } from "../types/command";
+import type { CommandButtonInteraction, CommandChatInputInteraction } from "../types/command";
 import type { Logger } from "../types/logger";
 import { activeGames } from "../utils/activeGames";
 import { refundGameBets, reserveStakes, resolveGame } from "../utils/gameEconomy";
+import { JOKENPO_MOVES, jokenpoWinner } from "../utils/gameRules";
+import type { DuelWinner, JokenpoMove } from "../utils/gameRules";
 import {
   buttonRow,
   contextFor,
@@ -28,15 +30,6 @@ import {
 const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
 const logger = require("../utils/logger") as Logger;
 
-type Move = "pedra" | "papel" | "tesoura";
-type DuelWinner = "challenger" | "opponent" | "draw";
-
-const MOVE_DATA: Record<Move, { label: string; emoji: string; icon: string; beats: Move }> = {
-  pedra: { label: "Pedra", emoji: "🪨", icon: "rock", beats: "tesoura" },
-  papel: { label: "Papel", emoji: "📄", icon: "paper", beats: "pedra" },
-  tesoura: { label: "Tesoura", emoji: "✂️", icon: "scissors", beats: "papel" },
-};
-
 function invitationRow(gameId: string): ActionRowBuilder<ButtonBuilder> {
   return buttonRow(
     gameButton(`jokenpo|aceitar|${gameId}`, "Aceitar", "correct", "✅", ButtonStyle.Success),
@@ -50,11 +43,6 @@ function moveRow(gameId: string): ActionRowBuilder<ButtonBuilder> {
     gameButton(`jokenpo|jogada|${gameId}|papel`, "Papel", "paper", "📄", ButtonStyle.Secondary),
     gameButton(`jokenpo|jogada|${gameId}|tesoura`, "Tesoura", "scissors", "✂️", ButtonStyle.Secondary),
   );
-}
-
-function winnerFor(first: Move, second: Move): DuelWinner {
-  if (first === second) return "draw";
-  return MOVE_DATA[first].beats === second ? "challenger" : "opponent";
 }
 
 async function executeJokenpo(interaction: CommandChatInputInteraction): Promise<void> {
@@ -80,7 +68,7 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
     return;
   }
 
-  const moves = new Map<string, Move>();
+  const moves = new Map<string, JokenpoMove>();
   let phase: "invite" | "playing" = "invite";
   let stakeReserved = false;
   let settled = false;
@@ -179,12 +167,12 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
           await button.reply({ content: "Sua jogada já foi registrada e está oculta.", flags: 64 });
           return;
         }
-        if (!(rawMove in MOVE_DATA)) {
+        if (!(rawMove in JOKENPO_MOVES)) {
           await button.reply({ content: "Essa jogada não é válida.", flags: 64 });
           return;
         }
 
-        moves.set(button.user.id, rawMove as Move);
+        moves.set(button.user.id, rawMove as JokenpoMove);
         await button.deferUpdate();
         if (moves.size < 2) {
           await button.followUp({ content: "Sua escolha foi registrada em segredo.", flags: 64 });
@@ -194,7 +182,7 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
         const challengerMove = moves.get(challenger.id);
         const opponentMove = moves.get(opponent.id);
         if (!challengerMove || !opponentMove) throw new Error("Uma das jogadas não foi encontrada.");
-        const outcome = winnerFor(challengerMove, opponentMove);
+        const outcome = jokenpoWinner(challengerMove, opponentMove);
         const results = outcome === "draw"
           ? [
             { userId: challenger.id, username: challenger.username, outcome: "draw" as const, payout: bet, note: "/jokenpo empatado" },
@@ -220,11 +208,12 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
         settled = true;
         finished = true;
         collector.stop("finished");
+        activeGames.releaseGame(gameId);
 
         const winnerId = outcome === "challenger" ? challenger.id : outcome === "opponent" ? opponent.id : null;
         const description = [
-          `${challenger}: ${icon(MOVE_DATA[challengerMove].icon, MOVE_DATA[challengerMove].emoji)} **${MOVE_DATA[challengerMove].label}**`,
-          `${opponent}: ${icon(MOVE_DATA[opponentMove].icon, MOVE_DATA[opponentMove].emoji)} **${MOVE_DATA[opponentMove].label}**`,
+          `${challenger}: ${icon(JOKENPO_MOVES[challengerMove].icon, JOKENPO_MOVES[challengerMove].emoji)} **${JOKENPO_MOVES[challengerMove].label}**`,
+          `${opponent}: ${icon(JOKENPO_MOVES[opponentMove].icon, JOKENPO_MOVES[opponentMove].emoji)} **${JOKENPO_MOVES[opponentMove].label}**`,
           "",
           outcome === "draw"
             ? `${icon("handshake", "🤝")} Empate! As apostas foram devolvidas.`
@@ -239,7 +228,7 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
             description,
             outcome === "draw" ? DRAW_COLOR : winnerId ? WIN_COLOR : LOSS_COLOR,
           )],
-          components: [],
+          components: [buttonRow(gameButton(`jokenpo|revanche|${challenger.id}|${opponent.id}|${bet}`, "Revanche", "revanche", "🔁", ButtonStyle.Secondary))],
         });
       } catch (error) {
         logger.error("Falha durante partida de /jokenpo", error, { gameId, userId: button.user.id });
@@ -310,5 +299,29 @@ module.exports = defineCommand({
       .setRequired(false)),
   async execute(interaction: CommandChatInputInteraction): Promise<void> {
     await executeJokenpo(interaction);
+  },
+
+  async handleButton(interaction: CommandButtonInteraction): Promise<void> {
+    const [command, action, challengerId, opponentId, amountRaw] = interaction.customId.split("|");
+    if (command !== "jokenpo" || action !== "revanche") return;
+
+    if (![challengerId, opponentId].includes(interaction.user.id)) {
+      await interaction.reply({ content: "Esta revanche pertence a outros jogadores.", flags: 64 });
+      return;
+    }
+
+    const nextOpponentId = interaction.user.id === challengerId ? opponentId : challengerId;
+    const opponent = await interaction.client.users.fetch(nextOpponentId).catch(() => null);
+    const bet = Number(amountRaw);
+
+    if (!opponent || !Number.isFinite(bet) || bet < 1) {
+      await interaction.reply({ content: "Não consegui iniciar a revanche.", flags: 64 });
+      return;
+    }
+
+    const rematch = Object.create(interaction);
+    rematch.options = { getUser: () => opponent, getInteger: () => bet };
+
+    await module.exports.execute(rematch);
   },
 });

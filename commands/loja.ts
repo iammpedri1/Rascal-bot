@@ -1,17 +1,16 @@
 import { defineCommand } from "../types/command";
 import type { GuildMember, Role } from "discord.js";
 import type { ShopRoleOffer, ShopRoleKind } from "../utils/shopRolePurchases";
-const {
+import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ComponentType,
   EmbedBuilder,
   MessageFlags,
   SlashCommandBuilder,
-} = require("discord.js") as typeof import("discord.js");
+} from "discord.js";
 
-const emoji = require("../utils/emojis") as typeof import("../utils/emojis") & Record<string, any>;
+const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
 const cooldowns = require("../utils/cooldowns");
 const { SHOP_SECTIONS, guildRoleOffers, vipBenefitsFor } = require("../utils/cookieShop");
 const { randomColor } = require("../utils/embedStyle");
@@ -22,7 +21,6 @@ const {
   purchaseCooldownUnlock,
 } = require("../utils/cookieEconomy");
 const rolePurchases = require("../utils/shopRolePurchases") as typeof import("../utils/shopRolePurchases");
-const blackMarket = require("../utils/blackMarket") as typeof import("../utils/blackMarket");
 const { PRIMARY_GUILD_ID } = require("../utils/primaryGuild") as typeof import("../utils/primaryGuild");
 
 const COLOR_PAGE_SIZE = 10;
@@ -49,7 +47,7 @@ function pageCountFor(kind: ShopRoleKind, count: number): number {
 }
 
 function displayColorNumber(offer: ShopRoleOffer, absoluteIndex: number): string {
-  const match = offer.name.match(/(?:^|\D)(\d{1,2})(?:\D|$)/);
+  const match = offer.name.match(/(?:^|\\D)(\\d{1,2})(?:\\D|$)/);
   return match?.[1] || String(absoluteIndex + 1);
 }
 
@@ -66,18 +64,12 @@ function storeMember(interaction): GuildMember | undefined {
 
 function categoryRow(interaction, sectionId: string) {
   const sections = [...SHOP_SECTIONS];
-  const member = storeMember(interaction);
-  if (member && blackMarket.isVipMember(interaction.guild, member)) {
-    sections.push({ id: "mercado_negro", name: "Mercado Negro" });
-  }
   const buttons = sections.map((section) => {
     const config = section.id === "cores"
       ? { emoji: "palette", fallback: "🎨" }
       : section.id === "vip"
         ? { emoji: "owner", fallback: "👑" }
-        : section.id === "mercado_negro"
-          ? { emoji: "pand_police", fallback: "🕶️" }
-          : { emoji: "clock", fallback: "⏳" };
+        : { emoji: "clock", fallback: "⏳" };
     const button = new ButtonBuilder()
       .setCustomId(`loja|categoria|${section.id}`)
       .setLabel(section.name)
@@ -160,7 +152,7 @@ function buildRoleEmbed(interaction, sectionId: "cores" | "vip", page: number, n
     ? [
       kind === "color"
         ? "Escolha um número para comprar o cargo de cor e aplicá-lo ao seu perfil."
-        : "Star VIP, Elite VIP e Super VIP, com bônus de cookies e acesso ao Mercado Negro.",
+        : "Star VIP, Elite VIP e Super VIP, com bônus de cookies.",
       "",
       ...lines,
       "",
@@ -180,16 +172,13 @@ function buildRoleEmbed(interaction, sectionId: "cores" | "vip", page: number, n
     .setColor(randomColor())
     .setAuthor({ name: `${interaction.guild.name} · Loja do Rascal` })
     .setTitle(`${emoji.application(kind === "color" ? "palette" : "owner", kind === "color" ? "🎨" : "👑")} ${title}`)
-    .setDescription(description)
-    .setFooter({ text: `Página ${currentPage + 1}/${pages} · ${kind === "color" ? "cargos de cor" : "duração VIP de 30 dias"}` });
+    .setDescription(description);
 
   return { embed, offers, page: currentPage, pages, visible, profile };
 }
 
 function buildHomeEmbed(interaction, notice: string) {
   const profile = getProfile(interaction.user);
-  const member = storeMember(interaction);
-  const marketAvailable = Boolean(member && blackMarket.isVipMember(interaction.guild, member));
   return new EmbedBuilder()
     .setColor(randomColor())
     .setAuthor({ name: `Loja de ${interaction.guild.name}` })
@@ -200,27 +189,6 @@ function buildHomeEmbed(interaction, notice: string) {
       `${emoji.application("palette", "🎨")} **CORES**\n↳ Cargos numerados de cor encontrados no servidor.`,
       `${emoji.application("owner", "👑")} **VIPs**\n↳ Star VIP, Elite VIP e Super VIP disponíveis neste servidor.`,
       `${emoji.application("clock", "⏳")} **ACELERADORES**\n↳ Libere Daily, Roubar ou Trabalhar antes do cooldown.`,
-      ...(marketAvailable ? [`${emoji.application("pand_police", "🕶️")} **MERCADO NEGRO**\n↳ Itens táticos exclusivos para VIPs.`] : []),
-      "",
-      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
-      notice,
-    ].filter(Boolean).join("\n\n"));
-}
-
-function buildBlackMarketEmbed(interaction, notice: string) {
-  const profile = getProfile(interaction.user);
-  const lines = blackMarket.BLACK_MARKET_ITEMS.map((item) => {
-    const quantity = blackMarket.getInventoryCount(interaction.user.id, item.id);
-    return `${emoji.application(item.emoji, item.fallback)} **${item.name}** — **${amount(item.price)} cookies**\n↳ ${item.description}\n↳ No inventário: **${quantity}**`;
-  });
-  return new EmbedBuilder()
-    .setColor(randomColor())
-    .setAuthor({ name: `${interaction.guild.name} · acesso VIP` })
-    .setTitle(`${emoji.application("pand_police", "🕶️")} Mercado Negro`)
-    .setDescription([
-      "Equipamentos consumíveis: cada unidade é usada automaticamente no próximo roubo aplicável.",
-      "",
-      ...lines,
       "",
       `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
       notice,
@@ -310,20 +278,6 @@ function buildComponents(interaction, sectionId: string, page: number, notice: s
     return rows;
   }
 
-  if (sectionId === "mercado_negro") {
-    const buttons = blackMarket.BLACK_MARKET_ITEMS.map((item) => {
-      const button = new ButtonBuilder()
-        .setCustomId(`loja|mercado|comprar|${item.id}`)
-        .setLabel(`${item.name} · ${amount(item.price)}`)
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(getProfile(interaction.user).balance < item.price);
-      return buttonEmoji(button, item.emoji, item.fallback);
-    });
-    rows.push(new ActionRowBuilder().addComponents(...buttons));
-    rows.push(navigationRow(sectionId, 0, 1));
-    return rows;
-  }
-
   return [categoryRow(interaction, sectionId)];
 }
 
@@ -359,9 +313,9 @@ module.exports = defineCommand({
       }
 
       const id = component.customId;
-      const isPurchase = id.startsWith("loja|cargo|") || id.startsWith("loja|acelerador|") || id.startsWith("loja|mercado|comprar|");
+      const isPurchase = id.startsWith("loja|cargo|") || id.startsWith("loja|acelerador|");
       if (isPurchase && activePurchaseUsers.has(component.user.id)) {
-        await component.reply({ content: `${emoji.clock} Sua outra compra ainda está sendo processada. Aguarde.`, flags: MessageFlags.Ephemeral });
+        await component.reply({ content: `${emoji.application("clock", "⏳")} Sua outra compra ainda está sendo processada. Aguarde.`, flags: MessageFlags.Ephemeral });
         return;
       }
       if (isPurchase) activePurchaseUsers.add(component.user.id);
@@ -372,14 +326,9 @@ module.exports = defineCommand({
 
         if (id.startsWith("loja|categoria|")) {
           const selected = id.split("|")[2];
-          const member = storeMember(component);
-          const canOpenMarket = selected === "mercado_negro" && Boolean(member && blackMarket.isVipMember(interaction.guild, member));
-          if (SHOP_SECTIONS.some((entry) => entry.id === selected) || canOpenMarket) {
+          if (SHOP_SECTIONS.some((entry) => entry.id === selected)) {
             sectionId = selected;
             page = 0;
-          } else if (selected === "mercado_negro") {
-            sectionId = "home";
-            notice = `${emoji.redTick} O Mercado Negro é restrito aos VIPs deste servidor.`;
           }
         } else if (id === "loja|home") {
           sectionId = "home";
@@ -397,38 +346,23 @@ module.exports = defineCommand({
           const offer: ShopRoleOffer | undefined = guildRoleOffers(interaction.guild, kind)
             .find((candidate) => candidate.roleId === roleId);
           if (!role || !offer) {
-            notice = `${emoji.redTick} Esse cargo não está mais disponível na loja.`;
+            notice = `${emoji.application("redTick", "❌")} Esse cargo não está mais disponível na loja.`;
           } else {
             notice = await processGuildRolePurchase(component, member, role, offer);
           }
         } else if (id.startsWith("loja|acelerador|")) {
           const offer = ACCELERATORS.find((entry) => entry.id === id.split("|")[2]);
           if (!offer) {
-            notice = `${emoji.redTick} Esse acelerador não existe.`;
+            notice = `${emoji.application("redTick", "❌")} Esse acelerador não existe.`;
           } else {
             const result = purchaseCooldownUnlock(interaction.user, offer.targets, offer.price, {
               guildId: interaction.guildId,
               guildName: interaction.guild.name,
             });
-            if (result.ok) notice = `${emoji.correct} Cooldown liberado: ${result.targets.map((target) => `/${target}`).join(", ")}.`;
-            else if (result.reason === "balance") notice = `${emoji.redTick} Saldo insuficiente para esse acelerador.`;
-            else if (result.reason === "cooldown_ready") notice = `${emoji.thinking} Esse cooldown já está liberado.`;
-            else notice = `${emoji.redTick} Não consegui aplicar esse acelerador.`;
-          }
-        } else if (id.startsWith("loja|mercado|comprar|")) {
-          const itemId = id.split("|")[3];
-          const member = storeMember(component);
-          const item = blackMarket.BLACK_MARKET_ITEMS.find((entry) => entry.id === itemId);
-          if (!member || !blackMarket.isVipMember(interaction.guild, member)) {
-            sectionId = "home";
-            notice = `${emoji.redTick} O Mercado Negro é restrito aos VIPs deste servidor.`;
-          } else if (!item) {
-            notice = `${emoji.redTick} Esse item não está disponível.`;
-          } else {
-            const purchase = blackMarket.purchaseItem(interaction.user, item.id, interaction.guildId, interaction.guild.name);
-            notice = purchase.ok === true
-              ? `${emoji.correct} **${item.name}** comprado. Você tem ${blackMarket.getInventoryCount(interaction.user.id, item.id)} unidade(s).`
-              : `${emoji.redTick} ${purchase.reason === "balance" ? "Saldo insuficiente." : "Esse item não está disponível."}`;
+            if (result.ok) notice = `${emoji.application("correct", "✅")} Cooldown liberado: ${result.targets.map((target) => `/${target}`).join(", ")}.`;
+            else if (result.reason === "balance") notice = `${emoji.application("redTick", "❌")} Saldo insuficiente para esse acelerador.`;
+            else if (result.reason === "cooldown_ready") notice = `${emoji.application("thinking", "🤔")} Esse cooldown já está liberado.`;
+            else notice = `${emoji.application("redTick", "❌")} Não consegui aplicar esse acelerador.`;
           }
         } else if (id === "loja|fechar") {
           collector.stop("closed");
@@ -443,8 +377,6 @@ module.exports = defineCommand({
           ? [buildHomeEmbed(interaction, notice)]
           : sectionId === "aceleradores"
             ? [buildAcceleratorEmbed(interaction, notice)]
-            : sectionId === "mercado_negro"
-              ? [buildBlackMarketEmbed(interaction, notice)]
             : [buildRoleEmbed(interaction, sectionId as "cores" | "vip", page, notice).embed];
         await component.editReply({
           embeds,
@@ -457,7 +389,7 @@ module.exports = defineCommand({
           customId: component.customId,
         });
         await component.followUp({
-          content: `${emoji.redTick} Não consegui concluir a ação. Tente novamente.`,
+          content: `${emoji.application("redTick", "❌")} Não consegui concluir a ação. Tente novamente.`,
           flags: MessageFlags.Ephemeral,
         }).catch(() => undefined);
       } finally {
@@ -481,22 +413,22 @@ async function processGuildRolePurchase(
   const existing = getGuildShopRolePurchase(interaction.guildId, interaction.user.id, role.id, offer.kind);
 
   if (alreadyAssigned && offer.kind === "color") {
-    return `${emoji.thinking} Você já está usando essa cor; nenhum cookie foi cobrado.`;
+    return `${emoji.application("thinking", "🤔")} Você já está usando essa cor; nenhum cookie foi cobrado.`;
   }
   if (alreadyAssigned && offer.kind === "vip" && !existing) {
-    return `${emoji.thinking} Você já possui esse VIP; nenhum cookie foi cobrado.`;
+    return `${emoji.application("thinking", "🤔")} Você já possui esse VIP; nenhum cookie foi cobrado.`;
   }
 
   const activePurchase = existing && (offer.kind === "color" || Number(existing.expiresAt) > Date.now());
   if (!alreadyAssigned && activePurchase) {
     try {
       await member.roles.add(role, "Reaplicação de um cargo comprado na loja");
-      return `${emoji.correct} Cargo ${role} reaplicado sem nova cobrança.`;
+      return `${emoji.application("correct", "✅")} Cargo ${role} reaplicado sem nova cobrança.`;
     } catch (error) {
       logger.error("Falha ao reaplicar cargo comprado", error, { roleId: role.id, userId: interaction.user.id });
       return discordErrorCode(error) === 50013
-        ? `${emoji.redTick} Não consigo aplicar o cargo. A equipe precisa mover o cargo do Rascal acima dele.`
-        : `${emoji.redTick} Não consegui aplicar o cargo agora.`;
+        ? `${emoji.application("redTick", "❌")} Não consigo aplicar o cargo. A equipe precisa mover o cargo do Rascal acima dele.`
+        : `${emoji.application("redTick", "❌")} Não consegui aplicar o cargo agora.`;
     }
   }
 
@@ -506,10 +438,10 @@ async function processGuildRolePurchase(
     { guildId: interaction.guildId, guildName: interaction.guild.name },
   );
   if (reservation.ok === false) {
-    if (reservation.reason === "balance") return `${emoji.redTick} Você precisa de ${amount(offer.price)} cookies para comprar esse cargo.`;
-    if (reservation.reason === "owned") return `${emoji.thinking} Essa cor já está registrada na sua coleção.`;
-    if (reservation.reason === "busy") return `${emoji.clock} Sua outra compra ainda está sendo processada.`;
-    return `${emoji.redTick} Não consegui concluir essa compra.`;
+    if (reservation.reason === "balance") return `${emoji.application("redTick", "❌")} Você precisa de ${amount(offer.price)} cookies para comprar esse cargo.`;
+    if (reservation.reason === "owned") return `${emoji.application("thinking", "🤔")} Essa cor já está registrada na sua coleção.`;
+    if (reservation.reason === "busy") return `${emoji.application("clock", "⏳")} Sua outra compra ainda está sendo processada.`;
+    return `${emoji.application("redTick", "❌")} Não consegui concluir essa compra.`;
   }
 
   try {
@@ -536,20 +468,20 @@ async function processGuildRolePurchase(
     }
     if (applied === true) {
       rolePurchases.completeRolePurchase(reservation.reservation.id);
-      return `${emoji.correct} Cargo aplicado e compra registrada.`;
+      return `${emoji.application("correct", "✅")} Cargo aplicado e compra registrada.`;
     }
     if (applied === false) {
       const refunded = rolePurchases.refundRolePurchase(reservation.reservation.id, "Discord recusou a aplicação do cargo");
       return refunded
-        ? `${emoji.redTick} A compra foi cancelada e os cookies devolvidos. Confira se o cargo do Rascal está acima do cargo da loja.`
-        : `${emoji.redTick} O estorno está pendente de reconciliação; avise a equipe do servidor.`;
+        ? `${emoji.application("redTick", "❌")} A compra foi cancelada e os cookies devolvidos. Confira se o cargo do Rascal está acima do cargo da loja.`
+        : `${emoji.application("redTick", "❌")} O estorno está pendente de reconciliação; avise a equipe do servidor.`;
     }
-    return `${emoji.clock} O Discord não confirmou a aplicação. Mantive a compra pendente para proteger seu saldo.`;
+    return `${emoji.application("clock", "⏳")} O Discord não confirmou a aplicação. Mantive a compra pendente para proteger seu saldo.`;
   }
 
   const completed = rolePurchases.completeRolePurchase(reservation.reservation.id);
-  if (!completed) return `${emoji.clock} Cargo aplicado; o registro será reconciliado automaticamente.`;
-  return `${emoji.correct} ${role} comprado e aplicado!` +
+  if (!completed) return `${emoji.application("clock", "⏳")} Cargo aplicado; o registro será reconciliado automaticamente.`;
+  return `${emoji.application("correct", "✅")} ${role} comprado e aplicado!` +
     (completed.expiresAt ? ` Válido até ${timestamp(completed.expiresAt)}.` : "");
 }
 

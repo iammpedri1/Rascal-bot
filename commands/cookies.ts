@@ -51,26 +51,7 @@ module.exports = defineCommand({
             .setDescription("Usuário para consultar")
             .setRequired(false)
         )
-    )
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName("pagar")
-        .setDescription("Envia cookies para outro usuário")
-        .addUserOption(option =>
-          option
-            .setName("usuario")
-            .setDescription("Usuário que vai receber os cookies")
-            .setRequired(true)
-        )
-        .addIntegerOption(option =>
-          option
-            .setName("quantidade")
-            .setDescription("Quantidade de cookies para enviar")
-            .setRequired(true)
-            .setMinValue(1)
-        )
     ),
-
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
 
@@ -127,45 +108,6 @@ module.exports = defineCommand({
             value: "1% ao dia apenas sobre saldo acima de **500 cookies**. Limite: **250 cookies/dia**.",
             inline: false,
           }
-        )
-        .setFooter({
-          text: interaction.client.user?.username || "Bot",
-          iconURL: interaction.client.user?.displayAvatarURL() || undefined,
-        })
-        .setTimestamp();
-
-      return interaction.reply({ embeds: [embed] });
-    }
-
-    if (subcommand === "pagar") {
-      const target = interaction.options.getUser("usuario");
-      const quantity = interaction.options.getInteger("quantidade");
-      const result = transfer(interaction.user, target, quantity, buildContext(interaction));
-
-      if (!result.ok && result.reason === "self") {
-        return interaction.reply({
-          embeds: [buildInlineErrorEmbed("Você não pode enviar cookies para você mesmo!")],
-          flags: 64,
-        });
-      }
-
-      if (!result.ok && result.reason === "balance") {
-        return interaction.reply({
-          embeds: [buildInlineErrorEmbed(`Você não tem ${cookieEmoji()} **${amount(quantity)} cookies** para enviar!`)],
-          flags: 64,
-        });
-      }
-
-      const embed = new EmbedBuilder()
-        .setColor(0x57f287)
-        .setTitle(`${emoji.greenTick} Transferência concluída`)
-        .setDescription(
-          [
-            `<@${interaction.user.id}> enviou ${cookieEmoji()} **${amount(result.amount)} cookies** para <@${target.id}>.`,
-            "",
-            `Seu saldo: ${cookieEmoji()} **${amount(result.from.balance)}**`,
-            `Saldo de ${target.username}: ${cookieEmoji()} **${amount(result.to.balance)}**`,
-          ].join("\n")
         )
         .setFooter({
           text: interaction.client.user?.username || "Bot",

@@ -44,6 +44,7 @@ function canRandomReply(message) {
     for (const [key, expiresAt] of botReplyGuildCooldowns) if (expiresAt <= now) botReplyGuildCooldowns.delete(key);
     for (const [key, expiresAt] of botReplyUserCooldowns) if (expiresAt <= now) botReplyUserCooldowns.delete(key);
     while (botReplyUserCooldowns.size > MAX_TRACKED_COOLDOWNS) botReplyUserCooldowns.delete(botReplyUserCooldowns.keys().next().value);
+    while (botReplyGuildCooldowns.size > MAX_TRACKED_COOLDOWNS) botReplyGuildCooldowns.delete(botReplyGuildCooldowns.keys().next().value);
   }
   const guildKey = message.guild.id;
   const userKey = `${message.guild.id}:${message.author.id}`;
@@ -72,7 +73,7 @@ async function handleRandomBotReply(message) {
   const replies = isGreeting || mentionedBot ? greetingReplies() : randomReplies();
   const reply = replies[Math.floor(Math.random() * replies.length)];
 
-  await message.reply({ content: reply }).catch(() => {});
+  await message.reply({ content: reply, allowedMentions: { parse: [] } }).catch(() => {});
 }
 
 async function handleAfk(message) {
@@ -83,6 +84,7 @@ async function handleAfk(message) {
   if (current) {
     const notice = await message.reply({
       content: `${emoji.correct} Bem-vindo de volta, ${message.author}! Removi seu AFK.`,
+      allowedMentions: { parse: [] },
     }).catch(() => null);
 
     if (notice?.deletable) {
@@ -107,6 +109,7 @@ async function handleAfk(message) {
         `${emoji.clock} ${user} está AFK desde <t:${timestamp}:R>.`,
         `${AFK_REASON_EMOJI} **Motivo:** ${afk.reason}`,
       ].join("\n"),
+      allowedMentions: { parse: [] },
     }).catch(() => null);
 
     if (notice?.deletable) {

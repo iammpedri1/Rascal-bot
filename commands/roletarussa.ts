@@ -10,6 +10,7 @@ import type { CommandChatInputInteraction } from "../types/command";
 import type { Logger } from "../types/logger";
 import { activeGames } from "../utils/activeGames";
 import { refundGameBets, reserveStakes, resolveGame } from "../utils/gameEconomy";
+import { ROULETTE_CHAMBERS, rouletteChancePercent, rouletteEstimatedPayout } from "../utils/gameRules";
 import {
   buttonRow,
   contextFor,
@@ -25,6 +26,13 @@ import {
 
 const { randomUUID, randomInt } = require("node:crypto") as typeof import("node:crypto");
 const logger = require("../utils/logger") as Logger;
+const { getAnimeGif } = require("../utils/animeGifs") as { getAnimeGif(type: "win" | "lose" | "draw"): Promise<string> };
+
+// GIFs temáticos por ação (Tenor, estáveis). A câmara vazia usa o anime "draw" (alívio).
+const ROULETTE_GIFS = {
+  shot: "https://media1.tenor.com/m/0pgJh8gr5IAAAAAd/down-bad-gambling.gif",
+  cashout: "https://media1.tenor.com/m/hv0J_QfWhOYAAAAd/jackpot-casino.gif",
+} as const;
 
 type PlayerStatus = "active" | "cashed_out" | "shot" | "survived";
 
@@ -36,11 +44,6 @@ interface RoulettePlayer {
   status: PlayerStatus;
 }
 
-function estimatedPayout(player: RoulettePlayer): number {
-  const bonusRate = Math.min(0.8, player.safePulls * 0.2);
-  return player.stake + Math.floor(player.stake * bonusRate);
-}
-
 function buildDescription(
   players: ReadonlyMap<string, RoulettePlayer>,
   chamber: number,
@@ -49,7 +52,7 @@ function buildDescription(
 ): string {
   const roster = [...players.values()].map((player) => {
     if (player.status === "cashed_out") {
-      return `${icon("cashout", "💰")} <@${player.userId}> saiu com **${formatCookies(estimatedPayout(player))} cookies**.`;
+      return `${icon("cashout", "💰")} <@${player.userId}> saiu com **${formatCookies(rouletteEstimatedPayout(player.stake, player.safePulls))} cookies**.`;
     }
     if (player.status === "shot") {
       return `${icon("pand_police", "🚨")} <@${player.userId}> foi atingido e perdeu a aposta.`;
@@ -57,11 +60,11 @@ function buildDescription(
     if (player.status === "survived") {
       return `${icon("correct", "✅")} <@${player.userId}> sobreviveu e recebeu a aposta de volta.`;
     }
-    return `${icon("trigger", "🔫")} <@${player.userId}> · ${player.safePulls} sobrevivência(s) · prêmio atual **${formatCookies(estimatedPayout(player))}**`;
+    return `${icon("trigger", "🔫")} <@${player.userId}> · ${player.safePulls} sobrevivência(s) · prêmio atual **${formatCookies(rouletteEstimatedPayout(player.stake, player.safePulls))}**`;
   });
   const status = gameOver
     ? "A rodada acabou."
-    : `Próxima câmara: **${Math.min(chamber + 1, 6)}/6** · chance do disparo: **${Math.round((1 / Math.max(1, 6 - chamber)) * 100)}%**.`;
+    : `Próxima câmara: **${Math.min(chamber + 1, ROULETTE_CHAMBERS)}/6** · chance do disparo: **${rouletteChancePercent(chamber)}%**.`;
 
   return [
     status,
@@ -74,6 +77,7 @@ function buildDescription(
 
 function gameComponents(gameId: string, ended = false) {
   return [buttonRow(
+    gameButton(`roletarussa|entrar|${gameId}`, "Entrar", "humanIcon", "🚪", ButtonStyle.Primary, ended),
     gameButton(`roletarussa|puxar|${gameId}`, "Puxar gatilho", "trigger", "🔫", ButtonStyle.Danger, ended),
     gameButton(`roletarussa|sair|${gameId}`, "Pipocar", "cashout", "💰", ButtonStyle.Success, ended),
   )];
@@ -151,14 +155,17 @@ async function executeRussianRoulette(interaction: CommandChatInputInteraction):
       }
       const [command, action, id] = button.customId.split("|");
       if (command !== "roletarussa" || id !== gameId) return;
-      if (action !== "puxar" && action !== "sair") return;
+      if (action !== "puxar" && action !== "sair" && action !== "entrar") return;
       processing = true;
 
       try {
         await button.deferUpdate();
-        let player = players.get(button.user.id);
 
-        if (action === "puxar" && !player) {
+        if (action === "entrar") {
+          if (players.has(button.user.id)) {
+            await button.followUp({ content: "Você já está na rodada.", flags: 64 });
+            return;
+          }
           if (!activeGames.join(button.user.id, gameId)) {
             await button.followUp({ content: "Você já está em outro minijogo ativo.", flags: 64 });
             return;
@@ -178,14 +185,29 @@ async function executeRussianRoulette(interaction: CommandChatInputInteraction):
             });
             return;
           }
-          player = {
+          players.set(button.user.id, {
             userId: button.user.id,
             username: button.user.username,
             stake,
             safePulls: 0,
             status: "active",
-          };
-          players.set(button.user.id, player);
+          });
+          await message.edit({
+            embeds: [gameEmbed(
+              `${icon("revolver", "🔫")} Roleta-russa`,
+              buildDescription(players, chamber, false),
+            )],
+            components: gameComponents(gameId),
+          });
+          await button.followUp({ content: "Você entrou na rodada.", flags: 64 });
+          return;
+        }
+
+        let player = players.get(button.user.id);
+
+        if (action === "puxar" && !player) {
+          await button.followUp({ content: "Entre na rodada primeiro usando o botão Entrar.", flags: 64 });
+          return;
         }
 
         if (!player || player.status !== "active") {
@@ -198,7 +220,7 @@ async function executeRussianRoulette(interaction: CommandChatInputInteraction):
             await button.followUp({ content: "Sobreviva a pelo menos uma puxada para poder sair com prêmio.", flags: 64 });
             return;
           }
-          const payout = estimatedPayout(player);
+          const payout = rouletteEstimatedPayout(player.stake, player.safePulls);
           const settled = resolveGame(gameId, [{
             userId: player.userId,
             username: player.username,
@@ -214,7 +236,7 @@ async function executeRussianRoulette(interaction: CommandChatInputInteraction):
               `${icon("correct", "✅")} Recebeu **${formatCookies(payout)} cookies**. Saldo: **${formatCookies(settled.balance)}**.\n\n` +
                 buildDescription(players, chamber, false),
               WIN_COLOR,
-            )],
+            ).setImage(ROULETTE_GIFS.cashout)],
             components: gameComponents(gameId),
           });
           return;
@@ -248,20 +270,21 @@ async function executeRussianRoulette(interaction: CommandChatInputInteraction):
               .map((balance) => `${icon("correct", "✅")} <@${balance.userId}> sobreviveu; aposta devolvida. Saldo: **${formatCookies(balance.balance)} cookies**.`),
           ].join("\n");
           await message.edit({
-            embeds: [gameEmbed("Fim da rodada", buildDescription(players, chamber, true, finalLine), LOSS_COLOR)],
+            embeds: [gameEmbed("Fim da rodada", buildDescription(players, chamber, true, finalLine), LOSS_COLOR).setImage(ROULETTE_GIFS.shot)],
             components: gameComponents(gameId, true),
           });
           return;
         }
 
         player.safePulls += 1;
+        const surviveGif = await getAnimeGif("draw");
         await message.edit({
           embeds: [gameEmbed(
             `${icon("correct", "🍀")} Câmara vazia`,
             `${button.user} sobreviveu. Pode tentar de novo ou **Pipocar** para guardar o prêmio atual.\n\n` +
               buildDescription(players, chamber, false),
             DRAW_COLOR,
-          )],
+          ).setImage(surviveGif)],
           components: gameComponents(gameId),
         });
       } catch (error) {

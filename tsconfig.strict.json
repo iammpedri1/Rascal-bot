@@ -16,8 +16,9 @@
     "utils/shopRolePurchases.ts",
     "utils/activeGames.ts",
     "utils/gameEconomy.ts",
+    "utils/gameRules.ts",
     "utils/gameUi.ts",
-    "utils/blackMarket.ts",
+    "utils/minesLogic.ts",
     "utils/scratchCards.ts",
     "utils/serverBoosts.ts",
     "utils/weeklyLottery.ts",
@@ -31,9 +32,13 @@
     "commands/jogodavelha.ts",
     "commands/roletarussa.ts",
     "commands/ping.ts",
-    "commands/fianca.ts",
     "commands/loteria.ts",
-    "commands/raspadinha.ts"
+    "commands/raspadinha.ts",
+    "commands/mines.ts",
+    "commands/ranking.ts",
+    "commands/work.ts",
+    "commands/roubar.ts",
+    "commands/pix.ts"
   ],
   "exclude": [
     "node_modules",

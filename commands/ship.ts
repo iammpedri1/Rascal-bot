@@ -1,6 +1,6 @@
 import { defineCommand } from "../types/command";
 const { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
-const { loadCanvas } = require("../utils/canvas");
+const { loadCanvas, loadImageCached } = require("../utils/canvas");
 
 const emoji = require("../utils/emojis");
 const { COLORS, setBrandFooter } = require("../utils/embedStyle");
@@ -119,9 +119,8 @@ function drawCircleAvatar(ctx, image, x, y, size) {
 }
 
 async function loadAvatar(user) {
-  const { loadImage } = loadCanvas();
   try {
-    return await loadImage(user.displayAvatarURL({ extension: "png", size: 256 }));
+    return await loadImageCached(user.displayAvatarURL({ extension: "png", size: 256 }));
   } catch {
     return null;
   }

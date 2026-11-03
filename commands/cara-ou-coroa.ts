@@ -10,6 +10,8 @@ const {
 
 const { canBet, settleDuel } = require("../utils/cookieEconomy");
 const { getAnimeGif } = require("../utils/animeGifs");
+const { activeGames } = require("../utils/activeGames");
+const { flipCoinSide, oppositeSide } = require("../utils/gameRules");
 const emoji = require("../utils/emojis");
 const logger = require("../utils/logger");
 
@@ -20,18 +22,13 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function flipCoin() {
-  return Math.random() < 0.5 ? "cara" : "coroa";
+function randomSides() {
+  const challengerChoice = flipCoinSide();
+  return { challengerChoice, opponentChoice: oppositeSide(challengerChoice) };
 }
 
-function randomSides() {
-  const challengerChoice = flipCoin();
-  const opponentChoice = challengerChoice === "cara" ? "coroa" : "cara";
-
-  return {
-    challengerChoice,
-    opponentChoice,
-  };
+function createGameId() {
+  return `coin-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function isHouseBot(interaction, user) {
@@ -104,58 +101,67 @@ module.exports = defineCommand({
     }
 
     if (houseBot) {
-      const { challengerChoice, opponentChoice } = randomSides();
-      const coin = flipCoin();
-      const challengerWon = challengerChoice === coin;
-      const winnerUser = challengerWon ? interaction.user : opponent;
-      const loserUser = challengerWon ? opponent : interaction.user;
+      const gameId = createGameId();
+      if (!activeGames.reserveNew([interaction.user.id], gameId)) {
+        return interaction.reply({ content: "Você já está em outro minijogo.", flags: 64 });
+      }
 
-      await interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xfaa61a)
-            .setTitle(`${COIN_EMOJI} Girando a moeda...`)
-            .setDescription(
-              [
-                `${interaction.user} ficou com **${challengerChoice}**.`,
-                `${opponent} ficou com **${opponentChoice}**.`,
-                "",
-                "A moeda está no ar...",
-              ].join("\n")
-            ),
-        ],
-      });
+      try {
+        const { challengerChoice, opponentChoice } = randomSides();
+        const coin = flipCoinSide();
+        const challengerWon = challengerChoice === coin;
+        const winnerUser = challengerWon ? interaction.user : opponent;
+        const loserUser = challengerWon ? opponent : interaction.user;
 
-      const message = await interaction.fetchReply();
-      const { winner, loser } = settleDuel(winnerUser, loserUser, amount, economyContext);
-      const gif = await getAnimeGif("win");
+        await interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xfaa61a)
+              .setTitle(`${COIN_EMOJI} Girando a moeda...`)
+              .setDescription(
+                [
+                  `${interaction.user} ficou com **${challengerChoice}**.`,
+                  `${opponent} ficou com **${opponentChoice}**.`,
+                  "",
+                  "A moeda está no ar...",
+                ].join("\n")
+              ),
+          ],
+        });
 
-      await wait(1800);
+        const message = await interaction.fetchReply();
+        const { winner, loser } = settleDuel(winnerUser, loserUser, amount, economyContext);
+        const gif = await getAnimeGif("win");
 
-      return message.edit({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x57f287)
-            .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
-            .setDescription(
-              [
-                `A moeda caiu em: **${coin.toUpperCase()}**`,
-                "",
-                `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${amount.toLocaleString("pt-BR")} cookies**.`,
-                "",
-                `**Placar**`,
-                `<@${interaction.user.id}>: **${challengerChoice.toUpperCase()}**`,
-                `<@${opponent.id}>: **${opponentChoice.toUpperCase()}**`,
-                "",
-                `**Saldos**`,
-                `<@${winnerUser.id}>: **${balanceText(winnerUser, winner, houseId)}**`,
-                `<@${loserUser.id}>: **${balanceText(loserUser, loser, houseId)}**`,
-              ].join("\n")
-            )
-            .setImage(gif),
-        ],
-        components: [buildRematchRow(interaction.user.id, opponent.id, amount)],
-      });
+        await wait(1800);
+
+        return message.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x57f287)
+              .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
+              .setDescription(
+                [
+                  `A moeda caiu em: **${coin.toUpperCase()}**`,
+                  "",
+                  `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${amount.toLocaleString("pt-BR")} cookies**.`,
+                  "",
+                  `**Placar**`,
+                  `<@${interaction.user.id}>: **${challengerChoice.toUpperCase()}**`,
+                  `<@${opponent.id}>: **${opponentChoice.toUpperCase()}**`,
+                  "",
+                  `**Saldos**`,
+                  `<@${winnerUser.id}>: **${balanceText(winnerUser, winner, houseId)}**`,
+                  `<@${loserUser.id}>: **${balanceText(loserUser, loser, houseId)}**`,
+                ].join("\n")
+              )
+              .setImage(gif),
+          ],
+          components: [buildRematchRow(interaction.user.id, opponent.id, amount)],
+        });
+      } finally {
+        activeGames.releaseGame(gameId);
+      }
     }
 
     const row = new ActionRowBuilder().addComponents(
@@ -186,6 +192,11 @@ module.exports = defineCommand({
       .setThumbnail("https://cdn-icons-png.flaticon.com/512/272/272525.png")
       .setFooter({ text: "O vencedor leva a aposta do adversário." });
 
+    const gameId = createGameId();
+    if (!activeGames.reserveNew([interaction.user.id, opponent.id], gameId)) {
+      return interaction.reply({ content: "Um dos jogadores já está em outro minijogo.", flags: 64 });
+    }
+
     await interaction.reply({
       embeds: [inviteEmbed],
       components: [row],
@@ -214,6 +225,7 @@ module.exports = defineCommand({
         if (action === "coin_decline") {
           finished = true;
           collector.stop("declined");
+          activeGames.releaseGame(gameId);
 
           return buttonInteraction.update({
             embeds: [
@@ -229,6 +241,7 @@ module.exports = defineCommand({
         if (!canBet(interaction.user, bet) || (!isHouseBot(interaction, opponent) && !canBet(opponent, bet))) {
           finished = true;
           collector.stop("no_balance");
+          activeGames.releaseGame(gameId);
 
           return buttonInteraction.update({
             content: "Um dos jogadores não tem cookies suficientes para essa aposta.",
@@ -238,7 +251,7 @@ module.exports = defineCommand({
         }
 
         const { challengerChoice, opponentChoice } = randomSides();
-        const coin = flipCoin();
+        const coin = flipCoinSide();
         const challengerWon = challengerChoice === coin;
         const winnerUser = challengerWon ? interaction.user : opponent;
         const loserUser = challengerWon ? opponent : interaction.user;
@@ -264,6 +277,7 @@ module.exports = defineCommand({
         });
 
         const { winner, loser } = settleDuel(winnerUser, loserUser, bet, economyContext);
+        activeGames.releaseGame(gameId);
         const gif = await getAnimeGif("win");
 
         await wait(1800);
@@ -295,6 +309,7 @@ module.exports = defineCommand({
       } catch (error) {
         finished = true;
         collector.stop("error");
+        activeGames.releaseGame(gameId);
         logger.error("Erro ao processar aceite do /cara-ou-coroa", error, {
           user: buttonInteraction.user.id,
           guild: buttonInteraction.guildId,
@@ -315,6 +330,7 @@ module.exports = defineCommand({
     });
 
     collector.on("end", () => {
+      activeGames.releaseGame(gameId);
       if (finished) return;
 
       message.edit({

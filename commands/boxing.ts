@@ -9,6 +9,8 @@ const {
 
 const emoji = require("../utils/emojis");
 const { getAnimeGif } = require("../utils/animeGifs");
+const { activeGames } = require("../utils/activeGames");
+const { simulateBoxingMatch } = require("../utils/gameRules");
 
 const CHALLENGE_TIMEOUT = 60_000;
 const pendingChallenges = new Map();
@@ -62,13 +64,22 @@ module.exports = defineCommand({
     }
 
     const challengeId = createChallengeId();
-    pendingChallenges.set(challengeId, {
-      challengerId: interaction.user.id,
-      opponentId: opponent.id,
-    });
+
+    if (!activeGames.reserveNew([interaction.user.id, opponent.id], challengeId)) {
+      return interaction.reply({
+        content: `${boxingEmoji()} Um dos jogadores já está em outro minijogo.`,
+        flags: 64,
+      });
+    }
 
     const timeout = setTimeout(() => {
       pendingChallenges.delete(challengeId);
+      activeGames.releaseGame(challengeId);
+      message.edit({
+        content: `${boxingEmoji()} O desafio expirou.`,
+        embeds: [],
+        components: [],
+      }).catch(() => {});
     }, CHALLENGE_TIMEOUT);
     timeout.unref?.();
 
@@ -77,13 +88,21 @@ module.exports = defineCommand({
       .setTitle(`${boxingEmoji()} Desafio de boxe`)
       .setDescription(
         `${interaction.user} desafiou ${opponent} para uma luta!\n` +
-        `A chance de vitória é de **50% para cada lado**.\n\n` +
+        `A luta terá 3 rounds; cada round tem 50% de chance para cada lado.\n\n` +
         `${opponent}, você tem 60 segundos para aceitar.`
       );
 
-    return interaction.reply({
+    await interaction.reply({
       embeds: [embed],
       components: [challengeRow(challengeId)],
+    });
+    const message = await interaction.fetchReply();
+
+    pendingChallenges.set(challengeId, {
+      challengerId: interaction.user.id,
+      opponentId: opponent.id,
+      message,
+      timeout,
     });
   },
 
@@ -107,13 +126,15 @@ module.exports = defineCommand({
       });
     }
 
+    if (challenge.timeout) clearTimeout(challenge.timeout);
+    activeGames.releaseGame(challengeId);
     pendingChallenges.delete(challengeId);
 
-    const challengerWins = Math.random() < 0.5;
-    const winnerId = challengerWins
+    const match = simulateBoxingMatch(3);
+    const winnerId = match.winner === "challenger"
       ? challenge.challengerId
       : challenge.opponentId;
-    const loserId = challengerWins
+    const loserId = match.winner === "challenger"
       ? challenge.opponentId
       : challenge.challengerId;
 
@@ -125,7 +146,8 @@ module.exports = defineCommand({
       .setTitle(`${boxingEmoji()} Resultado da luta`)
       .setDescription(
         `${boxingEmoji()} <@${challenge.challengerId}> e <@${challenge.opponentId}> lutaram!\n\n` +
-        `🏆 <@${winnerId}> venceu!\n` +
+        match.rounds.map(round => `Round ${round.round}: ${round.winner === "challenger" ? `**<@${challenge.challengerId}>**` : `**<@${challenge.opponentId}>**`} venceu`).join("\n") +
+        `\n\n🏆 <@${winnerId}> venceu por ${match.challengerRounds} a ${match.opponentRounds}!\n` +
         `💥 <@${loserId}> perdeu por pouco.`
       );
 

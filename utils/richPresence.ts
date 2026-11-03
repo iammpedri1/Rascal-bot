@@ -21,7 +21,7 @@ const ACTIVITIES = [
     name: "os rankings da comunidade",
     type: ActivityType.Watching,
     details: "Mensagens, voz e cookies",
-    state: "Consulte /rank e /rankmensagens",
+    state: "Consulte /ranking",
   },
   {
     name: "com a comunidade",
@@ -45,7 +45,7 @@ const ACTIVITIES = [
     name: "a atividade do servidor",
     type: ActivityType.Watching,
     details: "Participação por mensagens, voz e transmissão",
-    state: "/rankmensagens • /rankvoz • /ranktransmissao",
+    state: "/ranking • escolha uma categoria",
   },
   {
     name: "com seus cookies",

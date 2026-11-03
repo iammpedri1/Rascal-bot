@@ -274,7 +274,7 @@ function guildRoleOffers(guild, kind) {
 
 function vipBenefitsFor(roleOrOffer) {
   const benefitPercent = vipBenefitPercent(roleOrOffer);
-  return `+${benefitPercent}% em cookies no /daily, /trabalhar e /bonus; acesso ao Mercado Negro VIP.`;
+  return `+${benefitPercent}% em cookies no /daily, /trabalhar e /bonus.`;
 }
 
 const SHOP_ITEMS = [...COLOR_ITEMS, ...VIP_ITEMS, ...BOOST_ITEMS, ...UTILITY_ITEMS];

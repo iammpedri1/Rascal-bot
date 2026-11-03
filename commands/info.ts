@@ -10,21 +10,20 @@ function buildCookiesEmbed(interaction) {
     .setDescription([
       `${icon("info", "❓")}  » **Como consigo ganhar cookies?**`,
       `> • Resgatando **/daily**: 900 a 1.800 cookies; a cada 5 dias seguidos há um bônus de 1.000 a 3.000.`,
-      `> • Trabalhando com **/trabalhar**: 250 a 950 cookies antes dos bônus. Uma falha pode gerar uma multa de até 700.`,
-      `> • Coletando **/bonus**: 150 a 450 cookies uma vez por semana.`,
+      `> • Trabalhando com **/trabalhar**: 500 a 2.200 cookies antes dos bônus. Uma falha pode gerar uma multa de até 500.`,
+      `> • Coletando **/bonus**: 150 a 450 cookies a cada 7 dias.`,
       `> • Ficando em voz sem mute: receba de 1 a 5 cookies a cada 10 minutos.`,
-      `> • Ficando no top 3 semanal de **/rankmensagens**, **/rankvoz** ou **/ranktransmissao**: ganhe 15.000, 10.000 ou 5.000 cookies.`,
+      `> • Ficando no top 3 semanal de mensagens, voz ou transmissão em **/ranking**: ganhe 15.000, 10.000 ou 5.000 cookies.`,
       `> • No primeiro boost do servidor: bônus único de 25.000 e multiplicador permanente x2 no **/daily**.`,
-      `> • Tentando **/roubar @usuario**: um roubo bem-sucedido leva de 8% a 20% do saldo da pessoa; se for pego, você pode ser preso.`,
+      `> • Tentando **/roubar @usuario**: um roubo bem-sucedido leva de 8% a 20% do saldo da pessoa; uma tentativa frustrada pode custar até 500 cookies.`,
       `> • Apostando em **/cara-ou-coroa**, **/jokenpo** e **/rifa**. Jogos também podem resultar em perda.`,
       "",
       `${icon("info", "❓")}  » **Como posso gastar meus cookies?**`,
-      "> • Comprando cores, VIPs e aceleradores em **/loja**; a aba do Mercado Negro é exclusiva para VIPs.",
+      "> • Comprando cores, VIPs e aceleradores em **/loja**.",
       "> • Comprando uma **/raspadinha** por 500 cookies ou bilhetes da **/loteria**; metade de cada bilhete aumenta o prêmio semanal.",
       "> • Enviando cookies para outra pessoa com **/cookies pagar**.",
       "> • Fazendo apostas em **/cara-ou-coroa**, **/jokenpo** ou **/rifa**; você pode perder a aposta.",
-      "> • Pagando a fiança com **/fianca** para sair da prisão antes do prazo.",
-      "> • A taxa de inatividade é 1% a cada 25 dias sem **/daily**; a taxa mensal é 2%. Nitro Boost isenta da taxa mensal.",
+      "> • A taxa de inatividade é 1% do saldo acima de 500 cookies a cada 25 dias sem **/daily** (até 250 cookies); a taxa mensal é 2%. Nitro Boost isenta da taxa mensal.",
     ].join("\n"));
 
   setBrandFooter(embed, interaction.client, "economia de cookies");
@@ -47,7 +46,7 @@ function buildVipsEmbed(interaction) {
     })
     .setTitle(`${icon("owner", "⭐")} VIPs disponíveis`)
     .setThumbnail(guild.iconURL({ size: 256 }) || interaction.client.user.displayAvatarURL({ size: 256 }))
-    .setDescription("Os VIPs dão bônus reais às recompensas da economia durante o período ativo e liberam o Mercado Negro.")
+    .setDescription("Os VIPs dão bônus reais às recompensas da economia durante o período ativo.")
     .addFields({ name: `${icon("roles", "🎭")} VIPs DESTE SERVIDOR · 1 mês`, value: roleDetails, inline: false });
   setBrandFooter(embed, interaction.client, `/loja · ${guild.name}`);
   return embed;

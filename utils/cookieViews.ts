@@ -3,6 +3,9 @@ const { EmbedBuilder } = require("discord.js");
 const emoji = require("./emojis");
 const cooldowns = require("./cooldowns");
 const { randomColor } = require("./embedStyle");
+const WORK_SUCCESS_COLOR = 0x8b5cf6;
+const WORK_FAILURE_COLOR = 0xb8d77a;
+const BONUS_SUCCESS_COLOR = 0x8b5cf6;
 
 const ICONS = {
   get COOKIE_EMOJI() { return emoji.cookie || "\uD83C\uDF6A"; },
@@ -137,7 +140,7 @@ function buildDailyEmbed(source, result) {
     .setDescription(
       [
         `${ICONS.COOKIE_EMOJI} \u00bb Hoje você coletou **${amount(result.reward)} cookies!**`,
-        `${emoji.trophy || "🐤"} \u00bb Sequência atual: **${result.streak} dia${result.streak === 1 ? "" : "s"}** 🔥`,
+        `<a:yes:1507835785334751375> \u00bb Sequência atual: **${result.streak} dia${result.streak === 1 ? "" : "s"}** 🔥`,
         `${streakProgress}/5 ${streakBar}`,
         ...(result.milestoneReward ? [`${ICONS.GIFT_EMOJI} \u00bb Bônus da sequência: **+${amount(result.milestoneReward)} cookies**.`] : []),
         ...(result.perkBonus ? [`${ICONS.GIFT_EMOJI} \u00bb Seus benefícios adicionaram **${amount(result.perkBonus)} cookies**.`] : []),
@@ -145,7 +148,7 @@ function buildDailyEmbed(source, result) {
         "",
         `${ICONS.COOKIE_EMOJI} \u00bb Saldo atual: **${amount(result.profile.balance)} cookies.**`,
         "",
-        `${ICONS.HAPPY_EMOJI} \u00bb **Dica:** ${pick(dailyTips)}`,
+        `<:in_exlamacao1:1499799249393811616> \u00bb **Dica:** ${pick(dailyTips)}`,
       ].join("\n")
     );
 
@@ -158,41 +161,36 @@ function buildDailyCooldownEmbed(source, result) {
 
 function buildWorkEmbed(source, result) {
   if (!result.success) {
-    const reason = String(result.reason || pick(workFailReasons))
-      .replace(/^por\s+/i, "")
-      .replace(/[.]+$/, "");
-    const description = [
-      `${peepSad()} \u00bb Hoje você foi pro trabalho, mas foi despedido(a)!`,
-      "",
-      result.loss > 0
-        ? `E saiu no prejuízo... Você teve que pagar **${amount(result.loss)} cookies** para sua antiga empresa por **${reason}**.`
-        : `E saiu no prejuízo... Você foi despedido(a) por **${reason}**, mas não tinha cookies para pagar a multa.`,
-      "",
-      `${ICONS.CALM_EMOJI} \u00bb Se acalme! Tudo ficará bem. Tente novamente mais tarde para arranjar outro trabalho.`,
-      "",
-      `${peepSad()} \u00bb Veja outras formas de ganhar cookies em **/info cookies**.`,
-    ];
-
     return finish(new EmbedBuilder()
-      .setColor(randomColor())
-      .setTitle(`${ICONS.WORK_EMOJI} TRABALHANDO NA FIRMA ${ICONS.WORK_EMOJI}`)
+      .setColor(WORK_FAILURE_COLOR)
+      .setTitle(`<a:work:1564005889973944431> TRABALHANDO NA FIRMA <a:work:1564005889973944431>`)
       .setThumbnail(emojiImageUrl(peepSad()) || thumbnailFor(source, sadThumbnails()))
-      .setDescription(description.join("\n")), source);
+      .setDescription([
+        `${peepSad()} \u00bb Hoje você foi pro trabalho, mas foi **despedido(a)!**`,
+        "",
+        result.loss > 0
+          ? `E saiu no prejuízo... Você teve que pagar **${amount(result.loss)} cookies** para sua antiga empresa **por danos morais ao estabelecimento.**`
+          : "E saiu no prejuízo... Você foi despedido(a), mas não tinha cookies para pagar a multa.",
+        "",
+        `${ICONS.CALM_EMOJI} \u00bb Se acalme! Tudo ficará bem! Tente novamente mais tarde\npara tentar arranjar outro trabalho.`,
+        "",
+        `${peepSad()} \u00bb Para você ver o que mais pode fazê-lo ganhar cookies, use\n↳ **/info cookies** em ${emoji.getEmoji("slashCommand", "📋")} \u00b7 **comandos**.`,
+      ].join("\n")), source);
   }
 
   const embed = new EmbedBuilder()
-    .setColor(randomColor())
-    .setTitle(`${ICONS.WORK_EMOJI} TRABALHANDO NA FIRMA ${ICONS.WORK_EMOJI}`)
+    .setColor(WORK_SUCCESS_COLOR)
+    .setTitle(`${pandHappy()} TRABALHANDO NA FIRMA ${pandHappy()}`)
     .setThumbnail(emojiImageUrl(peepHappy()) || thumbnailFor(source, workThumbnails()))
     .setDescription(
       [
-        `${pandHappy()} \u00bb Parabéns! Você acaba de realizar um trabalho!`,
+        `${ICONS.WORK_EMOJI} \u00bb Parabéns! Você acaba de realizar um trabalho!`,
         "",
-        `${ICONS.WORK_EMOJI} \u00bb Você trabalhou como **${result.job || pick(workSuccessMessages)}** e ganhou **${amount(result.reward)} cookies**${result.perkBonus ? ` (inclui +${amount(result.perkBonus)} de bônus)` : ""}!`,
+        `${emoji.getEmoji("peep_happy", "🐭")} \u00bb Você trabalhou como **${result.job || pick(workSuccessMessages)}** e ganhou **${amount(result.reward)} cookies**!`,
         "",
-        `${ICONS.COOKIE_EMOJI} \u00bb Agora você possui: **${amount(result.profile.balance)} cookies.**`,
+        `${ICONS.COOKIE_EMOJI} \u00bb Agora você possui: **${amount(result.profile.balance)} cookies**.`,
         "",
-        `${peepHappy()} \u00bb Veja o que pode fazer com seus cookies!\n↳ Use **/info cookies** para explorar a economia.`,
+        `${peepHappy()} \u00bb Veja o que pode fazer com seus cookies!\n↳ Use **/info cookies** em ${emoji.getEmoji("slashCommand", "📋")} \u00b7 **comandos**.`,
       ].join("\n")
     );
 
@@ -205,12 +203,12 @@ function buildWorkCooldownEmbed(source, result) {
 
 function buildBonusEmbed(source, result) {
   const embed = new EmbedBuilder()
-    .setColor(randomColor())
-    .setTitle(`${ICONS.GIFT_EMOJI} B\u00f4nus semanal resgatado`)
+    .setColor(BONUS_SUCCESS_COLOR)
+    .setTitle(`${emoji.correct} \u00bb B\u00f4nus semanal resgatado com sucesso!`)
     .setThumbnail(thumbnailFor(source, [emojiImageUrl(emoji.gift), emojiImageUrl(emoji.cookie), emojiImageUrl(emoji.party)].filter(Boolean)))
     .setDescription(
       [
-        `${emoji.correct} \u00bb Voc\u00ea recebeu **${amount(result.reward)} cookies**.`,
+        `${ICONS.GIFT_EMOJI} \u00bb Voc\u00ea recebeu **${amount(result.reward)} cookies**!`,
         ...(result.perkBonus ? [`${ICONS.GIFT_EMOJI} \u00bb Seus benefícios adicionaram **${amount(result.perkBonus)} cookies**.`] : []),
         `${ICONS.COOKIE_EMOJI} \u00bb Saldo atual: **${amount(result.profile.balance)} cookies**.`,
         `${ICONS.CLOCK_EMOJI} \u00bb Pr\u00f3ximo resgate ${timestamp(result.nextAt)}.`,
@@ -238,28 +236,17 @@ function currentTimeLabel() {
 function buildRobEmbed(source, target, result) {
   const user = sourceUser(source);
 
-  if (result.protected) {
-    return new EmbedBuilder()
-      .setColor(randomColor())
-      .setTitle(`${pandPolice()} TENTATIVA BLOQUEADA ${pandPolice()}`)
-      .setThumbnail(emojiImageUrl(pandPolice()) || user?.displayAvatarURL?.({ size: 256 }))
-      .setDescription([
-        `${pandPolice()} \u00bb A Câmera de Segurança de <@${target.id}> bloqueou o roubo e foi consumida.`,
-        `${ICONS.CLOCK_EMOJI} \u00bb O próximo /roubar ficará disponível ${timestamp(result.nextAt)}.`,
-      ].join("\n"));
-  }
-
   if (result.success) {
     return new EmbedBuilder()
       .setColor(randomColor())
-      .setTitle(`${pandHappy()} ROUBO BEM-SUCEDIDO ${pandHappy()}`)
+      .setTitle(`${pandHappy()} \u00bb ROUBO BEM-SUCEDIDO ${pandHappy()}`)
       .setThumbnail(emojiImageUrl(peepHappy()) || emojiImageUrl(pandHappy()) || user?.displayAvatarURL?.({ size: 256 }))
       .setDescription(
         [
-          `${peepHappy()} \u00bb <@${user.id}> conseguiu roubar **${amount(result.stolen)} cookies** de <@${target.id}>!`,
-          ...(result.crowbarUsed ? [`${pandHappy()} \u00bb Pé de Cabra consumido; chance de sucesso aumentada para **${Math.round(result.chance * 100)}%**.`] : []),
+          `${pandHappy()} \u00bb <@${user.id}> conseguiu roubar **${amount(result.stolen)} cookies** de <@${target.id}>!`,
           "",
-          `${ICONS.COOKIE_EMOJI} \u00bb Seu saldo: **${amount(result.thief?.balance)}** · saldo de <@${target.id}>: **${amount(result.target?.balance)}**.`,
+          `${ICONS.COOKIE_EMOJI} \u00bb Agora você possui **${amount(result.thief?.balance)} cookies**.`,
+          `${pandHappy()} \u00bb A operação foi concluída sem chamar a polícia.`,
           "",
           `Hoje às ${currentTimeLabel()}`,
         ].join("\n")
@@ -268,15 +255,14 @@ function buildRobEmbed(source, target, result) {
 
   return new EmbedBuilder()
     .setColor(randomColor())
-    .setTitle(`${pandPolice()} ROUBO FRUSTRADO ${pandPolice()}`)
-    .setThumbnail(emojiImageUrl(peepSad()) || user?.displayAvatarURL?.({ size: 256 }))
+    .setTitle(`${pandPolice()} \u00bb TENTATIVA DE ROUBO FRUSTRADA`)
+    .setThumbnail(emojiImageUrl(pandPolice()) || emojiImageUrl(peepSad()) || user?.displayAvatarURL?.({ size: 256 }))
     .setDescription(
       [
-        `${pandPolice()} \u00bb <@${user.id}> tentou roubar <@${target.id}>, mas foi pego(a)!`,
+        `${pandPolice()} \u00bb <@${user.id}> tentou roubar <@${target.id}> e acabou sendo pego(a) pela polícia!`,
         "",
-        `${ICONS.COOKIE_EMOJI} \u00bb A polícia apreendeu **${amount(result.penalty)} cookies** como penalidade.`,
-        `${pandPolice()} \u00bb Você ficará preso(a) até ${timestamp(result.jail?.releaseAt)}. Fiança: **${amount(result.jail?.bailAmount)} cookies**${result.lawyerUsed ? " (Advogado reduziu o valor)" : ""}.`,
-        ...(result.crowbarUsed ? [`${pandHappy()} \u00bb O Pé de Cabra foi consumido; sua chance era **${Math.round(result.chance * 100)}%**.`] : []),
+        `${ICONS.COOKIE_EMOJI} \u00bb Você perdeu **${amount(result.penalty)} cookies** como penalidade.`,
+        `${pandPolice()} \u00bb A tentativa falhou e uma penalidade foi aplicada.`,
         `${ICONS.COOKIE_EMOJI} \u00bb Saldo atual: **${amount(result.thief?.balance)} cookies**.`,
         "",
         `Hoje às ${currentTimeLabel()}`,

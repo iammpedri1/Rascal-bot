@@ -1,10 +1,11 @@
-import { SlashCommandBuilder } from "discord.js";
+import { ButtonStyle, SlashCommandBuilder } from "discord.js";
 import { defineCommand } from "../types/command";
 import type { CommandChatInputInteraction } from "../types/command";
 import type { Logger } from "../types/logger";
 import { activeGames } from "../utils/activeGames";
 import { refundGameBets, reserveStakes, resolveGame } from "../utils/gameEconomy";
-import { contextFor, formatCookies, gameEmbed, icon, LOSS_COLOR, WIN_COLOR } from "../utils/gameUi";
+import { betAgainstHouseOutcome, betAgainstHousePayout, HOUSE_PAYOUT_MULTIPLIER, HOUSE_WIN_CHANCE_PERCENT } from "../utils/gameRules";
+import { buttonRow, contextFor, formatCookies, gameButton, gameEmbed, icon, LOSS_COLOR, WIN_COLOR } from "../utils/gameUi";
 
 const { randomUUID, randomInt } = require("node:crypto") as typeof import("node:crypto");
 const { setTimeout: delay } = require("node:timers/promises") as typeof import("node:timers/promises");
@@ -53,13 +54,14 @@ async function executeBet(interaction: CommandChatInputInteraction): Promise<voi
     await interaction.editReply({
       embeds: [gameEmbed(
         `${icon("roulette", "🎰")} A banca está girando...`,
-        `${interaction.user} apostou **${formatCookies(amount)} cookies**.\n\n${icon("sparkles", "✨")} Boa sorte!`,
+        `${interaction.user} apostou **${formatCookies(amount)} cookies**.\n\n${icon("sparkles", "✨")} Boa sorte!\nChance de vitória: **${HOUSE_WIN_CHANCE_PERCENT}%** · retorno de **${HOUSE_PAYOUT_MULTIPLIER}x** na vitória.`,
       )],
     });
 
     await delay(1_400);
-    const won = randomInt(100) < 46;
-    const payout = won ? amount * 2 : 0;
+    const outcome = betAgainstHouseOutcome(randomInt(100));
+    const won = outcome === "win";
+    const payout = betAgainstHousePayout(outcome, amount);
     const result = resolveGame(gameId, [{
       userId,
       username: interaction.user.username,
@@ -87,7 +89,10 @@ async function executeBet(interaction: CommandChatInputInteraction): Promise<voi
       )
       .setImage(won ? BET_RESULT_GIFS.win : BET_RESULT_GIFS.loss);
 
-    await interaction.editReply({ embeds: [resultEmbed] });
+    await interaction.editReply({
+      embeds: [resultEmbed],
+      components: [buttonRow(gameButton(`apostar|jogar_novamente|${amount}`, "Apostar novamente", "revanche", "🔁", ButtonStyle.Secondary))],
+    });
   } catch (error) {
     logger.error("Erro no minijogo /apostar", error, { userId, gameId });
     if (stakeReserved && !settled) {
@@ -120,5 +125,22 @@ module.exports = defineCommand({
       .setMaxValue(1_000_000_000)),
   async execute(interaction) {
     await executeBet(interaction);
+  },
+
+  async handleButton(interaction) {
+    const [command, action, amountRaw] = interaction.customId.split("|");
+    if (command !== "apostar" || action !== "jogar_novamente") return;
+
+    const amount = Number(amountRaw);
+    if (!Number.isFinite(amount) || amount < 1) {
+      return interaction.reply({
+        content: "Não consegui apostar novamente.",
+        flags: 64,
+      });
+    }
+
+    const replay = Object.create(interaction);
+    replay.options = { getInteger: () => amount };
+    return module.exports.execute(replay);
   },
 });

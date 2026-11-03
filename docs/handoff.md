@@ -35,11 +35,12 @@ Detalhes de serviço local e hospedagem em [linux-24h.md](linux-24h.md).
 
 ## Estado atual
 
-- Economia de cookies com `/daily` (com bônus aleatório a cada 5 dias de sequência), `/streak`, `/work`, `/bonus`, `/roubar`, `/transferir`, `/apostar`, rifa, loteria semanal, raspadinha, mercado negro e loja de cargos.
+- Economia de cookies com `/daily` (com bônus aleatório a cada 5 dias de sequência), `/streak`, `/work`, `/bonus`, `/roubar`, `/transferir`, `/apostar`, rifa, loteria semanal, raspadinha e loja de cargos.
 - Taxas: por inatividade (a cada 25 dias sem `/daily`) e mensal de 2% (isenta Nitro Boost).
 - Recompensa por atividade em voz (1–5 cookies a cada 10 minutos sem mute) e rankings (mensagens, voz, transmissões).
 - Emojis vindos do **Discord Developer** com cache (a aplicação carregou 163 emojis); embeds com cores aleatórias.
 - `/transacoes` refatorado: a formatação, os estilos e a paginação saíram para `utils/transactionHistory.ts` (funções puras, cobertas por `test/transactionHistory.test.ts`), e o botão passou a tratar IDs malformados com mensagem amigável.
+- `/ranking` unifica os rankings de cookies, mensagens, voz e transmissão em uma tela inicial com botões, paginação e atualização.
 - Limpeza de dados de usuários 365 dias após a saída do servidor.
 
 Validado neste handoff: `npm test` → **35 testes, 0 falhas**; `npm run typecheck:strict` limpo.
@@ -50,7 +51,7 @@ Validado neste handoff: `npm test` → **35 testes, 0 falhas**; `npm run typeche
 | --- | --- | --- |
 | 1 | `/ship`: badge com a identidade do Rascal | Refazer a badge a partir das imagens de referência que o usuário enviou no Codex e validar o resultado com ele. |
 | 2 | `/ship`: erro **10062** (interação desconhecida/expirada) | Reproduzir e medir o tempo até responder; se passar de 3 s, usar `deferReply`/`deferUpdate` antes de gerar o canvas. |
-| 3 | Revisão visual de `/menu`, `/userinfo`, `/ping`, `/botinfo`, `/serverinfo`, `/streak` | Padronizar com `core/InteractionResponseFormatter.ts` + `utils/embedStyle.ts`; conferir uso dos emojis do Discord Developer. |
+| 3 | Revisão visual de `/userinfo`, `/ping`, `/botinfo`, `/serverinfo`, `/streak` | Padronizar com `core/InteractionResponseFormatter.ts` + `utils/embedStyle.ts`; conferir uso dos emojis do Discord Developer. |
 | 4 | `/daily` notificando "trabalhar" | Trocar por botão de notificação por ação (decisão de UX pendente com o usuário). |
 | 5 | Confirmar intents no Discord Developer Portal (*Server Members* e *Message Content*) | Verificar no portal que ambos estão habilitados; sem eles, membros/mensagens não chegam aos eventos. |
 | 6 | Duas instâncias do bot disputando interações | Definir um único processo (VS Code **ou** serviço systemd) e encerrar o outro antes de testar. |

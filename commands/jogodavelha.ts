@@ -8,7 +8,7 @@ import {
   type Message,
 } from "discord.js";
 import { defineCommand } from "../types/command";
-import type { CommandChatInputInteraction } from "../types/command";
+import type { CommandButtonInteraction, CommandChatInputInteraction } from "../types/command";
 import type { Logger } from "../types/logger";
 import { activeGames } from "../utils/activeGames";
 import { refundGameBets, reserveStakes, resolveGame } from "../utils/gameEconomy";
@@ -24,29 +24,19 @@ import {
   WIN_COLOR,
   DRAW_COLOR,
 } from "../utils/gameUi";
+import { ticTacToeIsFull, ticTacToeWinner, ticTacToeWinningLine, flipCoinSide } from "../utils/gameRules";
+import type { TicTacToeCell, TicTacToeMark } from "../utils/gameRules";
 
 const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
 const logger = require("../utils/logger") as Logger;
 const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
 
-type Mark = "x" | "o";
-type Cell = Mark | null;
-
-const WINNING_LINES: readonly (readonly number[])[] = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8],
-  [0, 3, 6], [1, 4, 7], [2, 5, 8],
-  [0, 4, 8], [2, 4, 6],
-];
-
-function winnerOf(board: readonly Cell[]): Mark | null {
-  for (const [first, second, third] of WINNING_LINES) {
-    const mark = board[first];
-    if (mark && mark === board[second] && mark === board[third]) return mark;
-  }
-  return null;
-}
-
-function boardRows(gameId: string, board: readonly Cell[], disabled: boolean): ActionRowBuilder<ButtonBuilder>[] {
+function boardRows(
+  gameId: string,
+  board: readonly TicTacToeCell[],
+  disabled: boolean,
+  winningCells: ReadonlySet<number> = new Set(),
+): ActionRowBuilder<ButtonBuilder>[] {
   return [0, 1, 2].map((row) => {
     const buttons = [0, 1, 2].map((column) => {
       const index = row * 3 + column;
@@ -56,6 +46,9 @@ function boardRows(gameId: string, board: readonly Cell[], disabled: boolean): A
         .setLabel(mark === "x" ? "X" : mark === "o" ? "O" : "·")
         .setStyle(mark === "x" ? ButtonStyle.Primary : mark === "o" ? ButtonStyle.Danger : ButtonStyle.Secondary)
         .setDisabled(disabled || mark !== null);
+      if (winningCells.has(index)) {
+        return button.setStyle(ButtonStyle.Success).setEmoji(emoji.toComponentEmoji(icon("trophy", "⭐")));
+      }
       if (mark === "x") return button.setEmoji(emoji.toComponentEmoji(icon("cross", "❌")));
       if (mark === "o") return button.setEmoji(emoji.toComponentEmoji(icon("circle", "⭕")));
       return button;
@@ -64,13 +57,20 @@ function boardRows(gameId: string, board: readonly Cell[], disabled: boolean): A
   });
 }
 
-function playerFor(mark: Mark, challengerId: string, opponentId: string): string {
-  return mark === "x" ? challengerId : opponentId;
-}
-
 async function executeTicTacToe(interaction: CommandChatInputInteraction): Promise<void> {
   const opponent = interaction.options.getUser("usuario", true);
   const challenger = interaction.user;
+  const xPlayerId = flipCoinSide() === "cara" ? challenger.id : opponent.id;
+  const oPlayerId = xPlayerId === challenger.id ? opponent.id : challenger.id;
+
+  function playerIdFor(mark: TicTacToeMark): string {
+    return mark === "x" ? xPlayerId : oPlayerId;
+  }
+
+  function playerNameFor(mark: TicTacToeMark): string {
+    return playerIdFor(mark) === challenger.id ? challenger.username : opponent.username;
+  }
+
   const bet = interaction.options.getInteger("aposta") ?? 0;
   const gameId = randomUUID();
   const context = contextFor(interaction);
@@ -88,9 +88,9 @@ async function executeTicTacToe(interaction: CommandChatInputInteraction): Promi
     return;
   }
 
-  const board: Cell[] = Array<Cell>(9).fill(null);
+  const board: TicTacToeCell[] = Array<TicTacToeCell>(9).fill(null);
   let phase: "invite" | "playing" = "invite";
-  let currentMark: Mark = "x";
+  let currentMark: TicTacToeMark = "x";
   let stakeReserved = false;
   let settled = false;
   let finished = false;
@@ -105,7 +105,7 @@ async function executeTicTacToe(interaction: CommandChatInputInteraction): Promi
         [
           `${challenger} desafiou ${opponent}.`,
           bet > 0 ? `${icon("cookie", "🍪")} Aposta por jogador: **${formatCookies(bet)} cookies**.` : "Partida amistosa, sem aposta.",
-          `${opponent}, aceite para iniciar. O desafiante joga com X.`,
+          `${opponent}, aceite para iniciar.\n${icon("cross", "❌")} <@${xPlayerId}> joga com X.\n${icon("circle", "⭕")} <@${oPlayerId}> joga com O.`,
         ].join("\n\n"),
       )],
       components: [buttonRow(
@@ -171,8 +171,8 @@ async function executeTicTacToe(interaction: CommandChatInputInteraction): Promi
           await button.update({
             content: "",
             embeds: [gameEmbed(
-              `${icon("gamesIcon", "🎮")} É a vez de ${challenger.username}`,
-              `${icon("cross", "❌")} ${challenger} joga com X.\n${icon("circle", "⭕")} ${opponent} joga com O.\n\n` +
+              `${icon("gamesIcon", "🎮")} É a vez de ${playerNameFor(currentMark)}`,
+              `${icon("cross", "❌")} <@${xPlayerId}> joga com X.\n${icon("circle", "⭕")} <@${oPlayerId}> joga com O.\n\n` +
                 (bet > 0 ? `Prêmio: **${formatCookies(bet * 2)} cookies**.` : "Faça três em linha para vencer."),
             )],
             components: boardRows(gameId, board, false),
@@ -181,7 +181,7 @@ async function executeTicTacToe(interaction: CommandChatInputInteraction): Promi
         }
 
         if (phase !== "playing" || action !== "celula") return;
-        const expectedUser = playerFor(currentMark, challenger.id, opponent.id);
+        const expectedUser = playerIdFor(currentMark);
         if (button.user.id !== expectedUser) {
           await button.reply({ content: "Ainda não é a sua vez.", flags: 64 });
           return;
@@ -193,10 +193,12 @@ async function executeTicTacToe(interaction: CommandChatInputInteraction): Promi
         }
 
         board[index] = currentMark;
-        const winner = winnerOf(board);
-        const draw = !winner && board.every((cell) => cell !== null);
+        const winner = ticTacToeWinner(board);
+        const draw = !winner && ticTacToeIsFull(board);
         if (winner || draw) {
-          const winningUser = winner ? playerFor(winner, challenger.id, opponent.id) : null;
+          const winningLine = ticTacToeWinningLine(board);
+          const winningCells = new Set(winningLine ?? []);
+          const winningUser = winner ? playerIdFor(winner) : null;
           let balances: ReturnType<typeof resolveGame> = [];
           if (stakeReserved) {
             balances = resolveGame(gameId, winner
@@ -232,17 +234,20 @@ async function executeTicTacToe(interaction: CommandChatInputInteraction): Promi
           ].join("\n\n");
           await button.update({
             embeds: [gameEmbed("Jogo da velha · Resultado", description, winner ? WIN_COLOR : DRAW_COLOR)],
-            components: boardRows(gameId, board, true),
+            components: [
+              ...boardRows(gameId, board, true, winningCells),
+              buttonRow(gameButton(`jogodavelha|revanche|${challenger.id}|${opponent.id}|${bet}`, "Revanche", "revanche", "🔁", ButtonStyle.Secondary)),
+            ],
           });
           activeGames.releaseGame(gameId);
           return;
         }
 
         currentMark = currentMark === "x" ? "o" : "x";
-        const nextId = playerFor(currentMark, challenger.id, opponent.id);
+        const nextId = playerIdFor(currentMark);
         await button.update({
           embeds: [gameEmbed(
-            `${icon("gamesIcon", "🎮")} É a vez de ${currentMark === "x" ? challenger.username : opponent.username}`,
+            `${icon("gamesIcon", "🎮")} É a vez de ${playerNameFor(currentMark)}`,
             `${icon(currentMark === "x" ? "cross" : "circle", currentMark === "x" ? "❌" : "⭕")} <@${nextId}> joga agora.`,
           )],
           components: boardRows(gameId, board, false),
@@ -313,5 +318,29 @@ module.exports = defineCommand({
       .setRequired(false)),
   async execute(interaction: CommandChatInputInteraction): Promise<void> {
     await executeTicTacToe(interaction);
+  },
+
+  async handleButton(interaction: CommandButtonInteraction): Promise<void> {
+    const [command, action, challengerId, opponentId, amountRaw] = interaction.customId.split("|");
+    if (command !== "jogodavelha" || action !== "revanche") return;
+
+    if (![challengerId, opponentId].includes(interaction.user.id)) {
+      await interaction.reply({ content: "Esta revanche pertence a outros jogadores.", flags: 64 });
+      return;
+    }
+
+    const nextOpponentId = interaction.user.id === challengerId ? opponentId : challengerId;
+    const opponent = await interaction.client.users.fetch(nextOpponentId).catch(() => null);
+    const bet = Number(amountRaw);
+
+    if (!opponent || !Number.isFinite(bet) || bet < 0) {
+      await interaction.reply({ content: "Não consegui iniciar a revanche.", flags: 64 });
+      return;
+    }
+
+    const rematch = Object.create(interaction);
+    rematch.options = { getUser: () => opponent, getInteger: () => bet };
+
+    await module.exports.execute(rematch);
   },
 });

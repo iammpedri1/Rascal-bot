@@ -2,8 +2,32 @@
 const db = require("./db");
 const cooldowns = require("./cooldowns");
 const { PRIMARY_GUILD_ID } = require("./primaryGuild");
-const blackMarket = require("./blackMarket") as typeof import("./blackMarket");
 const { COLOR_ITEMS, COOLDOWN_TARGETS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
+const {
+  normalRandom,
+  uniformRandomInt,
+  ROB_MIN_TARGET_BALANCE,
+  ROB_PENALTY_MAX,
+  ROB_PENALTY_MIN,
+  ROB_STEAL_MAX_PCT,
+  ROB_STEAL_MIN_PCT,
+  ROB_SUCCESS_CHANCE,
+  WORK_LOSS_MAX,
+  WORK_LOSS_MIN,
+  WORK_REWARD_MAX,
+  WORK_REWARD_MEAN,
+  WORK_REWARD_MIN,
+  WORK_SUCCESS_CHANCE,
+} = require("./gameRules");
+
+const ALLOWED_STATS = new Set([
+  "best_daily_streak", "bet_losses", "bet_wins", "biggest_win", "bonus_claims",
+  "cookies_lost", "cookies_won", "daily_claims", "daily_streak", "draws",
+  "games_played", "reps_given", "reputacao", "rifa_losses", "rifa_wins",
+  "rob_count", "rob_losses", "rob_wins",
+  "total_earned", "total_spent", "transferred_in", "transferred_out",
+  "transfers_received", "transfers_sent", "work_count",
+]);
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -17,20 +41,8 @@ const DAILY_MILESTONE_DAYS     = 5;
 const DAILY_MILESTONE_MIN      = 1000;
 const DAILY_MILESTONE_MAX      = 3000;
 
-// Work
-const WORK_MIN_REWARD         = 250;
-const WORK_MAX_REWARD         = 950;
-const WORK_MIN_LOSS           = 150;
-const WORK_MAX_LOSS           = 700;
-
-// Roubo — balanceado
-const ROB_MIN_TARGET_BALANCE  = 50;   // era 20 — evita roubar quem não tem nada
-const ROB_SUCCESS_CHANCE      = 0.45; // era 0.5 — levemente mais difícil
-const ROB_STEAL_MIN_PCT       = 8;    // era 5%
-const ROB_STEAL_MAX_PCT       = 20;   // era 15%
-const ROB_PENALTY_MIN         = 100;  // era 200 — penalidade mínima menor
-const ROB_PENALTY_MAX         = 500;  // era 800 — penalidade máxima menor
-const ROB_PENALTY_SCALE       = true; // penalidade proporcional ao saldo do ladrão
+// Work e Roubo: chances, faixas e distribuições vivem em gameRules
+// (módulo puro e testado), para manter a economia auditável.
 
 // Cooldowns
 const DAILY_COOLDOWN          = cooldowns.DURATIONS.daily;
@@ -119,6 +131,10 @@ function addBalance(userId, amount) {
 }
 
 function updateStats(userId, changes) {
+  const invalidColumns = Object.keys(changes).filter(column => !ALLOWED_STATS.has(column));
+  if (invalidColumns.length) {
+    throw new Error(`Estatísticas não permitidas: ${invalidColumns.join(", ")}`);
+  }
   const entries = Object.entries(changes).filter(([, value]) => integer(value) !== 0);
   if (!entries.length) return;
 
@@ -130,6 +146,9 @@ function updateStats(userId, changes) {
 }
 
 function setStat(userId, column, value) {
+  if (!ALLOWED_STATS.has(column)) {
+    throw new Error(`Estatística não permitida: ${column}`);
+  }
   db.prepare(`UPDATE usuarios SET ${column} = ?, updated_at = ? WHERE id = ?`)
     .run(integer(value), Date.now(), String(userId));
 }
@@ -368,7 +387,6 @@ function work(user, details = {}) {
       profile,
       remaining: cooldown.remaining,
       nextAt: cooldown.expiresAt,
-      nextAt: cooldown.expiresAt,
     };
   }
 
@@ -377,9 +395,9 @@ function work(user, details = {}) {
     const currentProfile = getById(profile.id);
     updateStats(profile.id, { work_count: 1 });
 
-    if (Math.random() >= 0.4) {
+    if (Math.random() >= WORK_SUCCESS_CHANCE) {
       // A multa nunca pode exceder o saldo que realmente existe.
-      const loss = Math.min(currentProfile.balance, randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS));
+      const loss = Math.min(currentProfile.balance, uniformRandomInt(WORK_LOSS_MIN, WORK_LOSS_MAX));
       if (loss > 0) {
         addBalance(profile.id, -loss);
         updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
@@ -400,7 +418,8 @@ function work(user, details = {}) {
       };
     }
 
-    const baseReward = randomAmount(WORK_MIN_REWARD, WORK_MAX_REWARD);
+    // Distribuição normal: valores perto de ~2.200 são mais comuns que os extremos.
+    const baseReward = Math.floor(normalRandom(WORK_REWARD_MIN, WORK_REWARD_MAX, WORK_REWARD_MEAN));
     const reward = applyCookieBonuses(profile.id, baseReward);
     addBalance(profile.id, reward);
     updateStats(profile.id, { cookies_won: reward, total_earned: reward });
@@ -469,9 +488,6 @@ function rob(thiefUser, targetUser, details = {}) {
     return { ok: false, reason: "self", thief, target };
   }
 
-  const prison = blackMarket.getActivePrisonStatus(thief.id);
-  if (prison) return { ok: false, reason: "prison", thief, target, prison };
-
   if (target.balance < ROB_MIN_TARGET_BALANCE) {
     return { ok: false, reason: "target_balance", thief, target };
   }
@@ -490,37 +506,12 @@ function rob(thiefUser, targetUser, details = {}) {
 
   return db.transaction(() => {
     const nextAt = cooldowns.consume(thief.id, "roubar");
-    const guildId = String(details.guildId || PRIMARY_GUILD_ID);
-    const cameraUsed = blackMarket.consumeInventoryItem(target.id, "camera");
     updateStats(thief.id, { rob_count: 1 });
-
-    if (cameraUsed) {
-      pushTransaction("rob_blocked", thief.id, 0, {
-        ...details,
-        targetId: target.id,
-        note: "O roubo foi bloqueado por uma câmera de segurança",
-      });
-      pushTransaction("rob_camera_protection", target.id, 0, {
-        ...details,
-        targetId: thief.id,
-        note: "Câmera de Segurança bloqueou uma tentativa de roubo",
-      });
-      return {
-        ok: true,
-        success: false,
-        protected: true,
-        thief: getById(thief.id),
-        target: getById(target.id),
-        nextAt,
-      };
-    }
-
-    const crowbarUsed = blackMarket.consumeInventoryItem(thief.id, "crowbar");
-    const chance = Math.min(0.95, ROB_SUCCESS_CHANCE + (crowbarUsed ? 0.1 : 0));
+    const chance = ROB_SUCCESS_CHANCE;
     const success = Math.random() < chance;
 
     if (success) {
-      const percent = randomAmount(ROB_STEAL_MIN_PCT, ROB_STEAL_MAX_PCT);
+      const percent = uniformRandomInt(ROB_STEAL_MIN_PCT, ROB_STEAL_MAX_PCT);
       const stolen = Math.max(1, Math.floor(target.balance * (percent / 100)));
 
       addBalance(target.id, -stolen);
@@ -530,7 +521,7 @@ function rob(thiefUser, targetUser, details = {}) {
       pushTransaction("rob_win", thief.id, stolen, {
         ...details,
         targetId: target.id,
-        note: `${percent}%${crowbarUsed ? "; pé de cabra" : ""}`,
+        note: `${percent}%`,
       });
       pushTransaction("rob_loss_target", target.id, -stolen, {
         ...details,
@@ -546,26 +537,18 @@ function rob(thiefUser, targetUser, details = {}) {
         stolen,
         percent,
         chance,
-        crowbarUsed,
         nextAt,
       };
     }
 
-    let penalty = randomAmount(ROB_PENALTY_MIN, ROB_PENALTY_MAX);
-    if (ROB_PENALTY_SCALE) {
-      const scaledMax = Math.max(ROB_PENALTY_MIN, Math.floor(thief.balance * 0.10));
-      penalty = Math.min(penalty, scaledMax, thief.balance);
-    }
-    penalty = Math.min(thief.balance, Math.max(0, penalty));
-    const lawyerUsed = blackMarket.consumeInventoryItem(thief.id, "lawyer");
-    const jail = blackMarket.recordRobberyJail(thief.id, guildId, Date.now(), lawyerUsed);
-
+    // Fiança/multa severa: retirada do próprio saldo (pode ficar negativo ou zerado).
+    const penalty = uniformRandomInt(ROB_PENALTY_MIN, ROB_PENALTY_MAX);
     addBalance(thief.id, -penalty);
     updateStats(thief.id, { rob_losses: 1, cookies_lost: penalty, total_spent: penalty });
     pushTransaction("rob_fail", thief.id, -penalty, {
       ...details,
       targetId: target.id,
-      note: `Pego${crowbarUsed ? " (pé de cabra consumido)" : ""}; preso por 3 horas; fiança de ${jail.bailAmount} cookies${lawyerUsed ? " (advogado aplicado)" : ""}`,
+      note: "Fiança após tentativa frustrada",
     });
 
     return {
@@ -574,9 +557,6 @@ function rob(thiefUser, targetUser, details = {}) {
       thief: getById(thief.id),
       target,
       penalty,
-      jail,
-      lawyerUsed,
-      crowbarUsed,
       nextAt,
     };
   })();
@@ -740,6 +720,7 @@ function getRank(limit = 10, type = "balance") {
     wins:    "bet_wins",
     played:  "games_played",
     profit:  "(cookies_won - cookies_lost)",
+    reputation: "reputacao",
   }[type] || "cookies";
 
   return db.prepare(`SELECT * FROM usuarios ORDER BY ${orderBy} DESC LIMIT ?`)
@@ -1059,12 +1040,12 @@ module.exports = {
   ROB_COOLDOWN,
   START_BALANCE,
   WORK_COOLDOWN,
-  WORK_MAX_REWARD,
-  WORK_MIN_REWARD,
+  WORK_SUCCESS_CHANCE,
   addBalance,
   activateCookieBoost,
   applyCookieBonuses,
   updateStats,
+  ALLOWED_STATS,
   pushTransaction,
   canBet,
   claimBonus,

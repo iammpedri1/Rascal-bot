@@ -26,14 +26,20 @@ function buildPage(interaction, requestedPage: number) {
   const current = clampPage(requestedPage, pages);
   const rows = getHistory(interaction.user, PAGE_SIZE, current * PAGE_SIZE) as TransactionRow[];
   const resolveEmoji = (name: string): string => emoji.getGuildEmoji(interaction.guild, name, "");
+
+  const description = [
+    rows.length
+      ? rows.map(row => describeTransaction(row, resolveEmoji)).join("\n\n")
+      : "Nenhuma transação foi registrada ainda.",
+    "",
+    `${emoji.application("clipboard", "📋")} \u00bb Página **${current + 1} de ${pages}** · Total: **${total.toLocaleString("pt-BR")} transações**.`,
+  ].join("\n");
+
   const embed = new EmbedBuilder()
     .setColor(randomColor())
-    .setTitle(`Transações de ${interaction.user.username}`)
+    .setTitle(`${emoji.application("moneyIcon", "💸")} \u00bb Transações de ${interaction.user.username}`)
     .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
-    .setDescription(rows.length
-      ? rows.map(row => describeTransaction(row, resolveEmoji)).join("\n\n")
-      : "Nenhuma transação foi registrada ainda.")
-    .setFooter({ text: `Página ${current + 1} de ${pages} · Quantidade de transações: ${total}` });
+    .setDescription(description);
 
   const buttons = new ActionRowBuilder().addComponents(
     emoji.setGuildButtonEmoji(new ButtonBuilder()
