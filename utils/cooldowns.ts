@@ -30,7 +30,7 @@ function formatDuration(ms) {
 }
 
 function get(userId, command) {
-  // Pular cooldown para o dono do bot (Owner bypass para testes)
+
   if (userId === process.env.OWNER_ID) return { ready: true, remaining: 0, expiresAt: 0 };
 
   const column = USER_COOLDOWN_COLUMNS[command];

@@ -1,4 +1,4 @@
-// Banco simulado em memória — troque pelas funções reais do seu banco de dados.
+
 const SALDO_INICIAL = 1_000;
 const saldos = new Map<string, number>();
 

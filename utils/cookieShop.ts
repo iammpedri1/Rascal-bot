@@ -100,7 +100,7 @@ const CHEST_ITEMS = [
   },
 ];
 
-// VIPs are server roles and are loaded from the primary guild at runtime.
+
 const VIP_ITEMS = [];
 
 const BOOST_ITEMS = [
@@ -193,7 +193,7 @@ function normalizedRoleName(roleName) {
 }
 
 function colorRoleNumber(roleName) {
-  // Cargos de cor do servidor seguem o padrão 🎨 ・1 até 🎨 ・15.
+
   const match = String(roleName || "").trim().match(/^🎨\s*[・·•]\s*(1[0-5]|[1-9])$/u);
   return match ? Number(match[1]) : null;
 }
@@ -278,7 +278,7 @@ function vipBenefitsFor(roleOrOffer) {
 }
 
 const SHOP_ITEMS = [...COLOR_ITEMS, ...VIP_ITEMS, ...BOOST_ITEMS, ...UTILITY_ITEMS];
-// Mantém itens antigos utilizáveis, sem oferecê-los no catálogo atual da loja.
+
 const SHOP_ITEMS_BY_ID = Object.fromEntries([...SHOP_ITEMS, ...CHEST_ITEMS].map(item => [item.id, item]));
 
 const COOLDOWN_TARGETS = [

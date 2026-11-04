@@ -14,7 +14,7 @@ const FONTE = '"Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-s
 const FUNDO = "./assets/fundo_raspadinha.png";
 
 const LARGURA_GRADE = TAMANHO_GRADE * CELULA + (TAMANHO_GRADE - 1) * ESPACO;
-// Coordenadas fixas da grade: centralizada no cartão.
+
 const GRADE_X = (CARTAO - LARGURA_GRADE) / 2;
 const GRADE_Y = (CARTAO - LARGURA_GRADE) / 2;
 
@@ -45,19 +45,19 @@ export async function renderizarCartao(grade: Grade): Promise<Buffer> {
   ctx.fillStyle = "#111827";
   ctx.fillRect(0, 0, CARTAO, CARTAO);
 
-  // Fundo opcional: se o PNG não existir, o fundo sólido acima continua valendo.
+
   if (existsSync(FUNDO)) {
     ctx.drawImage(await loadImage(FUNDO), 0, 0, CARTAO, CARTAO);
   }
 
-  // Fonte com fallback de emojis coloridos (Windows e Linux).
+
   ctx.font = `${Math.round(CELULA * 0.6)}px ${FONTE}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   grade.forEach((linha, row) => {
     linha.forEach((emoji, col) => {
-      // Tabela: x/y fixos por coluna/linha, com o espaçamento entre células.
+
       const x = GRADE_X + col * (CELULA + ESPACO);
       const y = GRADE_Y + row * (CELULA + ESPACO);
       ctx.fillStyle = "rgba(255, 255, 255, 0.14)";

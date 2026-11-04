@@ -29,7 +29,7 @@ const SYMBOLS: Record<string, { name: string; fallback: string }> = {
   palette: { name: "palette", fallback: "🎨" },
 };
 
-// Dimensões do cartão 3×3 (com banner "Raspadinha da Sorte") renderizado no canvas.
+
 const CARD_CELL = 168;
 const CARD_GAP = 14;
 const CARD_PADDING = 26;
@@ -71,7 +71,7 @@ function drawCoveredCell(ctx: SKRSContext2D, x: number, y: number, position: num
   ctx.fillStyle = gradient;
   ctx.fillRect(x, y, CARD_CELL, CARD_CELL);
 
-  // Textura de "raspadinha" (linhas diagonais bem sutis).
+
   ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
   ctx.lineWidth = 1;
   for (let offset = -CARD_CELL; offset < CARD_CELL; offset += 14) {
@@ -97,7 +97,7 @@ async function renderCardImage(game: ScratchGame): Promise<Buffer> {
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-  // Banner "Raspadinha da Sorte".
+
   const bannerWidth = CARD_WIDTH - CARD_PADDING * 2;
   const bannerGradient = ctx.createLinearGradient(CARD_PADDING, 0, CARD_PADDING + bannerWidth, 0);
   bannerGradient.addColorStop(0, "#ec4899");

@@ -28,8 +28,8 @@ test("slash command registry has unique schemas and excludes retired commands", 
 });
 
 test.after(() => {
-  // Fecha o handle do SQLite (WAL) antes de remover o diretório temporário;
-  // no Windows o arquivo aberto impede o rmSync com EPERM.
+
+
   db.close();
   fs.rmSync(temporaryDataDir, { recursive: true, force: true });
 });

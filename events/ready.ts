@@ -34,7 +34,7 @@ module.exports = {
       }
     };
 
-    // Carrega o mapa real antes de anunciar o bot como pronto; se a API falhar, o fallback mantém os comandos disponíveis.
+
     await refreshEmojis();
     logger.info("Cache de emojis da aplicação atualizado", { count: emoji.getEmojiCount() });
     logger.success(`Bot online como ${client.user.tag}`);
@@ -56,8 +56,8 @@ module.exports = {
         });
       }
     }
-    // Aplicações não recebem um evento gateway para emojis do Developer Portal.
-    // Uma consulta leve por minuto atualiza o cache sem envolver os comandos.
+
+
     const emojiRefreshTimer = setInterval(refreshEmojis, emoji.REFRESH_INTERVAL_MS);
     emojiRefreshTimer.unref?.();
 

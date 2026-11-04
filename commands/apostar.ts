@@ -12,7 +12,7 @@ const { setTimeout: delay } = require("node:timers/promises") as typeof import("
 const logger = require("../utils/logger") as Logger;
 const WON_EMOJI = "<a:Correct:1501637592817602630>";
 const LOST_EMOJI = "<a:Crossed:1501637659305705516>";
-// GIFs públicos do Tenor: jackpot (vitória) e perda de dinheiro (derrota).
+
 const BET_RESULT_GIFS = {
   win: "https://media1.tenor.com/m/hv0J_QfWhOYAAAAd/jackpot-casino.gif",
   loss: "https://media1.tenor.com/m/0pgJh8gr5IAAAAAd/down-bad-gambling.gif",

@@ -30,7 +30,7 @@ const { handleButton: handleCooldownNotification } = require("../utils/cooldownN
 const { createRateLimiter } = require("../utils/interactionRateLimit") as typeof import("../utils/interactionRateLimit");
 const logger = require("../utils/logger") as Logger;
 
-// Limite generoso: barra apenas flood de comandos, sem atrapalhar o uso normal.
+
 const commandRateLimiter = createRateLimiter({ max: 10, windowMs: 10_000 });
 
 type RepliableInteraction =

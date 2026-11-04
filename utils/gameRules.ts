@@ -1,6 +1,6 @@
-// Regras puras e determinísticas dos minijogos. Sem Discord.js nem banco de dados,
-// para que possam ser testadas de forma isolada. Mantenha estas funções livres de
-// efeitos colaterais: qualquer sorteio recebe a fonte de aleatoriedade por parâmetro.
+
+
+
 
 export type JokenpoMove = "pedra" | "papel" | "tesoura";
 export type DuelWinner = "challenger" | "opponent" | "draw";
@@ -60,7 +60,7 @@ export function oppositeSide(side: CoinSide): CoinSide {
   return side === "cara" ? "coroa" : "cara";
 }
 
-// Combinatória exata: C(n, k), estável para os valores usados nos minijogos.
+
 export function combinations(n: number, k: number): number {
   if (!Number.isInteger(n) || !Number.isInteger(k) || k < 0 || n < 0) return 0;
   if (k > n) return 0;
@@ -73,11 +73,11 @@ export function combinations(n: number, k: number): number {
   return result;
 }
 
-// Roleta-russa: revólver de 6 câmaras e probabilidade condicional sem reposição
-// (o tambor não é re-girado: 1/6 -> 1/5 -> 1/4 -> ... a cada câmara vazia).
+
+
 export const ROULETTE_CHAMBERS = 6;
 export const ROULETTE_HOUSE_EDGE = 0.05;
-// Vitória contra o bot: 1/P(sobreviver) = 2, com a taxa da casa de 5% => 1.9x.
+
 export const ROULETTE_DUEL_MULTIPLIER = (1 / 0.5) * (1 - ROULETTE_HOUSE_EDGE);
 
 export function rouletteChancePercent(chamber: number): number {
@@ -89,17 +89,17 @@ export function rouletteChancePercent(chamber: number): number {
 export function rouletteEstimatedPayout(stake: number, safePulls: number): number {
   const pulls = Math.max(0, Math.floor(safePulls));
   if (pulls === 0) return Math.max(0, Math.floor(stake));
-  // Sem re-giro: P(sobreviver a k puxadas) = (6-k)/6.
-  // Prêmio justo = inverso dessa probabilidade; aplica-se a taxa de 5% da casa.
+
+
   const remaining = Math.max(1, ROULETTE_CHAMBERS - pulls);
   const fairMultiplier = ROULETTE_CHAMBERS / remaining;
   return Math.floor(stake * fairMultiplier * (1 - ROULETTE_HOUSE_EDGE));
 }
 
-// Raspadinha: tabela de frequência para RTP exato de 93% (a casa retém 7%).
-// P(vitória) necessária = RTP / (prêmio / preço) = 0.93 / (10000/500) = 0.0465.
-// Com k cookies no grid, P = C(k,3)/C(9,3): 4 cookies => 4/84, 3 cookies => 1/84.
-// 4p + (1-p) = 84 * 0.0465 => p = 0.96866..., arredondado para 0.9687.
+
+
+
+
 export const SCRATCH_FOUR_COOKIE_PROBABILITY = 0.9687;
 
 export function scratchWinProbability(cookieCount: number): number {
@@ -122,23 +122,23 @@ export function rollScratchCookieCount(random: () => number = Math.random): 3 | 
   return random() < SCRATCH_FOUR_COOKIE_PROBABILITY ? 4 : 3;
 }
 
-// ─── Economia ativa: /trabalhar e /roubar ──────────────────────────────────────
 
-// Trabalho: 80% de sucesso e 20% de demissão.
+
+
 export const WORK_SUCCESS_CHANCE = 0.8;
-// Ganho com distribuição normal: média ~2.200 dentro de [1.500, 3.000].
+
 export const WORK_REWARD_MIN = 1_500;
 export const WORK_REWARD_MAX = 3_000;
 export const WORK_REWARD_MEAN = 2_200;
-// Prejuízo da demissão: uniforme entre 500 e 2.500.
+
 export const WORK_LOSS_MIN = 500;
 export const WORK_LOSS_MAX = 2_500;
 
-// Roubo: 40% de sucesso (vantagem para a casa/segurança pública).
+
 export const ROB_SUCCESS_CHANCE = 0.4;
 export const ROB_STEAL_MIN_PCT = 10;
 export const ROB_STEAL_MAX_PCT = 25;
-// Fiança/multa de 1.500 a 4.000 quando a tentativa falha.
+
 export const ROB_PENALTY_MIN = 1_500;
 export const ROB_PENALTY_MAX = 4_000;
 export const ROB_MIN_TARGET_BALANCE = 100;
@@ -175,7 +175,7 @@ export function uniformRandomInt(
 
 
 
-// Aposta contra a banca.
+
 export const HOUSE_WIN_CHANCE_PERCENT = 46;
 export const HOUSE_PAYOUT_MULTIPLIER = 2;
 
@@ -188,7 +188,7 @@ export function betAgainstHousePayout(outcome: "win" | "loss", amount: number): 
   return outcome === "win" ? amount * HOUSE_PAYOUT_MULTIPLIER : 0;
 }
 
-// Boxe: narrativa de rounds com resultado agregado.
+
 export type Boxer = "challenger" | "opponent";
 
 export interface BoxingRoundResult {

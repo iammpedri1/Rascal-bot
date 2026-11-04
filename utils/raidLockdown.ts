@@ -1,4 +1,4 @@
-// @ts-nocheck
+
 const { ChannelType, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const db = require("./db");
 const logger = require("./logger");
@@ -93,7 +93,7 @@ async function activateRaidLockdown(guild, { activatedBy = "anti-raid", reason =
         }, { reason: `Anti-raid: ${String(reason).slice(0, 400)}` });
         return true;
       } catch (error) {
-        failures.push({ channelId: channel.id, error: String(error?.message || error).slice(0, 180) });
+        failures.push({ channelId: channel.id, error: String(error instanceof Error ? error.message : error).slice(0, 180) });
         return false;
       }
     }));
@@ -105,7 +105,7 @@ async function activateRaidLockdown(guild, { activatedBy = "anti-raid", reason =
       await guild.setVerificationLevel(4, `Anti-raid: ${String(reason).slice(0, 400)}`);
       verificationChanged = true;
     } catch (error) {
-      failures.push({ channelId: "verification", error: String(error?.message || error).slice(0, 180) });
+      failures.push({ channelId: "verification", error: String(error instanceof Error ? error.message : error).slice(0, 180) });
     }
   }
 
@@ -126,7 +126,7 @@ async function activateRaidLockdown(guild, { activatedBy = "anti-raid", reason =
     content,
     embeds: [embed],
     allowedMentions: { roles: STAFF_ROLE_IDS },
-  }).catch(error => logger.warn("Falha ao publicar alerta de lockdown", { error: String(error?.message || error) }));
+  }).catch(error => logger.warn("Falha ao publicar alerta de lockdown", { error: String(error instanceof Error ? error.message : error) }));
 
   logger.warn("Lockdown anti-raid aplicado", { guildId: guild.id, channelCount: channels.length, failureCount: failures.length });
   return { alreadyActive: false, locked: channels.length - failures.filter(item => item.channelId !== "verification").length, failed: failures };
@@ -162,7 +162,7 @@ async function disableRaidLockdown(guild, actor = "staff") {
         .run(String(guild.id), String(row.channel_id));
       restored += 1;
     } catch (error) {
-      failures.push({ channelId: row.channel_id, error: String(error?.message || error).slice(0, 180) });
+      failures.push({ channelId: row.channel_id, error: String(error instanceof Error ? error.message : error).slice(0, 180) });
     }
   }
 
@@ -170,7 +170,7 @@ async function disableRaidLockdown(guild, actor = "staff") {
     try {
       await guild.setVerificationLevel(Number(lockdown.verification_level), `Lockdown anti-raid encerrado por ${actor}`);
     } catch (error) {
-      failures.push({ channelId: "verification", error: String(error?.message || error).slice(0, 180) });
+      failures.push({ channelId: "verification", error: String(error instanceof Error ? error.message : error).slice(0, 180) });
     }
   }
 

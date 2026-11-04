@@ -16,8 +16,8 @@ export const SCRATCH_TICKET_PRICE = 500;
 export const SCRATCH_COOKIE_PRIZE = 10_000;
 export const SCRATCH_GAME_TTL_MS = 15 * 60 * 1000;
 const COOKIE_SYMBOL = "cookie";
-// Tabela de frequência dos símbolos de preenchimento: os mais "raros" têm peso
-// menor. Eles não alteram o RTP (só os cookies pagam), apenas a estética do cartão.
+
+
 const FILLER_SYMBOL_WEIGHTS: readonly (readonly [string, number])[] = [
   ["ticket", 26],
   ["gift", 22],
@@ -37,7 +37,7 @@ function rollFillerSymbol(random: () => number = Math.random): string {
   return FILLER_SYMBOL_WEIGHTS[FILLER_SYMBOL_WEIGHTS.length - 1][0];
 }
 
-// Imagens Twemoji (PNG, CDN estável) para compor o cartão da raspadinha no canvas.
+
 export const SCRATCH_SYMBOL_IMAGE_URLS: Readonly<Record<string, string>> = {
   cookie: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f36a.png",
   ticket: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f39f.png",
@@ -97,9 +97,9 @@ function fromRow(row: ScratchRow | undefined): ScratchGame | null {
 }
 
 function rollGrid(): string[] {
-  // O número de cookies vem da tabela de frequência de gameRules (RTP 93%):
-  // ~96,87% dos bilhetes têm 4 cookies (P = 4/84) e ~3,13% têm 3 (P = 1/84),
-  // dando P(vitória) = 0,0465 e RTP = 0,0465 * (10.000/500) = 93%.
+
+
+
   const cookieCount = rollScratchCookieCount();
   const symbols: string[] = Array<string>(cookieCount).fill(COOKIE_SYMBOL);
   while (symbols.length < 9) symbols.push(rollFillerSymbol());

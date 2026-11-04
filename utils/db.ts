@@ -1,4 +1,4 @@
-// @ts-nocheck
+
 const fs = require("fs");
 const path = require("path");
 const Database = require("better-sqlite3");
@@ -16,21 +16,21 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const db = new Database(dbFile);
-// Pragmas de desempenho/robustez para um processo 24/7 rodando em SQLite/WAL.
+
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 db.pragma("secure_delete = ON");
-// NORMAL e seguro com WAL e evita um fsync a cada escrita (mensagens, cooldowns...).
+
 db.pragma("synchronous = NORMAL");
-// Espera o lock em vez de falhar quando outra escrita estiver em andamento.
+
 db.pragma("busy_timeout = 5000");
-// Tabelas temporarias ficam em RAM, sem passar pelo disco.
+
 db.pragma("temp_store = MEMORY");
-// Limita o page cache a ~4MB para manter o consumo de RAM previsivel.
+
 db.pragma("cache_size = -4000");
-// Leitura via mmap reduz syscalls; as paginas ficam fora do heap do processo.
+
 db.pragma("mmap_size = 67108864");
-// Evita que o arquivo -wal cresca sem limite apos os checkpoints.
+
 db.pragma("journal_size_limit = 8388608");
 
 db.exec(`
@@ -457,7 +457,7 @@ db.exec(`
     ON scratch_games (guild_id, user_id) WHERE status IN ('pending', 'open');
 `);
 
-// Atualiza as estatisticas do planejador de consultas apos criar/alterar indices.
+
 db.pragma("optimize");
 
 const userColumns = db.prepare("PRAGMA table_info(usuarios)").all().map(column => column.name);
@@ -494,7 +494,7 @@ for (const column of [
   }
 }
 
-// Mantém as colunas legíveis no perfil atualizadas com os timestamps já salvos no schema legado.
+
 for (const [command, column] of [
   ["daily", "cooldown_daily"],
   ["trabalhar", "cooldown_trabalhar"],
@@ -566,7 +566,7 @@ function migrateLegacyCookies() {
 
     const now = Date.now();
     const migrate = db.transaction(() => {
-      for (const [id, profile] of Object.entries(users)) {
+      for (const [id, profile] of Object.entries(users as Record<string, Record<string, unknown>>)) {
         insert.run({
           id: String(id),
           username: profile.username || "Usuario",

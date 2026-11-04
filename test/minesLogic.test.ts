@@ -28,16 +28,16 @@ test("calculateMultiplier começa em 1x e cresce a cada diamante revelado", () =
 });
 
 test("calculateMultiplier usa a fórmula hipergeométrica com house edge de 5%", () => {
-  // 1 mina, 1 clique: C(16,1)/C(15,1) * 0.95 = 16/15 * 0.95
+
   assert.ok(Math.abs(calculateMultiplier(1, 1) - (16 / 15) * 0.95) < 1e-9);
-  // 3 minas, 3 cliques: C(16,3)/C(13,3) * 0.95 = 560/286 * 0.95
+
   assert.ok(Math.abs(calculateMultiplier(3, 3) - (560 / 286) * 0.95) < 1e-9);
-  // 15 minas, 1 clique: C(16,15)/C(15,15) * 0.95 = 16 * 0.95 = 15.2
+
   assert.ok(Math.abs(calculateMultiplier(1, 15) - 15.2) < 1e-9);
 });
 
 test("calculateMultiplier mantém a vantagem da casa em exatamente 5%", () => {
-  // EV = P(sobreviver) * multiplicador = 0.95 para qualquer config de minas.
+
   for (const mineCount of [1, 3, 8, 15]) {
     const safeCells = MINES_TOTAL_CELLS - mineCount;
     const survival = safeCells / MINES_TOTAL_CELLS;

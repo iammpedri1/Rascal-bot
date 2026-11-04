@@ -11,7 +11,6 @@ async function main() {
     .filter(command => command.data.name !== "xp")
     .map(command => command.data.toJSON());
 
-  console.log("Comandos finais:", commands.map(command => command.name));
 
   await rest.put(
     Routes.applicationGuildCommands(

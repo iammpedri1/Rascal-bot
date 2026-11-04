@@ -7,8 +7,8 @@ import type {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 
-// Catálogo em memória. A troca do mapa é atômica para manter a última versão
-// válida enquanto uma atualização de rede está em andamento.
+
+
 let emojiMap = new Map<string, string>();
 let applicationEmojiAssets = new Map<string, ApplicationEmojiAsset>();
 let refreshInFlight: Promise<void> | null = null;
@@ -105,9 +105,9 @@ export function getGuildEmoji(
   name: string,
   fallback = "",
 ): string {
-  // Os emojis do Developer Portal são a identidade padrão do bot; o cache do
-  // servidor entra apenas como alternativa quando o catálogo da aplicação não
-  // contém o nome solicitado.
+
+
+
   const portalEmoji = portalEmojiFor(name);
   if (portalEmoji) return portalEmoji;
 

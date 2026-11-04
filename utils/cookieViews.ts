@@ -219,10 +219,7 @@ function buildBonusEmbed(source, result) {
 }
 
 function buildBonusCooldownEmbed(source, result) {
-  return buildInlineErrorEmbed(
-    `Seu b\u00f4nus semanal ainda n\u00e3o est\u00e1 pronto.\n${ICONS.CLOCK_EMOJI} \u00bb Tente novamente em **${timeLeft(result.remaining)}**.`,
-    ICONS.GIFT_EMOJI
-  );
+  return buildInlineCooldownEmbed(result, "/bonus");
 }
 
 function currentTimeLabel() {

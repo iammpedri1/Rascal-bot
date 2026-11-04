@@ -5,9 +5,9 @@ const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
 const { rob } = require("../utils/cookieEconomy") as {
   rob(thiefUser: User, targetUser: User, details?: Record<string, unknown>): RobResult;
 };
-const { buildContext, timeLeft } = require("../utils/cookieViews") as {
+const { buildContext, buildInlineCooldownEmbed } = require("../utils/cookieViews") as {
   buildContext(interaction: CommandChatInputInteraction): Record<string, unknown>;
-  timeLeft(ms: number): string;
+  buildInlineCooldownEmbed(result: any, commandLabel?: string): any;
 };
 
 interface RobResult {
@@ -23,7 +23,7 @@ interface RobResult {
   nextAt?: number;
 }
 
-// Placeholders de GIF do Pepe — troque pelas suas mídias.
+
 const PEPE_POLICE_GIF = "https://media.tenor.com/PLACEHOLDER_POLICE/pepe-policial-cassetete.gif"; // Pepe policial com cassetete
 const PEPE_THIEF_GIF = "https://media.tenor.com/PLACEHOLDER_THIEF/pepe-ladrao.gif"; // Pepe ladrão (sucesso)
 
@@ -96,7 +96,7 @@ module.exports = defineCommand({
 
     if (!result.ok && result.reason === "cooldown") {
       await interaction.reply({
-        embeds: [inlineError(`Espere **${timeLeft(result.remaining ?? 0)}** para roubar novamente.`)],
+            embeds: [buildInlineCooldownEmbed(result, "/roubar")],
         flags: 64,
       });
       return;

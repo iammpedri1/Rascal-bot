@@ -8,7 +8,10 @@ const { COLORS, setBrandFooter } = require("../utils/embedStyle");
 const WIDTH = 1100;
 const HEIGHT = 520;
 const CARD_RADIUS = 28;
+
 function displayName(user) {
+  if (!user) return "Usuario";
+
   return user.globalName || user.username || "Usuario";
 }
 
@@ -86,14 +89,23 @@ function strokeRoundRect(ctx, x, y, width, height, radius) {
   ctx.stroke();
 }
 
+/**
+ * Adjusts the canvas context font size so that `text` fits within `maxWidth`.
+ * Returns the final font size used. The caller should then render the text
+ * using `ctx.fillText(text, x, y, maxWidth)` to enable native horizontal
+ * squeezing when the text is still slightly too wide.
+ */
 function fitText(ctx, text, maxWidth, baseSize, weight = "700") {
   let size = baseSize;
 
   do {
     ctx.font = `${weight} ${size}px Arial`;
-    if (ctx.measureText(text).width <= maxWidth) return;
+    if (ctx.measureText(text).width <= maxWidth) return size;
     size -= 2;
   } while (size >= 16);
+
+  ctx.font = `${weight} 16px Arial`;
+  return 16;
 }
 
 function drawCircleAvatar(ctx, image, x, y, size) {

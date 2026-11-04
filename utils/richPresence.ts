@@ -3,7 +3,7 @@ const logger = require("./logger");
 
 const PRESENCE_INTERVAL_MS = 8 * 60 * 1000;
 
-// Atividades ligadas a recursos que existem no bot, sem simular jogos ou músicas.
+
 const ACTIVITIES = [
   {
     name: "a comunidade",

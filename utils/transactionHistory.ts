@@ -75,7 +75,7 @@ export const TRANSACTION_STYLES: Record<string, TransactionStyle> = {
   boost_welcome_bonus: { emoji: "booster", action: "Recebeu bônus por impulsionar o servidor", verb: "Recebeu" },
 };
 
-// Preposition used before the target mention, per transaction type.
+
 const TARGET_PREPOSITIONS = new Map<string, string>([
   ["rob_loss_target", "por"],
   ["rep", "para"],
@@ -86,7 +86,7 @@ const TARGET_PREPOSITIONS = new Map<string, string>([
   ["duel_draw", "contra"],
 ]);
 
-// Types whose note is appended to the action as **note**.
+
 const BOLD_NOTE_TYPES = new Set([
   "shop_purchase",
   "shop_chest_open",
@@ -99,14 +99,14 @@ const BOLD_NOTE_TYPES = new Set([
   "boost_welcome_bonus",
 ]);
 
-// Types whose note is appended to the action as plain text.
+
 const PLAIN_NOTE_TYPES = new Set([
   "shop_server_role_purchase",
   "shop_server_role_purchase_pending",
   "shop_server_role_refund",
 ]);
 
-// Types that never get a separate "> note" line.
+
 export const NOTE_LINE_HIDDEN_TYPES: ReadonlySet<string> = new Set([
   "work",
   "work_loss",

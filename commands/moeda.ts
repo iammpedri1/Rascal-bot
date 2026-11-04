@@ -6,7 +6,7 @@ const emoji = require("../utils/emojis");
 const EXCHANGE_URL = "https://open.er-api.com/v6/latest";
 const MOEDA_COLOR  = 0xf0a500;
 
-// Cache simples: { base: { rates, timestamp } }
+
 const cache    = new Map();
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutos
 
@@ -79,42 +79,42 @@ function buildMoedaEmbed(valor, de, para, resultado, taxa) {
     .setAuthor({ name: "Conversão de moedas — open.er-api.com" })
     .setTitle(`${bandeiraDe} ${de}  →  ${bandeiraPara} ${para}`)
     .setDescription(
-      // emoji.shop = <:loja:...> representa o valor sendo "comprado/convertido"
+
       `${emoji.shop} **${formatarValor(valor, de)}** equivale a\n# ${formatarValor(resultado, para)}`
     )
     .addFields(
       {
-        // emoji.likeLed = taxa favorável (subindo)
+
         name: `${emoji.likeLed} Taxa direta`,
         value: `**1 ${de}** = **${formatarTaxa(taxa, para)} ${para}**`,
         inline: true,
       },
       {
-        // emoji.dislikeLed = taxa inversa (caindo)
+
         name: `${emoji.dislikeLed} Taxa inversa`,
         value: `**1 ${para}** = **${formatarTaxa(1 / taxa, de)} ${de}**`,
         inline: true,
       },
       {
-        // emoji.channel = campo de informação/origem
+
         name: `${emoji.channel} Origem`,
         value: `${bandeiraDe} **${NOMES_MOEDA[de] ?? de}**`,
         inline: true,
       },
       {
-        // emoji.thread = campo de destino/saída
+
         name: `${emoji.thread} Destino`,
         value: `${bandeiraPara} **${NOMES_MOEDA[para] ?? para}**`,
         inline: true,
       },
       {
-        // emoji.clock = horário da consulta
+
         name: `${emoji.clock} Atualizado`,
         value: formatarDataPt(),
         inline: true,
       },
       {
-        // emoji.thinking = informação técnica do cache
+
         name: `${emoji.thinking} Cache`,
         value: "Taxas renovadas a cada 10 min",
         inline: true,

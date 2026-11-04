@@ -1,4 +1,4 @@
-// @ts-nocheck
+
 const db = require("./db");
 const cooldowns = require("./cooldowns");
 const { PRIMARY_GUILD_ID } = require("./primaryGuild");
@@ -29,11 +29,11 @@ const ALLOWED_STATS = new Set([
   "transfers_received", "transfers_sent", "work_count",
 ]);
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
+
 
 const START_BALANCE           = 100;
 
-// Daily rewards
+
 const DAILY_MIN_REWARD        = 900;
 const DAILY_MAX_REWARD        = 1800;
 const DAILY_STREAK_WINDOW     = 48 * 60 * 60 * 1000;
@@ -41,23 +41,23 @@ const DAILY_MILESTONE_DAYS     = 5;
 const DAILY_MILESTONE_MIN      = 1000;
 const DAILY_MILESTONE_MAX      = 3000;
 
-// Work e Roubo: chances, faixas e distribuições vivem em gameRules
-// (módulo puro e testado), para manter a economia auditável.
 
-// Cooldowns
+
+
+
 const DAILY_COOLDOWN          = cooldowns.DURATIONS.daily;
 const WORK_COOLDOWN           = cooldowns.DURATIONS.trabalhar;
 const ROB_COOLDOWN            = cooldowns.DURATIONS.roubar;
 const BONUS_COOLDOWN          = cooldowns.DURATIONS.bonus;
 const REP_COOLDOWN            = cooldowns.DURATIONS.rep;
 
-// Impostos
+
 const DAILY_TAX_RATE          = 0.01;
 const DAILY_TAX_MAX           = 250;
 const DAILY_TAX_GRACE_BALANCE = 500;
 const INACTIVITY_TAX_PERIOD_MS = 25 * 24 * 60 * 60 * 1000;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 
 function integer(value, fallback = 0) {
   const parsed = Number(value);
@@ -120,7 +120,7 @@ function rowToProfile(row) {
   };
 }
 
-// ─── DB helpers ───────────────────────────────────────────────────────────────
+
 
 function addBalance(userId, amount) {
   db.prepare(`
@@ -187,7 +187,7 @@ function applyPermanentDailyBoost(userId, guildId, reward) {
   return { reward: boosted ? integer(reward) * 2 : integer(reward), multiplier: boosted ? 2 : 1 };
 }
 
-function pushTransaction(type, userId, amount, details = {}) {
+function pushTransaction(type, userId, amount, details: Record<string, unknown> = {}) {
   db.prepare(`
     INSERT INTO transacoes (tipo, user_id, amount, guild_id, guild_name, target_id, note, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -203,7 +203,7 @@ function pushTransaction(type, userId, amount, details = {}) {
   );
 }
 
-// ─── Impostos ─────────────────────────────────────────────────────────────────
+
 
 function applyDailyTax(userId) {
   const row = db.prepare("SELECT * FROM usuarios WHERE id = ?").get(String(userId));
@@ -258,7 +258,7 @@ function applyDailyTax(userId) {
   return { profile: getById(profile.id), charged, periods };
 }
 
-// ─── Usuário ──────────────────────────────────────────────────────────────────
+
 
 function getUser(user) {
   const id  = String(user.id);
@@ -281,7 +281,7 @@ function getProfile(user) {
   return getUser(user);
 }
 
-// ─── Daily com multiplicador de streak ───────────────────────────────────────
+
 
 function claimDaily(user, details = {}) {
   const profile  = getUser(user);
@@ -375,7 +375,7 @@ function getDailyStreak(user) {
   };
 }
 
-// ─── Work ─────────────────────────────────────────────────────────────────────
+
 
 function work(user, details = {}) {
   const profile  = getUser(user);
@@ -396,7 +396,7 @@ function work(user, details = {}) {
     updateStats(profile.id, { work_count: 1 });
 
     if (Math.random() >= WORK_SUCCESS_CHANCE) {
-      // A multa nunca pode exceder o saldo que realmente existe.
+
       const loss = Math.min(currentProfile.balance, uniformRandomInt(WORK_LOSS_MIN, WORK_LOSS_MAX));
       if (loss > 0) {
         addBalance(profile.id, -loss);
@@ -418,7 +418,7 @@ function work(user, details = {}) {
       };
     }
 
-    // Distribuição normal: valores perto de ~2.200 são mais comuns que os extremos.
+
     const baseReward = Math.floor(normalRandom(WORK_REWARD_MIN, WORK_REWARD_MAX, WORK_REWARD_MEAN));
     const reward = applyCookieBonuses(profile.id, baseReward);
     addBalance(profile.id, reward);
@@ -442,7 +442,7 @@ function work(user, details = {}) {
   return settleWork();
 }
 
-// ─── Bonus ────────────────────────────────────────────────────────────────────
+
 
 function claimBonus(user, details = {}) {
   const profile  = getUser(user);
@@ -478,7 +478,7 @@ function claimBonus(user, details = {}) {
   };
 }
 
-// ─── Roubo balanceado ─────────────────────────────────────────────────────────
+
 
 function rob(thiefUser, targetUser, details = {}) {
   const thief  = getUser(thiefUser);
@@ -541,7 +541,7 @@ function rob(thiefUser, targetUser, details = {}) {
       };
     }
 
-    // Fiança/multa severa: retirada do próprio saldo (pode ficar negativo ou zerado).
+
     const penalty = uniformRandomInt(ROB_PENALTY_MIN, ROB_PENALTY_MAX);
     addBalance(thief.id, -penalty);
     updateStats(thief.id, { rob_losses: 1, cookies_lost: penalty, total_spent: penalty });
@@ -562,7 +562,7 @@ function rob(thiefUser, targetUser, details = {}) {
   })();
 }
 
-// ─── Rifa ─────────────────────────────────────────────────────────────────────
+
 
 function playRifa(user, amount, details = {}) {
   const value   = cleanAmount(amount);
@@ -591,7 +591,7 @@ function playRifa(user, amount, details = {}) {
   return { ok: true, won: false, profile: getById(profile.id), amount: value };
 }
 
-// ─── Rep ──────────────────────────────────────────────────────────────────────
+
 
 function giveRep(fromUser, toUser, details = {}) {
   const from = getUser(fromUser);
@@ -613,7 +613,7 @@ function giveRep(fromUser, toUser, details = {}) {
   return { ok: true, from: getById(from.id), to: getById(to.id), nextAt };
 }
 
-// ─── Transfer ─────────────────────────────────────────────────────────────────
+
 
 function transfer(fromUser, toUser, amount, details = {}) {
   const requested = Number(amount);
@@ -655,7 +655,7 @@ function transfer(fromUser, toUser, amount, details = {}) {
   return { ok: true, from: getById(from.id), to: getById(to.id), amount: value };
 }
 
-// ─── Apostas ──────────────────────────────────────────────────────────────────
+
 
 function canBet(user, amount) {
   return getProfile(user).balance >= cleanAmount(amount);
@@ -711,7 +711,7 @@ function settleDraw(userA, userB, details = {}) {
   return { profileA: getById(profileA.id), profileB: getById(profileB.id) };
 }
 
-// ─── Rank ─────────────────────────────────────────────────────────────────────
+
 
 function getRank(limit = 10, type = "balance") {
   const orderBy = {
@@ -1026,7 +1026,7 @@ function equipShopItem(user, itemId) {
   };
 }
 
-// ─── Exports ──────────────────────────────────────────────────────────────────
+
 
 module.exports = {
   BONUS_COOLDOWN,

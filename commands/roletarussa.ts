@@ -28,7 +28,7 @@ const { randomUUID, randomInt } = require("node:crypto") as typeof import("node:
 const logger = require("../utils/logger") as Logger;
 const { getAnimeGif } = require("../utils/animeGifs") as { getAnimeGif(type: "win" | "lose" | "draw"): Promise<string> };
 
-// GIFs temáticos por ação (Tenor, estáveis). A câmara vazia usa o anime "draw" (alívio).
+
 const ROULETTE_GIFS = {
   shot: "https://media1.tenor.com/m/0pgJh8gr5IAAAAAd/down-bad-gambling.gif",
   cashout: "https://media1.tenor.com/m/hv0J_QfWhOYAAAAd/jackpot-casino.gif",

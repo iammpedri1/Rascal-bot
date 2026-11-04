@@ -32,7 +32,7 @@ const logger = require("../utils/logger") as Logger;
 const MIN_STAKE = 1_000;
 const MAX_STAKE = 100_000_000;
 const MAX_PAYOUT = 2_147_483_647;
-const PEPE_EXPLOSION_GIF = "https://media.tenor.com/m/k6D4n7L3qXoAAAAC/pepe-frog-explode.gif";
+const ANIME_EXPLOSION_GIF = "https://media.tenor.com/r85PBhLnCkQAAAAC/explosion-megumin.gif";
 
 interface MinesPlayer {
   userId: string;
@@ -60,7 +60,8 @@ function boardRows(
       const index = row * 4 + column;
       const isBomb = grid[row][column] === true;
       const picked = picks.includes(index);
-      
+      const revealed = picked || (revealAll && isBomb);
+
       const button = new ButtonBuilder()
         .setCustomId(`mines|pick|${gameId}|${index}`)
         .setStyle(
@@ -72,9 +73,10 @@ function boardRows(
         )
         .setDisabled(disabled || picked || (revealAll && !isBomb));
 
-      // Remove '?' - revealed get emojis, others stay gray and empty
-      if (picked || (revealAll && isBomb)) {
+      if (revealed) {
         button.setEmoji(isBomb ? "💣" : "💎");
+      } else {
+        button.setLabel("\u200B");
       }
       buttons.push(button);
     }
@@ -113,7 +115,7 @@ async function playMines(interaction: CommandChatInputInteraction): Promise<void
   const stake = interaction.options.getInteger("aposta") ?? 0;
   const mineCount = interaction.options.getInteger("minas") ?? 0;
 
-  // Simple validations before deferring to keep it fast
+
   if (stake < MIN_STAKE) {
     await interaction.reply({ content: `${icon("crossed", "❌")} Aposta mínima: **${formatCookies(MIN_STAKE)} cookies**.`, flags: MessageFlags.Ephemeral });
     return;
@@ -123,7 +125,7 @@ async function playMines(interaction: CommandChatInputInteraction): Promise<void
     return;
   }
 
-  // Defer immediately to avoid "Unknown Interaction"
+
   await interaction.deferReply();
 
   const gameId = `mines-${Date.now()}-${interaction.user.id}`;
@@ -199,37 +201,57 @@ async function playMines(interaction: CommandChatInputInteraction): Promise<void
           const column = index % 4;
 
           if (grid[row][column]) {
-            // LOSS
-            const settled = resolveGame(gameId, [{
+
+            resolveGame(gameId, [{
               userId: player.userId,
               username: player.username,
               outcome: "loss",
               note: "/mines · bomba",
-            }], context)[0];
+            }], context);
             finished = true;
             collector.stop("boom");
             await replyMessage.edit({
-              embeds: [gameEmbed(`${icon("bomb", "💣")} CABUM!`, `Você atingiu uma mina e perdeu **${formatCookies(player.stake)} cookies**.`, LOSS_COLOR).setImage(PEPE_EXPLOSION_GIF)],
+              embeds: [
+                gameEmbed(
+                  "💥 BOOM! VOCÊ EXPLODIU! 💥",
+                  [
+                    `😵 » **${player.username}** pisou numa mina e virou confete!`,
+                    "",
+                    `💣 » Prejuízo: **${formatCookies(player.stake)} cookies** perdidos.`,
+                    `💰 » Saldo descontado. Vai chorar num cantinho! 😭`,
+                  ].join("\n"),
+                  LOSS_COLOR,
+                ).setImage(ANIME_EXPLOSION_GIF),
+              ],
               components: boardRows(gameId, grid, [...player.picks, index], true, true),
             });
           } else {
-            // SAFE
+
             player.picks.push(index);
             const currentMult = calculateMultiplier(player.picks.length, mineCount);
             if (player.picks.length === (MINES_TOTAL_CELLS - mineCount)) {
-              // FULL CLEAR
+
               const payout = potentialWin(stake, currentMult);
-              const settled = resolveGame(gameId, [{
+              resolveGame(gameId, [{
                 userId: player.userId,
                 username: player.username,
                 outcome: "win",
                 payout,
                 note: "/mines · total",
-              }], context)[0];
+              }], context);
               finished = true;
               collector.stop("cleared");
               await replyMessage.edit({
-                embeds: [gameEmbed(`${icon("diamond", "💎")} LIMPO!`, `Você encontrou todos os diamantes!\nRetirou **${formatCookies(payout)} cookies** (${currentMult.toFixed(2)}x).`, WIN_COLOR)],
+                embeds: [gameEmbed(
+                  "💎 TABULEIRO LIMPO! 💎",
+                  [
+                    `🏆 » **${player.username}** desviou de todas as minas!`,
+                    "",
+                    `💎 » Multiplicador final: **${currentMult.toFixed(2)}x**`,
+                    `💥 » Você ganhou **${formatCookies(payout)} cookies**! Incrível! 🎉`,
+                  ].join("\n"),
+                  WIN_COLOR,
+                )],
                 components: boardRows(gameId, grid, player.picks, true, true),
               });
             } else {
@@ -247,28 +269,82 @@ async function playMines(interaction: CommandChatInputInteraction): Promise<void
           }
           const currentMult = calculateMultiplier(player.picks.length, mineCount);
           const payout = potentialWin(stake, currentMult);
-          const settled = resolveGame(gameId, [{
+          resolveGame(gameId, [{
             userId: player.userId,
             username: player.username,
             outcome: "win",
             payout,
             note: "/mines · cashout",
-          }], context)[0];
+          }], context);
           finished = true;
           collector.stop("cashout");
           await replyMessage.edit({
-            embeds: [gameEmbed(`${icon("cashout", "💰")} Retirado!`, `Multiplicador: **${currentMult.toFixed(2)}x**\nVocê retirou **${formatCookies(payout)} cookies**.`, WIN_COLOR)],
+            embeds: [gameEmbed(
+              "💰 CASHOUT REALIZADO! 💰",
+              [
+                `😎 » **${player.username}** saiu antes de explodir! Inteligente!`,
+                "",
+                `💎 » Multiplicador: **${currentMult.toFixed(2)}x**`,
+                `💥 » Você retirou **${formatCookies(payout)} cookies**!`,
+              ].join("\n"),
+              WIN_COLOR,
+            )],
             components: boardRows(gameId, grid, player.picks, true, true),
           });
         }
       } catch (e) {
-        logger.error("Erro na rodada do Mines", e);
+        logger.error("Erro na rodada do Mines", e, { gameId, userId: button.user.id });
+        if (!finished) {
+          try {
+            refundGameBets(gameId, context);
+            stakeReserved = false;
+          } catch (refundError) {
+            logger.error("Falha ao devolver aposta do Mines", refundError, { gameId });
+          }
+          finished = true;
+          collector.stop("error");
+          activeGames.releaseGame(gameId);
+          await replyMessage.edit({
+            embeds: [gameEmbed("Rodada cancelada", "Não consegui concluir o jogo. A aposta foi devolvida.", LOSS_COLOR)],
+            components: boardRows(gameId, grid, player.picks, true, true),
+          }).catch((editError) => logger.warn("Não consegui atualizar o Mines cancelado", { gameId, error: editError }));
+        }
       } finally {
         processing = false;
       }
     });
+
+    collector.on("end", (_collected, reason) => {
+      activeGames.releaseGame(gameId);
+      if (finished) return;
+
+      finished = true;
+      try {
+        refundGameBets(gameId, context);
+        stakeReserved = false;
+      } catch (refundError) {
+        logger.error("Falha ao devolver aposta após expiração do Mines", refundError, { gameId });
+      }
+      void replyMessage.edit({
+        embeds: [gameEmbed(
+          "Rodada encerrada por inatividade",
+          "O tempo terminou. A aposta foi devolvida.",
+          0x747f8d,
+        )],
+        components: boardRows(gameId, grid, player.picks, true, true),
+      }).catch((editError) => logger.warn("Não consegui atualizar o Mines expirado", { gameId, reason, error: editError }));
+    });
   } catch (error) {
-    logger.error("Erro crítico no Mines", error);
+    logger.error("Erro crítico no Mines", error, { gameId });
+    if (stakeReserved && !finished) {
+      try {
+        refundGameBets(gameId, context);
+        stakeReserved = false;
+      } catch (refundError) {
+        logger.error("Falha ao devolver aposta após erro crítico no Mines", refundError, { gameId });
+      }
+    }
+    activeGames.releaseGame(gameId);
   } finally {
     if (!stakeReserved || finished) activeGames.releaseGame(gameId);
   }

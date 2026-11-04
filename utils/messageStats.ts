@@ -1,7 +1,7 @@
 const db = require("./db");
 
-// recordMessage roda a cada mensagem: as sentenças ficam preparadas uma única
-// vez para evitar recompilar SQL (CPU e alocação) no caminho mais quente.
+
+
 const recordWeeklyStmt = db.prepare(`
   INSERT INTO message_weekly_stats (guild_id, user_id, week_key, messages, updated_at)
   VALUES (?, ?, ?, 1, ?)

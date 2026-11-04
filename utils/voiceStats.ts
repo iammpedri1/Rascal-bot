@@ -1,4 +1,4 @@
-// @ts-nocheck
+
 const db = require("./db");
 const { getUser, addBalance, updateStats, pushTransaction } = require("./cookieEconomy");
 const logger = require("./logger");
@@ -232,7 +232,7 @@ function localMonthStartMs(now = Date.now()) {
 }
 
 function voiceEligible(member) {
-  return !member?.voice?.selfMute && !member?.voice?.serverMute;
+  return Boolean(member?.voice?.channelId) && !member.voice.selfMute && !member.voice.serverMute;
 }
 
 function startVoiceSession(member, channelId, startedAt = Date.now(), resetRewardEligibility = false) {
@@ -391,7 +391,7 @@ function activeSecondsForCurrentWeek(session, now = Date.now()) {
 
 function getWeeklyVoiceLeaderboard(guildId, limit = 10) {
   const now = Date.now();
-  const rows = weeklyVoiceLeaderboardStmt.all(String(guildId), weekKey(now));
+  const rows = weeklyVoiceLeaderboardStmt.all(String(guildId), weekKey(now)) as Array<{ id: string; username: string; seconds: number }>;
   const byUser = new Map(rows.map(row => [row.id, {
     id: row.id,
     username: row.username || `usuario-${row.id}`,
@@ -423,7 +423,7 @@ function getWeeklyVoiceLeaderboard(guildId, limit = 10) {
 }
 
 function getWeeklyTransmissionLeaderboard(guildId, limit = 500, now = Date.now()) {
-  const byUser = new Map(weeklyTransmissionLeaderboardStmt.all(String(guildId), weekKey(now))
+  const byUser = new Map((weeklyTransmissionLeaderboardStmt.all(String(guildId), weekKey(now)) as Array<{ id: string; username: string; seconds: number }>)
     .map(row => [row.id, {
       id: row.id,
       username: row.username || `usuario-${row.id}`,
@@ -457,9 +457,9 @@ function getMonthlyVoiceLeaderboard(guildId, requestedMonthKey, limit = 5) {
     addVoiceRange(session.guildId, session.userId, session.startedAt, now);
     session.startedAt = now;
   }
-  return monthlyVoiceLeaderboardStmt.all(
+  return (monthlyVoiceLeaderboardStmt.all(
     String(guildId), String(requestedMonthKey), Math.max(1, integer(limit, 5))
-  ).map((row, index) => ({
+  ) as Array<{ id: string; username: string; seconds: number }>).map((row, index) => ({
     id: row.id,
     username: row.username || `usuario-${row.id}`,
     seconds: integer(row.seconds),

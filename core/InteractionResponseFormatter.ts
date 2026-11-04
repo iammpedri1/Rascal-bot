@@ -62,7 +62,7 @@ function formatPayload(payload: unknown, client: Client, guildName?: string | nu
     embeds: [textEmbed(content)],
   };
 
-  // Keep only explicit mentions in message content so Discord can deliver the ping.
+
   if (mentions.length) formatted.content = [...new Set(mentions)].join(" ");
   else delete formatted.content;
 
