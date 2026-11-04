@@ -38,3 +38,4 @@
 - Imagens usam cache LRU de até 200 URLs; falhas são removidas do cache para permitir novas tentativas.
 - Canvas reutilizável é limitado a 4096x4096 e é limpo antes de cada renderização.
 - `/mines` usa 3x3 por padrão; 5x5 é recusado preventivamente porque o tabuleiro ocupa as cinco action rows permitidas pelo Discord e não deixa espaço para os controles.
+- Reservas de minijogos possuem expiração de 2 minutos e são liberadas quando um novo jogo é iniciado, evitando avisos falsos após falhas de envio ou encerramentos inesperados.

@@ -131,7 +131,10 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
     }
 
     if (!activeGames.reserveNew([user.id], gameId)) {
-        await interaction.reply({ content: "Você já possui uma partida ativa em outro minijogo.", flags: 64 });
+        await interaction.reply({
+            content: "Você já possui uma partida ativa em outro minijogo. Se ela não estiver visível, aguarde até 2 minutos para a reserva expirar automaticamente.",
+            flags: 64,
+        });
         return;
     }
 
@@ -168,12 +171,18 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
             .setFooter({ text: `Partida #${gameId.slice(0, 8).toUpperCase()}` });
     };
 
-    await interaction.reply({
-        embeds: [getEmbed()],
-        components: [...buildMinesRows(gameId, state), buildControlRow(gameId, state)],
-    });
-
-    const message = await interaction.fetchReply();
+    let message: Message;
+    try {
+        await interaction.reply({
+            embeds: [getEmbed()],
+            components: [...buildMinesRows(gameId, state), buildControlRow(gameId, state)],
+        });
+        message = await interaction.fetchReply();
+    } catch (error) {
+        activeGames.releaseGame(gameId);
+        if (stakeReserved) refundGameBets(gameId, context);
+        throw error;
+    }
     const collector = message.createMessageComponentCollector({
         componentType: ComponentType.Button,
         idle: IDLE_TIMEOUT_MS,
