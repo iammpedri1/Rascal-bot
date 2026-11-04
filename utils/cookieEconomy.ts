@@ -5,6 +5,15 @@ const { PRIMARY_GUILD_ID } = require("./primaryGuild");
 const blackMarket = require("./blackMarket") as typeof import("./blackMarket");
 const { COLOR_ITEMS, COOLDOWN_TARGETS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
 
+interface TransactionDetails {
+  guildId?: string | null;
+  guildName?: string | null;
+  targetId?: string | null;
+  reason?: string | null;
+  note?: string | null;
+  job?: string | null;
+}
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const START_BALANCE = 100;
@@ -168,7 +177,7 @@ function applyPermanentDailyBoost(userId, guildId, reward) {
   return { reward: boosted ? integer(reward) * 2 : integer(reward), multiplier: boosted ? 2 : 1 };
 }
 
-function pushTransaction(type, userId, amount, details = {}) {
+function pushTransaction(type, userId, amount, details: TransactionDetails = {}) {
   db.prepare(`
     INSERT INTO transacoes (tipo, user_id, amount, guild_id, guild_name, target_id, note, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -264,7 +273,7 @@ function getProfile(user) {
 
 // ─── Daily com multiplicador de streak ───────────────────────────────────────
 
-function claimDaily(user, details = {}) {
+function claimDaily(user, details: TransactionDetails = {}) {
   const profile = getUser(user);
   const cooldown = cooldowns.check(profile.id, "daily");
 
@@ -358,7 +367,7 @@ function getDailyStreak(user) {
 
 // ─── Work ─────────────────────────────────────────────────────────────────────
 
-function work(user, details = {}) {
+function work(user, details: TransactionDetails = {}) {
   const profile = getUser(user);
   const cooldown = cooldowns.check(profile.id, "trabalhar");
 
@@ -635,13 +644,22 @@ function giveRep(fromUser, toUser, details = {}) {
 
 // ─── Transfer ─────────────────────────────────────────────────────────────────
 
+function transferTax(amount) {
+  const value = integer(amount);
+  if (value <= 10000) return 0;
+  if (value <= 50000) return Math.floor(value * 0.02);
+  return Math.floor(value * 0.05);
+}
+
 function transfer(fromUser, toUser, amount, details = {}) {
   const requested = Number(amount);
   if (!Number.isSafeInteger(requested) || requested <= 0) {
     return { ok: false, reason: "amount", from: getUser(fromUser), to: getUser(toUser) };
   }
 
-  const value = requested;
+  const tax = transferTax(requested);
+  const value = requested - tax;
+  if (value <= 0) return { ok: false, reason: "amount", from: getUser(fromUser), to: getUser(toUser) };
   const from = getUser(fromUser);
   const to = getUser(toUser);
   if (from.id === to.id) return { ok: false, reason: "self", from, to };
@@ -653,7 +671,7 @@ function transfer(fromUser, toUser, amount, details = {}) {
     const debit = db.prepare(`
       UPDATE usuarios SET cookies = cookies - ?, updated_at = ?
       WHERE id = ? AND cookies >= ?
-    `).run(value, Date.now(), from.id, value);
+    `).run(requested, Date.now(), from.id, requested);
     if (debit.changes !== 1) return false;
 
     const credit = db.prepare(`
@@ -665,6 +683,13 @@ function transfer(fromUser, toUser, amount, details = {}) {
     updateStats(to.id, { transfers_received: 1, transferred_in: value, total_earned: value });
     pushTransaction("transfer_out", from.id, -value, { ...details, targetId: to.id });
     pushTransaction("transfer_in", to.id, value, { ...details, targetId: from.id });
+    if (tax > 0) {
+      updateStats(from.id, { total_spent: tax });
+      pushTransaction("transfer_tax", from.id, -tax, {
+        ...details,
+        note: `Imposto progressivo de ${tax} cookies`,
+      });
+    }
     return true;
   });
 
@@ -672,7 +697,7 @@ function transfer(fromUser, toUser, amount, details = {}) {
     return { ok: false, reason: "balance", from: getById(from.id), to: getById(to.id) };
   }
 
-  return { ok: true, from: getById(from.id), to: getById(to.id), amount: value };
+  return { ok: true, from: getById(from.id), to: getById(to.id), amount: value, requested, tax };
 }
 
 // ─── Apostas ──────────────────────────────────────────────────────────────────

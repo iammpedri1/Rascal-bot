@@ -25,6 +25,7 @@ import {
 
 const { randomUUID, randomInt } = require("node:crypto") as typeof import("node:crypto");
 const logger = require("../utils/logger") as Logger;
+const { getAnimeGif } = require("../utils/animeGifs") as { getAnimeGif(type: "win" | "lose" | "draw"): Promise<string> };
 
 type PlayerStatus = "active" | "cashed_out" | "shot" | "survived";
 
@@ -247,8 +248,9 @@ async function executeRussianRoulette(interaction: CommandChatInputInteraction):
             ...balances.filter((balance) => balance.userId !== player?.userId)
               .map((balance) => `${icon("correct", "✅")} <@${balance.userId}> sobreviveu; aposta estornada. Saldo: **${formatCookies(balance.balance)} cookies**.`),
           ].join("\n");
+          const gif = await getAnimeGif("lose");
           await message.edit({
-            embeds: [gameEmbed("Partida Encerrada", buildDescription(players, chamber, true, finalLine), LOSS_COLOR)],
+            embeds: [gameEmbed("Partida Encerrada", buildDescription(players, chamber, true, finalLine), LOSS_COLOR).setImage(gif)],
             components: gameComponents(gameId, true),
           });
           return;

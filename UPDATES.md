@@ -20,21 +20,20 @@
   - Atualização de imports e inicialização do scheduler de voz em `events/ready.ts`
   - Atualizações de comentários e mensagens de log
 
-## O que ainda precisa ser finalizado
+## Pendências históricas concluídas
 
-- **Função faltante `playerFor`**
-  - O comando `/jogodavelha` ainda referencia `playerFor`, que não está definido em nenhuma parte do código. É necessário implementar a função ou substituir por lógica equivalente.
-- **Campos `guildId`, `reason` e `note` em `cookieEconomy.ts`**
-  - Vários usos de `details.guildId`, `details.reason` e `details.note` geram erros de tipagem porque o objeto padrão `details` não possui esses campos. Deve‑se definir a interface correta ou adaptar o código.
-- **Revisão completa de textos/gramática em Português**
-  - Revisar todas as mensagens dos slash commands para garantir consistência e correção gramatical.
-- **Melhorias nos minijogos**
-  - Refazer a UI dos jogos **Mines**, **Roleta Russa** e outros usando canvas mais profissional.
-  - Inserir GIFs temáticos no comando `/roletarussa`.
-- **Continuação dos trabalhos pendentes**
-  - Implementar novos minigames conforme solicitado.
-  - Atualizar documentação de uso (ex.: README) caso novas funcionalidades impactem o usuário final.
+- `playerFor` foi implementada em `/jogodavelha`.
+- `TransactionDetails` foi adicionada a `cookieEconomy.ts`.
+- A UI dos minijogos recebeu melhorias, incluindo canvas na raspadinha e GIFs na roleta.
+- O comando `/crash` foi adicionado e a documentação pública foi atualizada no README.
 
 ---
 
-_Este arquivo resume as alterações já commitadas e as próximas etapas a serem concluídas._
+## Entregas desta revisão
+
+- Adicionado `/crash` com RTP de 95%, reserva atômica e limite de pagamento.
+- `/mines` agora aceita tabuleiros 3x3 e 5x5; `/raspadinha` ganhou imagem dinâmica via canvas.
+- `/roletarussa` exibe GIF temático de resultado e `/pix` aplica imposto progressivo.
+- Atualizado o README com as opções públicas e corrigido o fallback de resposta do `/clear`.
+
+_Este arquivo resume as alterações implementadas e a validação atual do projeto._

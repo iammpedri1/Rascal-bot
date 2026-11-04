@@ -122,7 +122,7 @@ module.exports = defineCommand({
         const skippedText = skipped
           ? `\n${emoji.sino} ${skipped} mensagem(ns) permanecem no canal devido à política de retenção do Discord (mais de 14 dias).`
           : "";
-        resultMessage = `${emoji.correct} Foram removidas **${deleted.size}** mensagem(ns)${targetText} com sucesso.${skippedText}`;
+        resultMessage = `${emoji.correct} Apaguei **${deleted.size}** mensagem(ns)${targetText} com sucesso.${skippedText}`;
       }
     } catch (error) {
       if (discordErrorCode(error) !== 10008) console.error("Erro no /clear chat:", error);

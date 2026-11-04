@@ -27,8 +27,6 @@ import {
     createMinesGame,
     revealCell,
     MINES_GRID_SIZE,
-    MINES_ROWS,
-    MINES_COLS,
     calculateNextMultiplier,
     type MinesState,
 } from "../utils/mines";
@@ -40,10 +38,10 @@ const emoji = require("../utils/emojis");
 function buildMinesRows(gameId: string, state: MinesState, showAll = false): ActionRowBuilder<ButtonBuilder>[] {
     const rows: ActionRowBuilder<ButtonBuilder>[] = [];
 
-    for (let r = 0; r < MINES_ROWS; r++) {
+    for (let r = 0; r < state.gridSize; r++) {
         const buttons: ButtonBuilder[] = [];
-        for (let c = 0; c < MINES_COLS; c++) {
-            const index = r * MINES_COLS + c;
+        for (let c = 0; c < state.gridSize; c++) {
+            const index = r * state.gridSize + c;
             const isRevealed = state.revealed.includes(index);
             const isMine = state.mines.includes(index);
 
@@ -105,6 +103,8 @@ function buildControlRow(gameId: string, state: MinesState, disabled = false): A
 async function executeMines(interaction: CommandChatInputInteraction): Promise<void> {
     const bet = interaction.options.getInteger("aposta") ?? 0;
     const mineCount = interaction.options.getInteger("minas") ?? 3;
+    const requestedGridSize = interaction.options.getInteger("tamanho") ?? 5;
+    const gridSize = requestedGridSize === 3 ? 3 : 5;
     const gameId = randomUUID();
     const context = contextFor(interaction);
     const user = interaction.user;
@@ -114,8 +114,9 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
         return;
     }
 
-    if (mineCount < 1 || mineCount >= MINES_GRID_SIZE) {
-        await interaction.reply({ content: `Por favor, selecione entre 1 e ${MINES_GRID_SIZE - 1} minas.`, flags: 64 });
+    const gridCells = gridSize * gridSize;
+    if (mineCount < 1 || mineCount >= gridCells) {
+        await interaction.reply({ content: `Por favor, selecione entre 1 e ${gridCells - 1} minas.`, flags: 64 });
         return;
     }
 
@@ -135,14 +136,14 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
         stakeReserved = true;
     }
 
-    let state = createMinesGame(bet, mineCount);
+    let state = createMinesGame(bet, mineCount, gridSize);
     let finished = false;
     let processing = false;
 
-    const nextMulti = calculateNextMultiplier(MINES_GRID_SIZE, mineCount, 0);
+    const nextMulti = calculateNextMultiplier(gridCells, mineCount, 0);
 
     const getEmbed = (statusColor = 0x2b2d31) => {
-        const nextProfit = state.bet * state.multiplier * calculateNextMultiplier(MINES_GRID_SIZE, mineCount, state.revealed.length);
+        const nextProfit = state.bet * state.multiplier * calculateNextMultiplier(gridCells, mineCount, state.revealed.length);
 
         return new EmbedBuilder()
             .setColor(statusColor)
@@ -153,7 +154,7 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
             .setTitle(`${icon("blobBan", "💣")} Mines`)
             .addFields(
                 { name: `${icon("coin", "🪙")} Aposta`, value: `**${formatCookies(state.bet)}** cookies`, inline: true },
-                { name: `${icon("blobBan", "💣")} Minas`, value: `**${state.mineCount}** (${state.revealed.length}/${MINES_GRID_SIZE - state.mineCount})`, inline: true },
+                { name: `${icon("blobBan", "💣")} Minas`, value: `**${state.mineCount}** (${state.revealed.length}/${gridCells - state.mineCount})`, inline: true },
                 { name: `${icon("sparkles", "✨")} Multiplicador`, value: `**${state.multiplier.toFixed(2)}x**`, inline: true },
                 { name: `${icon("announcement", "📈")} Próximo Nível`, value: `**${nextMulti.toFixed(2)}x** (${formatCookies(nextProfit)})`, inline: false }
             )
@@ -192,7 +193,7 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
                 let index = action === "reveal" ? Number(extra) : -1;
 
                 if (action === "random") {
-                    const available = Array.from({ length: MINES_GRID_SIZE }, (_, i) => i)
+                    const available = Array.from({ length: gridCells }, (_, i) => i)
                         .filter(i => !state.revealed.includes(i));
                     index = available[Math.floor(Math.random() * available.length)];
                 }
@@ -268,7 +269,9 @@ module.exports = defineCommand({
         .setName("mines")
         .setDescription("Desafie sua sorte no Campo Minado e multiplique seus cookies")
         .addIntegerOption(opt => opt.setName("aposta").setDescription("Valor da aposta").setMinValue(0).setMaxValue(1000000).setRequired(false))
-        .addIntegerOption(opt => opt.setName("minas").setDescription("Quantidade de minas (1-24)").setMinValue(1).setMaxValue(24).setRequired(false)),
+        .addIntegerOption(opt => opt.setName("minas").setDescription("Quantidade de minas").setMinValue(1).setMaxValue(24).setRequired(false))
+        .addIntegerOption(opt => opt.setName("tamanho").setDescription("Tamanho do tabuleiro").setRequired(false)
+            .addChoices({ name: "3x3", value: 3 }, { name: "5x5", value: 5 })),
     async execute(interaction: CommandChatInputInteraction) {
         await executeMines(interaction);
     },

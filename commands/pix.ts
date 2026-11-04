@@ -17,6 +17,7 @@ interface TransferResult {
   amount?: number;
   from?: { balance: number };
   to?: { balance: number };
+  tax?: number;
 }
 
 function amount(value: number): string {
@@ -24,6 +25,9 @@ function amount(value: number): string {
 }
 
 function buildPixEmbed(sender: User, target: User, result: TransferResult): EmbedBuilder {
+  const taxLine = result.tax
+    ? `${emoji.application("coin", "🪙")} » Imposto progressivo: **${amount(result.tax)} cookies**.`
+    : null;
   return new EmbedBuilder()
     .setColor(0x57f287)
     .setTitle("💠 » PIX enviado!")
@@ -33,7 +37,8 @@ function buildPixEmbed(sender: User, target: User, result: TransferResult): Embe
         `${emoji.application("cookie", "🍪")} \u00bb <@${sender.id}> enviou **${amount(result.amount ?? 0)} cookies** para <@${target.id}> via PIX.`,
         `${emoji.application("cookie", "🍪")} \u00bb Seu saldo: **${amount(result.from?.balance ?? 0)} cookies**.`,
         `${emoji.application("cookie", "🍪")} \u00bb Saldo de ${target.username}: **${amount(result.to?.balance ?? 0)} cookies**.`,
-      ].join("\n"),
+        taxLine,
+      ].filter(Boolean).join("\n"),
     );
 }
 

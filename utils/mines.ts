@@ -36,8 +36,8 @@ export function calculateNextMultiplier(totalCells: number, totalMines: number, 
  * Gera as posições das minas aleatoriamente.
  * @param count Quantidade de minas a serem geradas
  */
-export function generateMines(count: number): number[] {
-    const positions = Array.from({ length: MINES_GRID_SIZE }, (_, i) => i);
+export function generateMines(count: number, gridSize = MINES_GRID_SIZE): number[] {
+    const positions = Array.from({ length: gridSize * gridSize }, (_, i) => i);
     const mines: number[] = [];
 
     for (let i = 0; i < count; i++) {
@@ -56,6 +56,7 @@ export interface MinesState {
     mineCount: number;
     isGameOver: boolean;
     isVictory: boolean;
+    gridSize: number;
 }
 
 /**
@@ -63,15 +64,17 @@ export interface MinesState {
  * @param bet Valor da aposta
  * @param mineCount Quantidade de minas
  */
-export function createMinesGame(bet: number, mineCount: number): MinesState {
+export function createMinesGame(bet: number, mineCount: number, gridSize = 5): MinesState {
+    const safeGridSize = gridSize === 3 ? 3 : 5;
     return {
-        mines: generateMines(mineCount),
+        mines: generateMines(mineCount, safeGridSize),
         revealed: [],
         multiplier: 1.0,
         bet,
         mineCount,
         isGameOver: false,
         isVictory: false,
+        gridSize: safeGridSize,
     };
 }
 
@@ -87,11 +90,12 @@ export function revealCell(state: MinesState, index: number): MinesState {
         return { ...state, isGameOver: true, isVictory: false };
     }
 
-    const nextMulti = calculateNextMultiplier(MINES_GRID_SIZE, state.mineCount, state.revealed.length);
+    const totalCells = state.gridSize * state.gridSize;
+    const nextMulti = calculateNextMultiplier(totalCells, state.mineCount, state.revealed.length);
     const newRevealed = [...state.revealed, index];
     const newMultiplier = state.multiplier * nextMulti;
 
-    const isVictory = newRevealed.length === (MINES_GRID_SIZE - state.mineCount);
+    const isVictory = newRevealed.length === (totalCells - state.mineCount);
 
     return {
         ...state,

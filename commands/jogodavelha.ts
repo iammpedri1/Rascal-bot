@@ -29,6 +29,12 @@ const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
 const logger = require("../utils/logger") as Logger;
 const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
 
+// Helper to map a mark ('x' or 'o') to the corresponding player ID
+function playerFor(mark: string, challengerId: string, opponentId: string): string {
+  return mark === "x" ? challengerId : opponentId;
+}
+
+
 type Mark = "x" | "o";
 type Cell = Mark | null;
 

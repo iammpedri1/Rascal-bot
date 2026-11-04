@@ -14,6 +14,7 @@ const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
 const logger = require("../utils/logger") as {
   error(message: string, error?: unknown, metadata?: Record<string, unknown>): void;
 };
+const { loadCanvas } = require("../utils/canvas") as typeof import("../utils/canvas");
 
 const SYMBOLS: Record<string, { name: string; fallback: string }> = {
   cookie: { name: "cookie", fallback: "🍪" },
@@ -47,6 +48,7 @@ function render(game: ScratchGame) {
     .setColor(randomColor())
     .setTitle(`${emoji.application("ticket", "🎟️")} Raspadinha da Comunidade`)
     .setDescription(description)
+    .setImage("attachment://raspadinha.png")
     .setFooter({ text: `Bilhete de: ${game.userId}` });
 
   const rows = [];
@@ -64,11 +66,35 @@ function render(game: ScratchGame) {
       } else {
         button.setLabel(String(index + 1));
       }
+
       return button;
     });
     rows.push(new ActionRowBuilder().addComponents(...buttons));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
+}
+
+function renderCanvas(game: ScratchGame): Buffer {
+  const { createCanvas } = loadCanvas();
+  const canvas = createCanvas(900, 260);
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#18191c";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#ff007f";
+  context.font = "bold 30px sans-serif";
+  context.fillText("RASPADINHA", 32, 48);
+  for (let index = 0; index < game.grid.length; index += 1) {
+    const x = 32 + (index % 3) * 280;
+    const y = 78 + Math.floor(index / 3) * 58;
+    const selected = game.picks.includes(index);
+    context.fillStyle = selected ? "#57f287" : "#2f3136";
+    context.roundRect(x, y, 250, 42, 8);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    context.font = "22px sans-serif";
+    context.fillText(selected ? game.grid[index].toUpperCase() : `POSIÇÃO ${index + 1}`, x + 14, y + 28);
+  }
+  return canvas.toBuffer("image/png");
 }
 
 module.exports = defineCommand({
@@ -106,7 +132,10 @@ module.exports = defineCommand({
 
     try {
       scratch.activateScratchGame(result.game.id);
-      const message = await interaction.editReply(render({ ...result.game, status: "open" }));
+      const message = await interaction.editReply({
+        ...render({ ...result.game, status: "open" }),
+        files: [{ attachment: renderCanvas({ ...result.game, status: "open" }), name: "raspadinha.png" }],
+      });
       scratch.attachScratchMessage(result.game.id, message.id);
     } catch (error) {
       scratch.cancelPendingScratchGame(result.game.id);
@@ -128,10 +157,16 @@ module.exports = defineCommand({
     await interaction.deferUpdate();
     const result = scratch.selectScratchCell(gameId, interaction.user.id, Number(cellText));
     if (result.ok === true) {
-      return interaction.editReply(render(result.game));
+      return interaction.editReply({
+        ...render(result.game),
+        files: [{ attachment: renderCanvas(result.game), name: "raspadinha.png" }],
+      });
     }
     if (result.game) {
-      await interaction.editReply(render(result.game));
+      await interaction.editReply({
+        ...render(result.game),
+        files: [{ attachment: renderCanvas(result.game), name: "raspadinha.png" }],
+      });
     }
     if (result.reason === "expired") {
       return interaction.followUp({ content: "O bilhete expirou; o valor de 500 cookies foi estornado.", flags: MessageFlags.Ephemeral });
