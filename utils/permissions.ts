@@ -46,6 +46,7 @@ async function requireAccess(interaction, access: AccessRequirement, message?: s
   await interaction.reply({
     content: message || "Você não tem permissão para usar este comando.",
     flags: 64,
+    allowedMentions: { repliedUser: false },
   });
   return false;
 }

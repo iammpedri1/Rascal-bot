@@ -68,9 +68,9 @@ async function handleButton(interaction) {
   const visibleCommands = (scopeRaw || Object.keys(COMMANDS).join(","))
     .split(",")
     .filter(item => COMMANDS[item]);
-  if (!COMMANDS[command]) return interaction.reply({ content: "Esse aviso não é válido.", flags: 64 });
+  if (!COMMANDS[command]) return interaction.reply({ content: "Esse aviso não é válido.", flags: 64, allowedMentions: { repliedUser: false } });
   if (interaction.user.id !== ownerId) {
-    return interaction.reply({ content: "Esse botão pertence a outra pessoa.", flags: 64 });
+    return interaction.reply({ content: "Esse botão pertence a outra pessoa.", flags: 64, allowedMentions: { repliedUser: false } });
   }
 
   const pending = getPending(ownerId, command);
@@ -86,7 +86,7 @@ async function handleButton(interaction) {
   const current = cooldowns.get(ownerId, command);
   const notifyAt = Math.max(Number(nextAtRaw) || 0, current.expiresAt || 0, Date.now());
   if (notifyAt <= Date.now()) {
-    return interaction.reply({ content: `${emoji.correct} ${COMMANDS[command].label} já está pronto.`, flags: 64 });
+    return interaction.reply({ content: `${emoji.correct} ${COMMANDS[command].label} já está pronto.`, flags: 64, allowedMentions: { repliedUser: false } });
   }
   subscribe(ownerId, command, notifyAt);
   return interaction.update({
