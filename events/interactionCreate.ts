@@ -222,6 +222,7 @@ async function enforceCommandRateLimit(interaction: ChatInputCommandInteraction)
   await interaction.reply({
     content: `Calma lá! Você está usando comandos rápido demais. Tente novamente em ${Math.ceil(retryAfterMs / 1000)}s.`,
     flags: 64,
+    allowedMentions: { repliedUser: false },
   }).catch(() => undefined);
   return false;
 }
@@ -235,6 +236,7 @@ module.exports = {
         await interaction.reply({
           content: "O Rascal é exclusivo do servidor configurado e só pode ser usado nele.",
           flags: 64,
+          allowedMentions: { repliedUser: false },
         }).catch(() => undefined);
       }
       return;

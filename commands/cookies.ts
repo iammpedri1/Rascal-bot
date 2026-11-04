@@ -81,10 +81,6 @@ module.exports = defineCommand({
 
       const embed = new EmbedBuilder()
         .setColor(0xf5a623)
-        .setAuthor({
-          name: `Carteira de ${user.username}`,
-          iconURL: user.displayAvatarURL({ size: 64 }),
-        })
         .setTitle(`${cookieEmoji()} Saldo de Cookies`)
         .setThumbnail(emojiImageUrl(emoji.cookie) || user.displayAvatarURL({ size: 256 }))
         .setDescription(
@@ -97,9 +93,9 @@ module.exports = defineCommand({
           {
             name: `${emoji.clipboard} Movimentação`,
             value: [
-              `Rendimento total: **${amount(profile.totalEarned)}**`,
-              `Despesas e perdas: **${amount(profile.totalSpent)}**`,
-              `Resultado em apostas: **${amount(netProfit)}**`,
+              `**Rendimento:** ${amount(profile.totalEarned)} cookies`,
+              `**Despesas:** ${amount(profile.totalSpent)} cookies`,
+              `**Resultado:** ${netProfit >= 0 ? "+" : ""}${amount(netProfit)} cookies`,
             ].join("\n"),
             inline: false,
           },
@@ -124,7 +120,7 @@ module.exports = defineCommand({
           },
           {
             name: `${emoji.booster} Taxa de Manutenção Diária`,
-            value: "Incidência de 1% ao dia sobre saldos excedentes a **500 cookies**. Limite máximo de **250 cookies** por dia.",
+            value: "> Incidência de 1% ao dia sobre saldos excedentes a **500 cookies**; limite de **250 cookies** por dia.",
             inline: false,
           }
         )
@@ -134,7 +130,7 @@ module.exports = defineCommand({
         })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed] });
+      return interaction.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
     }
 
     if (subcommand === "pagar") {
@@ -173,12 +169,13 @@ module.exports = defineCommand({
         })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed] });
+      return interaction.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
     }
 
     return interaction.reply({
       content: "Subcomando desconhecido.",
       flags: 64,
+      allowedMentions: { repliedUser: false },
     });
   },
 });

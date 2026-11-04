@@ -110,7 +110,7 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
     const user = interaction.user;
 
     if (!interaction.guild) {
-        await interaction.reply({ content: "Este minijogo deve ser iniciado dentro de um servidor.", flags: 64 });
+        await interaction.reply({ content: "Este minijogo deve ser iniciado dentro de um servidor.", flags: 64, allowedMentions: { repliedUser: false } });
         return;
     }
 
@@ -157,10 +157,6 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
 
         return new EmbedBuilder()
             .setColor(statusColor)
-            .setAuthor({
-                name: "Campo Minado",
-                iconURL: emoji.getEmojiDetails("blobBan")?.imageUrl || undefined
-            })
             .setTitle(`${icon("blobBan", "💣")} Mines`)
             .addFields(
                 { name: `${icon("coin", "🪙")} Aposta`, value: `**${formatCookies(state.bet)}** cookies`, inline: true },

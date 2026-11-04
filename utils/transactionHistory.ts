@@ -164,9 +164,11 @@ function formatTimestamp(createdAt: number): string {
 
 export function describeTransaction(row: TransactionRow, resolveEmoji: EmojiResolver): string {
   const style = getTransactionStyle(row.type);
-  const icon = resolveEmoji(style.emoji);
-  const cookie = resolveEmoji("cookie");
   const value = Number(row.amount) || 0;
+  const cookie = resolveEmoji("cookie");
+  const icon = value < 0
+    ? resolveEmoji("loss") || (cookie ? "❌" : "")
+    : cookie || resolveEmoji(style.emoji);
   const amount = Math.abs(value).toLocaleString("pt-BR");
   const iconPrefix = icon ? `${icon} ` : "";
   const amountPrefix = cookie ? `${cookie} ` : "";

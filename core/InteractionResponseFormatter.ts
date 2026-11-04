@@ -102,13 +102,24 @@ function formatPayload(payload: unknown, client: Client, guildName?: string | nu
     ? payload.embeds.map(embed => formatEmbed(embed, client, guildName))
     : [];
 
-  if (embeds.length) return { ...payload, embeds };
+  if (embeds.length) {
+    return {
+      ...payload,
+      embeds,
+      allowedMentions: isRecord(payload.allowedMentions)
+        ? { ...payload.allowedMentions, repliedUser: false }
+        : { repliedUser: false },
+    };
+  }
   if (!content.trim()) return payload;
 
   const mentions = mentionTokens(content);
   const formatted: Record<string, unknown> = {
     ...payload,
     embeds: [textEmbed(content, client, guildName)],
+    allowedMentions: isRecord(payload.allowedMentions)
+      ? { ...payload.allowedMentions, repliedUser: false }
+      : { repliedUser: false },
   };
 
   // Keep only explicit mentions in message content so Discord can deliver the ping.

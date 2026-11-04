@@ -138,19 +138,14 @@ function buildDailyEmbed(source, result) {
     .setColor(randomColor())
     .setTitle(`${ICONS.COOKIE_EMOJI} • RECOMPENSA DIÁRIA • ${ICONS.COOKIE_EMOJI}`)
     .setThumbnail(sourceUser(source)?.displayAvatarURL?.({ size: 256 }) || thumbnailFor(source, dailyThumbnails()))
-    .setDescription(
-      [
-        `${ICONS.COOKIE_EMOJI} \u00bb Você resgatou **${amount(result.reward)} cookies** hoje.`,
-        `${emoji.trophy || "🏆"} \u00bb Sua sequência atual é de **${result.streak} dia${result.streak === 1 ? "" : "s"}**.`,
-        `${streakProgress}/5 ${streakBar}`,
-        ...(result.milestoneReward ? [`${ICONS.GIFT_EMOJI} \u00bb Bônus de sequência: **+${amount(result.milestoneReward)} cookies**.`] : []),
-        ...(result.perkBonus ? [`${ICONS.GIFT_EMOJI} \u00bb Seus benefícios adicionaram **${amount(result.perkBonus)} cookies**.`] : []),
-        ...(result.dailyMultiplier === 2 ? [`${emoji.booster || "⚡"} \u00bb Impulso permanente aplicado: **x2 no /daily**.`] : []),
-        "",
-        `${ICONS.COOKIE_EMOJI} \u00bb Saldo total: **${amount(result.profile.balance)} cookies.**`,
-        "",
-        `💡 **Dica:** Você pode obter cookies adicionais avaliando o Rascal. Utilize o comando **/votar**!`,
-      ].join("\n")
+    .setDescription(`${ICONS.HAPPY_EMOJI} Seu resgate foi concluído. Continue sua sequência para desbloquear bônus maiores!`)
+    .addFields(
+      { name: `${ICONS.COOKIE_EMOJI} Recompensa`, value: `**${amount(result.reward)} cookies**${result.milestoneReward ? `\nBônus: **+${amount(result.milestoneReward)}**` : ""}`, inline: true },
+      { name: `${emoji.trophy || "🏆"} Sequência`, value: `**${result.streak} dia${result.streak === 1 ? "" : "s"}**\n${streakProgress}/5 ${streakBar}`, inline: true },
+      { name: `${ICONS.COOKIE_EMOJI} Saldo atual`, value: `**${amount(result.profile.balance)} cookies**`, inline: true },
+      ...(result.perkBonus ? [{ name: `${ICONS.GIFT_EMOJI} Benefícios`, value: `+${amount(result.perkBonus)} cookies`, inline: true }] : []),
+      ...(result.dailyMultiplier === 2 ? [{ name: `${emoji.booster || "⚡"} Multiplicador`, value: "**x2 no /daily**", inline: true }] : []),
+      { name: "💡 Dica", value: "*Use /votar para obter cookies adicionais.*", inline: false },
     );
 
   return finish(embed, source);
