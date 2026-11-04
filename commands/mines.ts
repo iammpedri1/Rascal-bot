@@ -103,7 +103,7 @@ function buildControlRow(gameId: string, state: MinesState, disabled = false): A
 async function executeMines(interaction: CommandChatInputInteraction): Promise<void> {
     const bet = interaction.options.getInteger("aposta") ?? 0;
     const mineCount = interaction.options.getInteger("minas") ?? 3;
-    const requestedGridSize = interaction.options.getInteger("tamanho") ?? 5;
+    const requestedGridSize = interaction.options.getInteger("tamanho") ?? 3;
     const gridSize = requestedGridSize === 3 ? 3 : 5;
     const gameId = randomUUID();
     const context = contextFor(interaction);
@@ -111,6 +111,16 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
 
     if (!interaction.guild) {
         await interaction.reply({ content: "Este minijogo deve ser iniciado dentro de um servidor.", flags: 64 });
+        return;
+    }
+
+    // Um tabuleiro 5x5 ocupa as cinco action rows permitidas pelo Discord;
+    // os controles precisam de uma sexta row e fariam a API rejeitar a resposta.
+    if (gridSize === 5) {
+        await interaction.reply({
+            content: "O tabuleiro 5x5 está temporariamente indisponível porque o Discord permite no máximo 5 linhas de componentes. Use `tamanho: 3`.",
+            flags: 64,
+        });
         return;
     }
 
