@@ -1,4 +1,3 @@
-// @ts-nocheck
 const fs = require("fs");
 const path = require("path");
 const Database = require("better-sqlite3");
@@ -562,6 +561,12 @@ function integer(value, fallback = 0) {
   return Number.isFinite(parsed) ? Math.floor(parsed) : fallback;
 }
 
+interface LegacyProfile {
+  [key: string]: string | number | undefined;
+  username?: string;
+  balance?: number;
+}
+
 function migrateLegacyCookies() {
   const marker = path.join(dataDir, ".sqlite-migrated");
   if (fs.existsSync(marker) || !fs.existsSync(legacyCookiesFile)) return;
@@ -574,7 +579,9 @@ function migrateLegacyCookies() {
 
   try {
     const store = JSON.parse(fs.readFileSync(legacyCookiesFile, "utf8"));
-    const users = store?.users && typeof store.users === "object" ? store.users : {};
+    const users = store?.users && typeof store.users === "object"
+      ? store.users as Record<string, LegacyProfile>
+      : {};
     const insert = db.prepare(`
       INSERT OR IGNORE INTO usuarios (
         id, username, cookies, reputacao, bet_wins, bet_losses, draws,
@@ -643,7 +650,8 @@ function migrateLegacyCookies() {
         ];
 
         for (const [command, expiresAt] of cooldowns) {
-          if (expiresAt > now) insertCooldown.run(String(id), command, expiresAt);
+          const expires = integer(expiresAt);
+          if (expires > now) insertCooldown.run(String(id), command, expires);
         }
       }
     });

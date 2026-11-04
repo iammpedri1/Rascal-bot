@@ -1,4 +1,3 @@
-// @ts-nocheck
 const db = require("./db");
 const cooldowns = require("./cooldowns");
 const { PRIMARY_GUILD_ID } = require("./primaryGuild");
@@ -27,10 +26,11 @@ const DAILY_MILESTONE_MIN = 1000;
 const DAILY_MILESTONE_MAX = 3000;
 
 // Work
-const WORK_MIN_REWARD = 250;
-const WORK_MAX_REWARD = 950;
-const WORK_MIN_LOSS = 150;
-const WORK_MAX_LOSS = 700;
+const WORK_MIN_REWARD = 50;
+const WORK_MAX_REWARD = 300;
+const WORK_MIN_LOSS = 100;
+const WORK_MAX_LOSS = 300;
+const WORK_DISMISSAL_CHANCE = 0.1;
 
 // Roubo — balanceado
 const ROB_MIN_TARGET_BALANCE = 50;   // era 20 — evita roubar quem não tem nada
@@ -274,6 +274,7 @@ function getProfile(user) {
 // ─── Daily com multiplicador de streak ───────────────────────────────────────
 
 function claimDaily(user, details: TransactionDetails = {}) {
+  return db.transaction(() => {
   const profile = getUser(user);
   const cooldown = cooldowns.check(profile.id, "daily");
 
@@ -341,6 +342,7 @@ function claimDaily(user, details: TransactionDetails = {}) {
     dailyMultiplier: dailyBoost.multiplier,
     nextAt,
   };
+  })();
 }
 
 function getDailyStreak(user) {
@@ -368,6 +370,7 @@ function getDailyStreak(user) {
 // ─── Work ─────────────────────────────────────────────────────────────────────
 
 function work(user, details: TransactionDetails = {}) {
+  return db.transaction(() => {
   const profile = getUser(user);
   const cooldown = cooldowns.check(profile.id, "trabalhar");
 
@@ -377,7 +380,6 @@ function work(user, details: TransactionDetails = {}) {
       profile,
       remaining: cooldown.remaining,
       nextAt: cooldown.expiresAt,
-      nextAt: cooldown.expiresAt,
     };
   }
 
@@ -386,15 +388,15 @@ function work(user, details: TransactionDetails = {}) {
     const currentProfile = getById(profile.id);
     updateStats(profile.id, { work_count: 1 });
 
-    if (Math.random() >= 0.4) {
+    if (Math.random() > 1 - WORK_DISMISSAL_CHANCE) {
       // A multa nunca pode exceder o saldo que realmente existe.
       const loss = Math.min(currentProfile.balance, randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS));
       if (loss > 0) {
         addBalance(profile.id, -loss);
         updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
-        pushTransaction("work_loss", profile.id, -loss, {
+        pushTransaction("work_dismissal", profile.id, -loss, {
           ...details,
-          note: details.reason || details.note,
+          note: `Demitido(a): ${details.reason || details.note || "desempenho inadequado"}`,
         });
       }
 
@@ -430,11 +432,12 @@ function work(user, details: TransactionDetails = {}) {
   });
 
   return settleWork();
+  })();
 }
 
 // ─── Bonus ────────────────────────────────────────────────────────────────────
 
-function claimBonus(user, details = {}) {
+function claimBonus(user, details: TransactionDetails = {}) {
   const profile = getUser(user);
   const cooldown = cooldowns.check(profile.id, "bonus");
 
@@ -470,7 +473,7 @@ function claimBonus(user, details = {}) {
 
 // ─── Roubo balanceado ─────────────────────────────────────────────────────────
 
-function rob(thiefUser, targetUser, details = {}) {
+function rob(thiefUser, targetUser, details: TransactionDetails = {}) {
   const thief = getUser(thiefUser);
   const target = getUser(targetUser);
 
@@ -593,7 +596,7 @@ function rob(thiefUser, targetUser, details = {}) {
 
 // ─── Rifa ─────────────────────────────────────────────────────────────────────
 
-function playRifa(user, amount, details = {}) {
+function playRifa(user, amount, details: TransactionDetails = {}) {
   const value = cleanAmount(amount);
   const profile = getUser(user);
 
@@ -622,7 +625,7 @@ function playRifa(user, amount, details = {}) {
 
 // ─── Rep ──────────────────────────────────────────────────────────────────────
 
-function giveRep(fromUser, toUser, details = {}) {
+function giveRep(fromUser, toUser, details: TransactionDetails = {}) {
   const from = getUser(fromUser);
   const to = getUser(toUser);
 
@@ -651,7 +654,7 @@ function transferTax(amount) {
   return Math.floor(value * 0.05);
 }
 
-function transfer(fromUser, toUser, amount, details = {}) {
+function transfer(fromUser, toUser, amount, details: TransactionDetails = {}) {
   const requested = Number(amount);
   if (!Number.isSafeInteger(requested) || requested <= 0) {
     return { ok: false, reason: "amount", from: getUser(fromUser), to: getUser(toUser) };
@@ -706,7 +709,7 @@ function canBet(user, amount) {
   return getProfile(user).balance >= cleanAmount(amount);
 }
 
-function settleBet(user, amount, result, details = {}) {
+function settleBet(user, amount, result, details: TransactionDetails = {}) {
   const value = cleanAmount(amount);
   const profile = getUser(user);
 
@@ -728,7 +731,7 @@ function settleBet(user, amount, result, details = {}) {
   return getById(profile.id);
 }
 
-function settleDuel(winnerUser, loserUser, amount, details = {}) {
+function settleDuel(winnerUser, loserUser, amount, details: TransactionDetails = {}) {
   const value = cleanAmount(amount);
   const winner = getUser(winnerUser);
   const loser = getUser(loserUser);
@@ -744,7 +747,7 @@ function settleDuel(winnerUser, loserUser, amount, details = {}) {
   return { winner: getById(winner.id), loser: getById(loser.id) };
 }
 
-function settleDraw(userA, userB, details = {}) {
+function settleDraw(userA, userB, details: TransactionDetails = {}) {
   const profileA = getUser(userA);
   const profileB = getUser(userB);
 
@@ -805,7 +808,7 @@ function getShopInventory(userId) {
   `).all(String(userId));
 }
 
-function purchaseShopItem(user, itemId, details = {}) {
+function purchaseShopItem(user, itemId, details: TransactionDetails = {}) {
   const item = SHOP_ITEMS_BY_ID[itemId];
   if (!item) return { ok: false, reason: "invalid_item" };
 
@@ -866,7 +869,7 @@ function getGuildShopRolePurchase(guildId, userId, roleId, kind) {
     .get(String(guildId), String(userId), String(roleId), String(kind)) || null;
 }
 
-function purchaseCooldownUnlock(user, targets, price, details = {}) {
+function purchaseCooldownUnlock(user, targets, price, details: TransactionDetails = {}) {
   const eligibleTargets = [...new Set((Array.isArray(targets) ? targets : [targets]).map(String))]
     .filter(target => ["daily", "roubar", "trabalhar"].includes(target) && cooldowns.DURATIONS[target]);
   const cost = Math.max(0, integer(price));
@@ -901,7 +904,7 @@ function purchaseCooldownUnlock(user, targets, price, details = {}) {
   })();
 }
 
-function openShopChest(user, itemId, details = {}) {
+function openShopChest(user, itemId, details: TransactionDetails = {}) {
   const item = SHOP_ITEMS_BY_ID[itemId];
   if (!item || item.kind !== "chest") return { ok: false, reason: "invalid_chest" };
 
@@ -974,7 +977,7 @@ function openShopChest(user, itemId, details = {}) {
   return open();
 }
 
-function useShopCooldownPass(user, itemId, target, details = {}) {
+function useShopCooldownPass(user, itemId, target, details: TransactionDetails = {}) {
   const item = SHOP_ITEMS_BY_ID[itemId];
   if (!item || item.kind !== "cooldown_pass") return { ok: false, reason: "invalid_item" };
   if (!COOLDOWN_TARGETS.some(entry => entry.id === target) || !cooldowns.DURATIONS[target]) {
@@ -1014,7 +1017,7 @@ function useShopCooldownPass(user, itemId, target, details = {}) {
   return use();
 }
 
-function activateCookieBoost(user, itemId, details = {}) {
+function activateCookieBoost(user, itemId, details: TransactionDetails = {}) {
   const item = SHOP_ITEMS_BY_ID[itemId];
   if (!item || item.kind !== "cookie_boost") return { ok: false, reason: "invalid_item" };
 

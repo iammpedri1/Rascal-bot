@@ -113,11 +113,8 @@ function buildPunishmentEmbed(interaction, targetUser, action, reason) {
 
     const embed = new EmbedBuilder()
         .setColor(action.color)
-        .setAuthor({
-            name: `${targetUser.username} • ${action.label}`,
-            iconURL: targetUser.displayAvatarURL({ size: 128 }),
-        })
-        .setThumbnail(action.gif)
+        .setTitle(`${action.actionLabel === "BANIMENTO" ? "🔨" : action.actionLabel === "EXPULSÃO" ? "👢" : action.actionLabel === "SILENCIAMENTO" ? "🤐" : "⚠️"} • ${targetUser.tag || targetUser.username} • ${action.actionLabel}`)
+        .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
         .setDescription(
             `�️ • ${targetUser} recebeu um **${action.actionLabel}** ${action.description}\n\n` +
             `O usuário violou as **Diretrizes e Termos de Conduta** da comunidade, resultando na aplicação desta sanção. Recomendamos a leitura atenta das regras no canal <#${interaction.channelId}>.`

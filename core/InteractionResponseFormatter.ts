@@ -21,13 +21,44 @@ function brandFooter(client: Client, guildName?: string | null) {
   };
 }
 
+function truncate(value: unknown, length: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return value.length > length ? value.slice(0, length) : value;
+}
+
+function normalizeEmbedLimits(embed: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = { ...embed };
+  normalized.title = truncate(normalized.title, 256);
+  normalized.description = truncate(normalized.description, 4096);
+  if (!normalized.title) delete normalized.title;
+  if (!normalized.description) delete normalized.description;
+
+  if (Array.isArray(normalized.fields)) {
+    normalized.fields = normalized.fields.slice(0, 25).map((field) => {
+      const source = isRecord(field) ? field : {};
+      return {
+        ...source,
+        name: truncate(source.name, 256) || "\u200b",
+        value: truncate(source.value, 1024) || "\u200b",
+      };
+    });
+  }
+
+  let total = JSON.stringify(normalized).length;
+  if (total > 6000 && typeof normalized.description === "string") {
+    const excess = total - 6000;
+    normalized.description = normalized.description.slice(0, Math.max(0, normalized.description.length - excess));
+  }
+  return normalized;
+}
+
 function formatEmbed(embed: unknown, client: Client, guildName?: string | null): unknown {
   const footer = brandFooter(client, guildName);
 
   if (embed instanceof EmbedBuilder) {
     embed.setColor(randomColor());
     if (!embed.data.footer) embed.setFooter(footer);
-    return embed;
+    return normalizeEmbedLimits(embed.toJSON() as Record<string, unknown>);
   }
 
   if (isRecord(embed) && "toJSON" in embed && typeof embed.toJSON === "function") {
@@ -36,7 +67,7 @@ function formatEmbed(embed: unknown, client: Client, guildName?: string | null):
 
   if (!isRecord(embed)) return embed;
   return {
-    ...embed,
+    ...normalizeEmbedLimits(embed),
     color: randomColor(),
     footer: isRecord(embed.footer) ? embed.footer : footer,
   };

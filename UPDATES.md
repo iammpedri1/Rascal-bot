@@ -36,4 +36,12 @@
 - `/roletarussa` exibe GIF temático de resultado e `/pix` aplica imposto progressivo.
 - Atualizado o README com as opções públicas e corrigido o fallback de resposta do `/clear`.
 
+## Economia, moderação e voz
+
+- `/trabalhar` agora usa empregos e recompensas variáveis, com demissão de baixa probabilidade e registro da perda no histórico.
+- O botão de cooldown usa o rótulo `Notificar próximo trabalho` e mantém a notificação persistida em banco.
+- `/transacoes` exibe histórico paginado com os botões `Voltar` e `Próximo`, usando `deferUpdate()`.
+- O rastreamento de voz credita 10 cookies a cada 15 minutos elegíveis e registra cada crédito como transação.
+- `/punir` publica embeds com título, avatar do usuário e GIF específico por tipo de sanção, mantendo o caso auditado no banco.
+
 _Este arquivo resume as alterações implementadas e a validação atual do projeto._

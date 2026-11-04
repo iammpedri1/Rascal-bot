@@ -14,7 +14,7 @@ const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
 const logger = require("../utils/logger") as {
   error(message: string, error?: unknown, metadata?: Record<string, unknown>): void;
 };
-const { loadCanvas } = require("../utils/canvas") as typeof import("../utils/canvas");
+const { getReusableCanvas } = require("../utils/canvas") as typeof import("../utils/canvas");
 
 const SYMBOLS: Record<string, { name: string; fallback: string }> = {
   cookie: { name: "cookie", fallback: "🍪" },
@@ -75,8 +75,7 @@ function render(game: ScratchGame) {
 }
 
 function renderCanvas(game: ScratchGame): Buffer {
-  const { createCanvas } = loadCanvas();
-  const canvas = createCanvas(900, 260);
+  const canvas = getReusableCanvas(900, 260);
   const context = canvas.getContext("2d");
   context.fillStyle = "#18191c";
   context.fillRect(0, 0, canvas.width, canvas.height);

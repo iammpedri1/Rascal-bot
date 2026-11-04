@@ -11,7 +11,7 @@ const {
   MessageFlags,
   SlashCommandBuilder,
 } = require("discord.js") as typeof import("discord.js");
-const { loadCanvas } = require("../utils/canvas");
+const { loadImageCached, getReusableCanvas } = require("../utils/canvas");
 
 const emoji = require("../utils/emojis");
 
@@ -126,11 +126,10 @@ function truncate(context, value, maxWidth) {
 }
 
 async function createSpotifyCard(activity) {
-  const { createCanvas, loadImage } = loadCanvas();
-  const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
-  const context = canvas.getContext("2d");
   const coverUrl = spotifyCover(activity);
-  const cover = coverUrl ? await loadImage(coverUrl).catch(() => null) : null;
+  const cover = coverUrl ? await loadImageCached(coverUrl).catch(() => null) : null;
+  const canvas = getReusableCanvas(CARD_WIDTH, CARD_HEIGHT);
+  const context = canvas.getContext("2d");
   const start = Number(activity.timestamps?.start || 0);
   const end = Number(activity.timestamps?.end || 0);
   const duration = end > start ? end - start : 0;

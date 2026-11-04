@@ -3,7 +3,7 @@ const {
   AttachmentBuilder,
   SlashCommandBuilder,
 } = require("discord.js") as typeof import("discord.js");
-const { loadCanvas } = require("../utils/canvas");
+const { loadImageCached, createCanvas } = require("../utils/canvas");
 const { generateFakeTweetMetrics } = require("../utils/fakeTweetMetrics");
 
 const CARD_WIDTH = 1240;
@@ -87,11 +87,10 @@ function drawAvatar(context, avatar, x, y, size) {
 }
 
 async function loadAvatar(url): Promise<any> {
-  const { loadImage } = loadCanvas();
   let timeout;
   try {
     return await Promise.race([
-      loadImage(url).catch(() => null),
+      loadImageCached(url).catch(() => null),
       new Promise<any>(resolve => {
         timeout = setTimeout(() => resolve(null), AVATAR_TIMEOUT_MS);
         timeout.unref?.();
@@ -103,7 +102,6 @@ async function loadAvatar(url): Promise<any> {
 }
 
 async function createTweetCard(user, message, options: any = {}) {
-  const { createCanvas } = loadCanvas();
   let canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
   let context = canvas.getContext("2d");
   const avatarUrl = Object.hasOwn(options, "avatarUrl")

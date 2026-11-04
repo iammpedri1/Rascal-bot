@@ -85,7 +85,7 @@ const workFailReasons = [
 ];
 
 function amount(value) {
-  return Number(value || 0).toLocaleString("en-US");
+  return Number(value || 0).toLocaleString("pt-BR");
 }
 
 function pick(list) {
@@ -162,43 +162,34 @@ function buildDailyCooldownEmbed(source, result) {
 
 function buildWorkEmbed(source, result) {
   const peepoSuit = "https://cdn.discordapp.com/emojis/1059245824036962324.png";
+  const channelId = source?.channelId || source?.channel?.id || "canal de comandos";
 
   if (!result.success) {
-    const reason = String(result.reason || pick(workFailReasons))
-      .replace(/^por\s+/i, "")
-      .replace(/[.]+$/, "");
-    const description = [
-      `${peepSad()} \u00bb Suas atividades foram encerradas por rescisão contratual.`,
-      "",
-      result.loss > 0
-        ? `Houve uma penalidade financeira: você foi multado em **${amount(result.loss)} cookies** devido a **${reason}**.`
-        : `Você foi desligado por **${reason}**, mas não possuía saldo suficiente para a multa contratual.`,
-      "",
-      `${ICONS.CALM_EMOJI} \u00bb Mantenha a calma. Você poderá buscar uma nova oportunidade profissional em breve.`,
-      "",
-      `💡 **Dica:** Conheça outras formas de obter cookies em **/info cookies**.`,
-    ];
-
     return finish(new EmbedBuilder()
-      .setColor(randomColor())
-      .setTitle(`CENTRO DE ATIVIDADES PROFISSIONAIS`)
+      .setColor(0x2b2d31)
+      .setTitle("🧑‍🏭 DEMITIDO(A) 🧑‍🏭")
       .setThumbnail(peepoSuit)
-      .setDescription(description.join("\n")), source);
+      .setDescription([
+        `📕 \u00bb Você foi demitido(a) após tentar trabalhar e perdeu **${amount(result.loss)} cookies**.`,
+        "",
+        `🍪 \u00bb Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        "",
+        `💁‍♀️ \u00bb Veja o que pode fazer com os seus cookies!`,
+        `↳ Use \`/info cookies\` em <#${channelId}>.`,
+      ].join("\n")), source);
   }
 
   const embed = new EmbedBuilder()
-    .setColor(randomColor())
-    .setTitle(`CENTRO DE ATIVIDADES PROFISSIONAIS`)
+    .setColor(0x2b2d31)
+    .setTitle("🧑‍🏭 TRABALHANDO NA FIRMA 🧑‍🏭")
     .setThumbnail(peepoSuit)
     .setDescription(
       [
-        `${pandHappy()} \u00bb Excelente! Você concluiu suas atividades com sucesso.`,
-        "",
-        `${ICONS.WORK_EMOJI} \u00bb Atuando como **${result.job || pick(workSuccessMessages)}**, você obteve um rendimento de **${amount(result.reward)} cookies**${result.perkBonus ? ` (incluindo +${amount(result.perkBonus)} de bônus)` : ""}!`,
-        "",
-        `${ICONS.COOKIE_EMOJI} \u00bb Saldo total: **${amount(result.profile.balance)} cookies.**`,
-        "",
-        `💡 **Dica:** Explore a economia em **/info cookies** e descubra novas possibilidades!`,
+        "📕 \u00bb Parabéns! Você acaba de realizar um trabalho!",
+        `${ICONS.WORK_EMOJI} \u00bb Você trabalhou como **${result.job || pick(workSuccessMessages)}** e ganhou **${amount(result.reward)} cookies**!`,
+        `🍪 \u00bb Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        "💁‍♀️ \u00bb Veja o que pode fazer com os seus cookies!",
+        `↳ Use \`/info cookies\` em <#${channelId}>.`,
       ].join("\n")
     );
 

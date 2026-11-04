@@ -10,6 +10,7 @@ import { EventHandler } from "../handlers/eventHandler";
 import type { CommandDefinition } from "../types/command";
 import type { Logger } from "../types/logger";
 const logger = require("../utils/logger") as Logger;
+const { latestDiscordCommand } = require("../utils/discordDiagnostics") as typeof import("../utils/discordDiagnostics");
 
 function buildClientOptions(): ClientOptions {
   const intents = [
@@ -79,6 +80,14 @@ export class RascalClient extends Client {
     this.on("shardReconnecting", (id) => logger.warn("Shard reconectando", { id }));
     this.on("shardResume", (id, replayedEvents) => {
       logger.info("Shard reconectada", { id, replayedEvents });
+    });
+    this.on("rateLimit", (info) => {
+      logger.warn("Rate limit do Discord acionado", {
+        route: info.route,
+        timeout: info.timeout,
+        global: info.global,
+        command: latestDiscordCommand() ?? "não identificado",
+      });
     });
   }
 }

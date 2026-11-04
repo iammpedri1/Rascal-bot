@@ -39,18 +39,18 @@ function buildPage(interaction, requestedPage: number, global = false) {
     .setDescription(rows.length
       ? rows.map(row => describeTransaction(row, resolveEmoji)).join("\n\n")
       : "Nenhuma transação registrada no momento.")
-    .setFooter({ text: `Página ${current + 1} de ${pages} · Total: ${total}` });
+    .setFooter({ text: `Página ${current + 1} de ${pages} | Quantidade de Transações (${total})` });
 
   const buttons = new ActionRowBuilder().addComponents(
     emoji.setGuildButtonEmoji(new ButtonBuilder()
       .setCustomId(historyButtonId("prev", interaction.user.id, current) + (global ? "|global" : ""))
       .setStyle(ButtonStyle.Secondary)
-      .setLabel("Anterior")
+      .setLabel("Voltar")
       .setDisabled(current <= 0), interaction.guild, "previous", ""),
     emoji.setGuildButtonEmoji(new ButtonBuilder()
       .setCustomId(historyButtonId("next", interaction.user.id, current) + (global ? "|global" : ""))
       .setStyle(ButtonStyle.Success)
-      .setLabel("Próxima")
+      .setLabel("Próximo")
       .setDisabled(current >= pages - 1), interaction.guild, "next", ""),
   );
 
@@ -70,7 +70,8 @@ module.exports = defineCommand({
 
   async execute(interaction) {
     const global = interaction.options.getBoolean("servidor") ?? false;
-    return interaction.reply({ ...buildPage(interaction, 0, global), allowedMentions: { parse: [] } });
+    await interaction.deferReply();
+    return interaction.editReply({ ...buildPage(interaction, 0, global), allowedMentions: { parse: [] } });
   },
 
   async handleButton(interaction) {
@@ -84,6 +85,7 @@ module.exports = defineCommand({
     if (interaction.user.id !== button.ownerId) {
       return interaction.reply({ content: "Este histórico foi solicitado por outro usuário.", flags: 64 });
     }
-    return interaction.update({ ...buildPage(interaction, targetPage(button), isGlobal), allowedMentions: { parse: [] } });
+    await interaction.deferUpdate();
+    return interaction.editReply({ ...buildPage(interaction, targetPage(button), isGlobal), allowedMentions: { parse: [] } });
   },
 });

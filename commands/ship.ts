@@ -1,6 +1,6 @@
 import { defineCommand } from "../types/command";
 const { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
-const { loadCanvas } = require("../utils/canvas");
+const { loadImageCached, getReusableCanvas } = require("../utils/canvas");
 
 const emoji = require("../utils/emojis");
 const { COLORS, setBrandFooter } = require("../utils/embedStyle");
@@ -119,9 +119,8 @@ function drawCircleAvatar(ctx, image, x, y, size) {
 }
 
 async function loadAvatar(user) {
-  const { loadImage } = loadCanvas();
   try {
-    return await loadImage(user.displayAvatarURL({ extension: "png", size: 256 }));
+    return await loadImageCached(user.displayAvatarURL({ extension: "png", size: 256 }));
   } catch {
     return null;
   }
@@ -148,33 +147,27 @@ function drawProfileCard(ctx, user, image, x, align = "left") {
 }
 
 async function buildShipImage(userA, userB, percent, coupleName) {
-  const { createCanvas } = loadCanvas();
-  const canvas = createCanvas(WIDTH, HEIGHT);
+  const [avatarA, avatarB] = await Promise.all([loadAvatar(userA), loadAvatar(userB)]);
+  const canvas = getReusableCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
   const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-
   gradient.addColorStop(0, "#f8fafc");
   gradient.addColorStop(0.48, "#fdf2f8");
   gradient.addColorStop(1, "#eef2ff");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
   ctx.fillStyle = "#ffffff";
   fillRoundRect(ctx, 38, 34, WIDTH - 76, HEIGHT - 68, 36);
   ctx.strokeStyle = "rgba(15, 23, 42, 0.08)";
   ctx.lineWidth = 2;
   strokeRoundRect(ctx, 38, 34, WIDTH - 76, HEIGHT - 68, 36);
-
   ctx.fillStyle = "#0f172a";
   ctx.textAlign = "center";
   ctx.font = "800 34px Arial";
   ctx.fillText("SHIP REPORT", WIDTH / 2, 82);
-
   ctx.fillStyle = "#64748b";
   ctx.font = "600 18px Arial";
   ctx.fillText("compatibilidade deterministica por ID", WIDTH / 2, 110);
-
-  const [avatarA, avatarB] = await Promise.all([loadAvatar(userA), loadAvatar(userB)]);
   drawProfileCard(ctx, userA, avatarA, 92, "left");
   drawProfileCard(ctx, userB, avatarB, 708, "right");
 

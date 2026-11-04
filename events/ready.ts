@@ -42,18 +42,22 @@ module.exports = {
     if (recoveredLockdowns) logger.warn("Lockdowns anti-raid ativos recuperados do banco", { count: recoveredLockdowns });
     if (!isImageModerationConfigured()) logger.warn("Moderação de imagens por IA desativada: configure OPENAI_API_KEY no .env.");
 
-    for (const guild of client.guilds.cache.values()) {
-      if (guild.id === PRIMARY_GUILD_ID) continue;
-      try {
-        await guild.leave();
-        logger.warn("Servidor removido: Rascal é exclusivo do servidor configurado", {
-          guildId: guild.id,
-          guildName: guild.name,
-        });
-      } catch (error) {
-        logger.error("Não foi possível sair de um servidor fora da configuração exclusiva", error, {
-          guildId: guild.id,
-        });
+    if (!PRIMARY_GUILD_ID) {
+      logger.warn("GUILD_ID não configurado; nenhuma guilda será abandonada.");
+    } else {
+      for (const guild of client.guilds.cache.values()) {
+        if (guild.id === PRIMARY_GUILD_ID) continue;
+        try {
+          await guild.leave();
+          logger.warn("Servidor removido: Rascal é exclusivo do servidor configurado", {
+            guildId: guild.id,
+            guildName: guild.name,
+          });
+        } catch (error) {
+          logger.error("Não foi possível sair de um servidor fora da configuração exclusiva", error, {
+            guildId: guild.id,
+          });
+        }
       }
     }
     // Aplicações não recebem um evento gateway para emojis do Developer Portal.

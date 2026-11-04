@@ -5,7 +5,7 @@ const logger = require("./logger");
 const { getPrimaryGuild } = require("./primaryGuild");
 
 const activeSessions = new Map();
-const VOICE_REWARD_INTERVAL_MS = 10 * 60 * 1000;
+const VOICE_REWARD_INTERVAL_MS = 15 * 60 * 1000;
 let rewardSchedulerStarted = false;
 const addVoiceSecondsStmt = db.prepare(`
   INSERT INTO voice_weekly_stats (guild_id, user_id, week_key, seconds, updated_at)
@@ -533,21 +533,22 @@ function payVoiceRewards(client, now = Date.now()) {
       continue;
     }
 
-    const reward = 1 + Math.floor(Math.random() * 5);
-    const user = { id: session.userId, username: session.username };
-    getUser(user);
-    addBalance(session.userId, reward);
-    updateStats(session.userId, { cookies_won: reward, total_earned: reward });
-    pushTransaction("voice_reward", session.userId, reward, {
-      guildId: session.guildId,
-      note: "10 minutos em canal de voz sem mute",
-    });
-    const lastRewardAt = now;
-    session.eligibleSince = now;
-    db.prepare(`
-      UPDATE voice_reward_state SET eligible_since = ?, last_reward_at = ?
-      WHERE guild_id = ? AND user_id = ?
-    `).run(now, lastRewardAt, session.guildId, session.userId);
+    db.transaction(() => {
+      const reward = 10;
+      const user = { id: session.userId, username: session.username };
+      getUser(user);
+      addBalance(session.userId, reward);
+      updateStats(session.userId, { cookies_won: reward, total_earned: reward });
+      pushTransaction("voice_reward", session.userId, reward, {
+        guildId: session.guildId,
+        note: "15 minutos em canal de voz sem mute",
+      });
+      session.eligibleSince = now;
+      db.prepare(`
+        UPDATE voice_reward_state SET eligible_since = ?, last_reward_at = ?
+        WHERE guild_id = ? AND user_id = ?
+      `).run(now, now, session.guildId, session.userId);
+    })();
   }
 }
 

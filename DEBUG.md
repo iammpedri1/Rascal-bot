@@ -30,3 +30,10 @@
 - As sessões de voz são armazenadas em `activeSessions` (Map). Quando o usuário sai, a sessão deve ser removida.
 - O bug original ocorria porque a verificação de presença no canal não era feita.
 - A correção adiciona verificação de `member?.voice?.channelId` e limpa sessões órfãs.
+
+## Diagnóstico de runtime
+
+- Se `GUILD_ID` não estiver configurado, o evento `ready` registra um aviso e não abandona nenhuma guilda.
+- O listener `Client#rateLimit` registra rota, timeout e escopo global para investigar throttling da API.
+- Imagens usam cache LRU de até 200 URLs; falhas são removidas do cache para permitir novas tentativas.
+- Canvas reutilizável é limitado a 4096x4096 e é limpo antes de cada renderização.

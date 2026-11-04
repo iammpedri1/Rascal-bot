@@ -55,7 +55,7 @@ function buildButtons(userId, stateByCommand = {}, nextAtByCommand = {}, command
     const button = new ButtonBuilder()
       .setCustomId(`cooldownnotify|${command}|${userId}|${nextAt}|${visibleCommands.join(",")}`)
       .setStyle(pending ? ButtonStyle.Success : ButtonStyle.Secondary)
-      .setLabel(pending ? `Aviso ativo: ${config.label}` : `Notificar ${config.label}`)
+      .setLabel("Notificar próximo trabalho")
       .setDisabled(!pending && nextAt <= Date.now());
     button.setEmoji(NOTIFICATION_BELL);
     row.addComponents(button);

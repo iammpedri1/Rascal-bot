@@ -30,6 +30,7 @@ const { handleButton: handleCooldownNotification } = require("../utils/cooldownN
 };
 const { createRateLimiter } = require("../utils/interactionRateLimit") as typeof import("../utils/interactionRateLimit");
 const logger = require("../utils/logger") as Logger;
+const { recordDiscordCommand } = require("../utils/discordDiagnostics") as typeof import("../utils/discordDiagnostics");
 
 // Limite generoso: barra apenas flood de comandos, sem atrapalhar o uso normal.
 const commandRateLimiter = createRateLimiter({ max: 10, windowMs: 10_000 });
@@ -136,6 +137,7 @@ async function dispatchCommand(
       user: interaction.user.id,
       guild: interaction.guildId,
     });
+    recordDiscordCommand(interaction.commandName);
 
     await command.execute(response as unknown as CommandChatInputInteraction, client as BotClient);
   } catch (error) {

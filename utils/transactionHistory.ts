@@ -33,7 +33,8 @@ export const TRANSACTION_STYLES: Record<string, TransactionStyle> = {
   daily_tax: { emoji: "cookie", action: "Pagou taxa antiga de inatividade", verb: "Pagou" },
   monthly_tax: { emoji: "cookie", action: "Pagou taxa mensal de 2%", verb: "Pagou" },
   work: { emoji: "work", action: "Trabalhou na firma", verb: "Recebeu" },
-  work_loss: { emoji: "peepSad", action: "Não concluiu o trabalho", verb: "Perdeu" },
+  work_dismissal: { emoji: "peepSad", action: "Foi demitido(a)", verb: "Perdeu" },
+  work_loss: { emoji: "peepSad", action: "Foi demitido(a)", verb: "Perdeu" },
   bonus: { emoji: "gift", action: "Resgatou o bônus semanal", verb: "Recebeu" },
   rob_win: { emoji: "pand_happy", action: "Conseguiu roubar", verb: "Recebeu" },
   rob_loss_target: { emoji: "pand_police", action: "Foi roubado", verb: "Perdeu" },
@@ -114,6 +115,7 @@ const PLAIN_NOTE_TYPES = new Set([
 // Types that never get a separate "> note" line.
 export const NOTE_LINE_HIDDEN_TYPES: ReadonlySet<string> = new Set([
   "work",
+  "work_dismissal",
   "work_loss",
   "game_stake_reserved",
   "game_refund",
@@ -143,7 +145,7 @@ export function transactionAction(row: TransactionRow): string {
   if (row.type === "rob_win" || row.type === "rob_fail") return `${style.action} de${target || " alguém"}`;
   if (preposition) return `${style.action}${target ? ` ${preposition}${target}` : ""}`;
   if (row.type === "work" && note) return `Trabalhou como **${note}**`;
-  if (row.type === "work_loss" && note) return `Foi demitido(a) ${note}`;
+  if ((row.type === "work_dismissal" || row.type === "work_loss") && note) return `Foi demitido(a) ${note}`;
   if (row.type === "shop_cooldown_unlock" && note.startsWith("Acelerador:")) {
     const targets = note.slice("Acelerador:".length).trim().split(",").map(command => command.trim()).join(", ");
     return `${style.action}: ${targets}`;
