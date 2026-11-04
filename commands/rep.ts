@@ -14,11 +14,11 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("rep")
-    .setDescription("Envie reputação para outro usuário a cada 12 horas")
+    .setDescription("Atribua um ponto de reputação a um membro da comunidade")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuário que vai receber reputação")
+        .setDescription("Usuário que receberá a reputação")
         .setRequired(true)
     ),
 
@@ -27,7 +27,7 @@ module.exports = defineCommand({
 
     if (target.bot) {
       return interaction.reply({
-        content: `${emoji.crossed} | **Você não pode dar rep para bots.**`,
+        content: `${emoji.crossed} | **Não é possível atribuir reputação a perfis robóticos.**`,
         flags: 64,
       });
     }
@@ -36,14 +36,14 @@ module.exports = defineCommand({
 
     if (!result.ok && result.reason === "self") {
       return interaction.reply({
-        content: `${emoji.crossed} | **Você não pode dar rep para si mesmo.**`,
+        content: `${emoji.crossed} | **Você não pode atribuir reputação ao próprio perfil.**`,
         flags: 64,
       });
     }
 
     if (!result.ok && result.reason === "cooldown") {
       return interaction.reply({
-        embeds: [buildSimpleCooldownEmbed(interaction, "💌 Rep em cooldown", result)],
+        embeds: [buildSimpleCooldownEmbed(interaction, "💌 Reputação em Período de Espera", result)],
         flags: 64,
       });
     }

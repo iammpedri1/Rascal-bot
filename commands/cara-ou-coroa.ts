@@ -10,8 +10,6 @@ const {
 
 const { canBet, settleDuel } = require("../utils/cookieEconomy");
 const { getAnimeGif } = require("../utils/animeGifs");
-const { activeGames } = require("../utils/activeGames");
-const { flipCoinSide, oppositeSide } = require("../utils/gameRules");
 const emoji = require("../utils/emojis");
 const logger = require("../utils/logger");
 
@@ -22,13 +20,18 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function randomSides() {
-  const challengerChoice = flipCoinSide();
-  return { challengerChoice, opponentChoice: oppositeSide(challengerChoice) };
+function flipCoin() {
+  return Math.random() < 0.5 ? "cara" : "coroa";
 }
 
-function createGameId() {
-  return `coin-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+function randomSides() {
+  const challengerChoice = flipCoin();
+  const opponentChoice = challengerChoice === "cara" ? "coroa" : "cara";
+
+  return {
+    challengerChoice,
+    opponentChoice,
+  };
 }
 
 function isHouseBot(interaction, user) {
@@ -54,17 +57,17 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("cara-ou-coroa")
-    .setDescription("Aposte cookies em um cara ou coroa aleatório")
+    .setDescription("Realize apostas de cookies no clássico Cara ou Coroa")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuário que você quer desafiar")
+        .setDescription("Usuário que deseja desafiar")
         .setRequired(true)
     )
     .addIntegerOption(option =>
       option
         .setName("aposta")
-        .setDescription("Quantidade de cookies para apostar")
+        .setDescription("Quantidade de cookies para aposta")
         .setRequired(true)
         .setMinValue(1)
     ),
@@ -81,87 +84,78 @@ module.exports = defineCommand({
 
     if (opponent.id === interaction.user.id) {
       return interaction.reply({
-        content: "Você não pode desafiar você mesmo.",
+        content: "Não é possível desafiar a si próprio.",
         flags: 64,
       });
     }
 
     if (opponent.bot && !houseBot) {
       return interaction.reply({
-        content: "Escolha uma pessoa ou aposte contra mim.",
+        content: "Por favor, desafie um membro ou aposte contra o Rascal.",
         flags: 64,
       });
     }
 
     if (!canBet(interaction.user, amount)) {
       return interaction.reply({
-        content: `Você não tem ${COOKIE_EMOJI} cookies suficientes para apostar ${amount}. Use /cookies saldo.`,
+        content: `Saldo insuficiente. Você não possui ${COOKIE_EMOJI} **${amount.toLocaleString("pt-BR")} cookies** para esta aposta. Verifique seu saldo com \`/cookies saldo\`.`,
         flags: 64,
       });
     }
 
     if (houseBot) {
-      const gameId = createGameId();
-      if (!activeGames.reserveNew([interaction.user.id], gameId)) {
-        return interaction.reply({ content: "Você já está em outro minijogo.", flags: 64 });
-      }
+      const { challengerChoice, opponentChoice } = randomSides();
+      const coin = flipCoin();
+      const challengerWon = challengerChoice === coin;
+      const winnerUser = challengerWon ? interaction.user : opponent;
+      const loserUser = challengerWon ? opponent : interaction.user;
 
-      try {
-        const { challengerChoice, opponentChoice } = randomSides();
-        const coin = flipCoinSide();
-        const challengerWon = challengerChoice === coin;
-        const winnerUser = challengerWon ? interaction.user : opponent;
-        const loserUser = challengerWon ? opponent : interaction.user;
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xfaa61a)
+            .setTitle(`${COIN_EMOJI} Girando a moeda...`)
+            .setDescription(
+              [
+                `${interaction.user} escolheu **${challengerChoice}**.`,
+                `${opponent} ficou com **${opponentChoice}**.`,
+                "",
+                "A moeda foi lançada...",
+              ].join("\n")
+            ),
+        ],
+      });
 
-        await interaction.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0xfaa61a)
-              .setTitle(`${COIN_EMOJI} Girando a moeda...`)
-              .setDescription(
-                [
-                  `${interaction.user} ficou com **${challengerChoice}**.`,
-                  `${opponent} ficou com **${opponentChoice}**.`,
-                  "",
-                  "A moeda está no ar...",
-                ].join("\n")
-              ),
-          ],
-        });
+      const message = await interaction.fetchReply();
+      const { winner, loser } = settleDuel(winnerUser, loserUser, amount, economyContext);
+      const gif = await getAnimeGif("win");
 
-        const message = await interaction.fetchReply();
-        const { winner, loser } = settleDuel(winnerUser, loserUser, amount, economyContext);
-        const gif = await getAnimeGif("win");
+      await wait(1800);
 
-        await wait(1800);
-
-        return message.edit({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0x57f287)
-              .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
-              .setDescription(
-                [
-                  `A moeda caiu em: **${coin.toUpperCase()}**`,
-                  "",
-                  `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${amount.toLocaleString("pt-BR")} cookies**.`,
-                  "",
-                  `**Placar**`,
-                  `<@${interaction.user.id}>: **${challengerChoice.toUpperCase()}**`,
-                  `<@${opponent.id}>: **${opponentChoice.toUpperCase()}**`,
-                  "",
-                  `**Saldos**`,
-                  `<@${winnerUser.id}>: **${balanceText(winnerUser, winner, houseId)}**`,
-                  `<@${loserUser.id}>: **${balanceText(loserUser, loser, houseId)}**`,
-                ].join("\n")
-              )
-              .setImage(gif),
-          ],
-          components: [buildRematchRow(interaction.user.id, opponent.id, amount)],
-        });
-      } finally {
-        activeGames.releaseGame(gameId);
-      }
+      return message.edit({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x57f287)
+            .setTitle(`${COIN_EMOJI} Resultado do Cara ou Coroa`)
+            .setDescription(
+              [
+                `A moeda caiu em: **${coin.toUpperCase()}**`,
+                "",
+                `🏆 <@${winnerUser.id}> venceu o desafio e obteve ${COOKIE_EMOJI} **${amount.toLocaleString("pt-BR")} cookies**.`,
+                "",
+                `**Placar**`,
+                `<@${interaction.user.id}>: **${challengerChoice.toUpperCase()}**`,
+                `<@${opponent.id}>: **${opponentChoice.toUpperCase()}**`,
+                "",
+                `**Saldos**`,
+                `<@${winnerUser.id}>: **${balanceText(winnerUser, winner, houseId)}**`,
+                `<@${loserUser.id}>: **${balanceText(loserUser, loser, houseId)}**`,
+              ].join("\n")
+            )
+            .setImage(gif),
+        ],
+        components: [buildRematchRow(interaction.user.id, opponent.id, amount)],
+      });
     }
 
     const row = new ActionRowBuilder().addComponents(
@@ -180,9 +174,9 @@ module.exports = defineCommand({
       .setTitle(`${COIN_EMOJI} Cara ou Coroa`)
       .setDescription(
         [
-          `<@${interaction.user.id}> chamou <@${opponent.id}> para uma aposta.`,
+          `<@${interaction.user.id}> desafiou <@${opponent.id}> para uma aposta.`,
           "",
-              "Os lados serão sorteados quando o desafio for aceito.",
+          "A escolha dos lados ocorrerá após a aceitação do desafio.",
           "",
           `${COOKIE_EMOJI} **Aposta:** ${amount.toLocaleString("pt-BR")} cookies`,
           "",
@@ -190,12 +184,7 @@ module.exports = defineCommand({
         ].join("\n")
       )
       .setThumbnail("https://cdn-icons-png.flaticon.com/512/272/272525.png")
-      .setFooter({ text: "O vencedor leva a aposta do adversário." });
-
-    const gameId = createGameId();
-    if (!activeGames.reserveNew([interaction.user.id, opponent.id], gameId)) {
-      return interaction.reply({ content: "Um dos jogadores já está em outro minijogo.", flags: 64 });
-    }
+      .setFooter({ text: "O vencedor receberá o montante total da aposta." });
 
     await interaction.reply({
       embeds: [inviteEmbed],
@@ -217,7 +206,7 @@ module.exports = defineCommand({
 
         if (buttonInteraction.user.id !== opponentId) {
           return buttonInteraction.reply({
-            content: "Só quem foi desafiado pode aceitar ou recusar.",
+            content: "Apenas o usuário desafiado tem permissão para interagir.",
             flags: 64,
           });
         }
@@ -225,14 +214,13 @@ module.exports = defineCommand({
         if (action === "coin_decline") {
           finished = true;
           collector.stop("declined");
-          activeGames.releaseGame(gameId);
 
           return buttonInteraction.update({
             embeds: [
               new EmbedBuilder()
                 .setColor(0xed4245)
                 .setTitle("Desafio recusado")
-                .setDescription(`<@${opponentId}> recusou a aposta de ${COOKIE_EMOJI} **${bet} cookies**.`),
+                .setDescription(`<@${opponentId}> recusou a aposta de ${COOKIE_EMOJI} **${bet.toLocaleString("pt-BR")} cookies**.`),
             ],
             components: [],
           });
@@ -241,17 +229,16 @@ module.exports = defineCommand({
         if (!canBet(interaction.user, bet) || (!isHouseBot(interaction, opponent) && !canBet(opponent, bet))) {
           finished = true;
           collector.stop("no_balance");
-          activeGames.releaseGame(gameId);
 
           return buttonInteraction.update({
-            content: "Um dos jogadores não tem cookies suficientes para essa aposta.",
+            content: "Saldo insuficiente para um dos participantes. A aposta não pode ser concluída.",
             embeds: [],
             components: [],
           });
         }
 
         const { challengerChoice, opponentChoice } = randomSides();
-        const coin = flipCoinSide();
+        const coin = flipCoin();
         const challengerWon = challengerChoice === coin;
         const winnerUser = challengerWon ? interaction.user : opponent;
         const loserUser = challengerWon ? opponent : interaction.user;
@@ -266,10 +253,10 @@ module.exports = defineCommand({
               .setTitle(`${COIN_EMOJI} Girando a moeda...`)
               .setDescription(
                 [
-                  `${interaction.user} ficou com **${challengerChoice}**.`,
+                  `${interaction.user} escolheu **${challengerChoice}**.`,
                   `${opponent} ficou com **${opponentChoice}**.`,
                   "",
-                  "A moeda está no ar...",
+                  "A moeda foi lançada...",
                 ].join("\n")
               ),
           ],
@@ -277,7 +264,6 @@ module.exports = defineCommand({
         });
 
         const { winner, loser } = settleDuel(winnerUser, loserUser, bet, economyContext);
-        activeGames.releaseGame(gameId);
         const gif = await getAnimeGif("win");
 
         await wait(1800);
@@ -289,7 +275,7 @@ module.exports = defineCommand({
             [
               `A moeda caiu em: **${coin.toUpperCase()}**`,
               "",
-              `🏆 <@${winnerUser.id}> venceu e ganhou ${COOKIE_EMOJI} **${bet.toLocaleString("pt-BR")} cookies**.`,
+              `🏆 <@${winnerUser.id}> venceu o desafio e obteve ${COOKIE_EMOJI} **${bet.toLocaleString("pt-BR")} cookies**.`,
               "",
               `**Placar**`,
               `<@${challengerId}>: **${challengerChoice.toUpperCase()}**`,
@@ -309,7 +295,6 @@ module.exports = defineCommand({
       } catch (error) {
         finished = true;
         collector.stop("error");
-        activeGames.releaseGame(gameId);
         logger.error("Erro ao processar aceite do /cara-ou-coroa", error, {
           user: buttonInteraction.user.id,
           guild: buttonInteraction.guildId,
@@ -322,21 +307,20 @@ module.exports = defineCommand({
         };
 
         if (buttonInteraction.deferred || buttonInteraction.replied) {
-          return message.edit(payload).catch(() => {});
+          return message.edit(payload).catch(() => { });
         }
 
-        return buttonInteraction.update(payload).catch(() => {});
+        return buttonInteraction.update(payload).catch(() => { });
       }
     });
 
     collector.on("end", () => {
-      activeGames.releaseGame(gameId);
       if (finished) return;
 
       message.edit({
-        content: "Tempo esgotado. A aposta foi cancelada.",
+        content: "O tempo limite expirou. O desafio foi cancelada automaticamente.",
         components: [],
-      }).catch(() => {});
+      }).catch(() => { });
     });
   },
 
@@ -346,7 +330,7 @@ module.exports = defineCommand({
 
     if (![challengerId, opponentId].includes(interaction.user.id)) {
       return interaction.reply({
-        content: "Essa revanche pertence a outros jogadores.",
+        content: "Esta solicitação de revanche é restrita aos participantes originais.",
         flags: 64,
       });
     }

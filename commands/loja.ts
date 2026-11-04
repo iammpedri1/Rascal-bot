@@ -1,16 +1,17 @@
 import { defineCommand } from "../types/command";
 import type { GuildMember, Role } from "discord.js";
 import type { ShopRoleOffer, ShopRoleKind } from "../utils/shopRolePurchases";
-import {
+const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ComponentType,
   EmbedBuilder,
   MessageFlags,
   SlashCommandBuilder,
-} from "discord.js";
+} = require("discord.js") as typeof import("discord.js");
 
-const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
+const emoji = require("../utils/emojis") as typeof import("../utils/emojis") & Record<string, any>;
 const cooldowns = require("../utils/cooldowns");
 const { SHOP_SECTIONS, guildRoleOffers, vipBenefitsFor } = require("../utils/cookieShop");
 const { randomColor } = require("../utils/embedStyle");
@@ -21,6 +22,7 @@ const {
   purchaseCooldownUnlock,
 } = require("../utils/cookieEconomy");
 const rolePurchases = require("../utils/shopRolePurchases") as typeof import("../utils/shopRolePurchases");
+const blackMarket = require("../utils/blackMarket") as typeof import("../utils/blackMarket");
 const { PRIMARY_GUILD_ID } = require("../utils/primaryGuild") as typeof import("../utils/primaryGuild");
 
 const COLOR_PAGE_SIZE = 10;
@@ -47,7 +49,7 @@ function pageCountFor(kind: ShopRoleKind, count: number): number {
 }
 
 function displayColorNumber(offer: ShopRoleOffer, absoluteIndex: number): string {
-  const match = offer.name.match(/(?:^|\\D)(\\d{1,2})(?:\\D|$)/);
+  const match = offer.name.match(/(?:^|\D)(\d{1,2})(?:\D|$)/);
   return match?.[1] || String(absoluteIndex + 1);
 }
 
@@ -64,12 +66,18 @@ function storeMember(interaction): GuildMember | undefined {
 
 function categoryRow(interaction, sectionId: string) {
   const sections = [...SHOP_SECTIONS];
+  const member = storeMember(interaction);
+  if (member && blackMarket.isVipMember(interaction.guild, member)) {
+    sections.push({ id: "mercado_negro", name: "Mercado Negro" });
+  }
   const buttons = sections.map((section) => {
     const config = section.id === "cores"
       ? { emoji: "palette", fallback: "🎨" }
       : section.id === "vip"
         ? { emoji: "owner", fallback: "👑" }
-        : { emoji: "clock", fallback: "⏳" };
+        : section.id === "mercado_negro"
+          ? { emoji: "pand_police", fallback: "🕶️" }
+          : { emoji: "clock", fallback: "⏳" };
     const button = new ButtonBuilder()
       .setCustomId(`loja|categoria|${section.id}`)
       .setLabel(section.name)
@@ -116,17 +124,17 @@ function navigationRow(sectionId: string, page: number, pages: number) {
 
 function roleStatus(kind: ShopRoleKind, offer: ShopRoleOffer, assigned: boolean, purchase: any): string {
   if (kind === "color") {
-    if (assigned) return `${emoji.application("correct", "✅")} já aplicada`;
-    if (purchase) return `${emoji.application("correct", "✅")} sua; clique para reaplicar sem pagar`;
-    return `${emoji.application("cookie", "🍪")} ${amount(offer.price)} cookies`;
+    if (assigned) return `${emoji.application("correct", "✅")} **Equipado**`;
+    if (purchase) return `${emoji.application("correct", "✅")} **Adquirido** · Toque para equipar`;
+    return `${emoji.application("cookie", "🍪")} \`${amount(offer.price)}\` cookies`;
   }
 
   const active = Number(purchase?.expiresAt) > Date.now();
-  if (active && assigned) return `${emoji.application("clock", "⏰")} ativa até ${timestamp(purchase.expiresAt)} · clique para renovar`;
-  if (active) return `${emoji.application("correct", "✅")} ativa até ${timestamp(purchase.expiresAt)} · reaplicar sem pagar`;
-  if (purchase) return `${emoji.application("clock", "⏰")} expirada · ${amount(offer.price)} cookies / 30 dias`;
-  if (assigned) return `${emoji.application("correct", "✅")} você já tem este cargo`;
-  return `${emoji.application("cookie", "🍪")} ${amount(offer.price)} cookies / 30 dias`;
+  if (active && assigned) return `${emoji.application("clock", "⏰")} **Ativo** até ${timestamp(purchase.expiresAt)}`;
+  if (active) return `${emoji.application("correct", "✅")} **Ativo** · Toque para equipar`;
+  if (purchase) return `${emoji.application("clock", "⏰")} **Expirado** · \`${amount(offer.price)}\` cookies / 30 dias`;
+  if (assigned) return `${emoji.application("correct", "✅")} **Já possui este cargo**`;
+  return `${emoji.application("cookie", "🍪")} \`${amount(offer.price)}\` cookies / 30 dias`;
 }
 
 function buildRoleEmbed(interaction, sectionId: "cores" | "vip", page: number, notice: string) {
@@ -142,57 +150,100 @@ function buildRoleEmbed(interaction, sectionId: "cores" | "vip", page: number, n
     const assigned = interaction.guild.members.cache.get(interaction.user.id)?.roles.cache.has(offer.roleId) || false;
     const label = kind === "color" ? displayColorNumber(offer, currentPage * size + index) : offer.name;
     const details = kind === "vip"
-      ? `\n   ${vipBenefitsFor(offer)}`
+      ? `\n   ${emoji.application("sparkles", "✨")} ${vipBenefitsFor(offer)}`
       : "";
-    return `${emoji.application("next", "›")} **${label}** » ${offer.mention}\n   ${roleStatus(kind, offer, assigned, purchase)}${details}`;
+    return `${emoji.application("next", "›")} **${label}** • ${offer.mention}\n   ${roleStatus(kind, offer, assigned, purchase)}${details}`;
   });
 
-  const title = kind === "color" ? "Cores do servidor" : "VIPs do servidor";
+  const title = kind === "color" ? "Cores Personalizadas" : "Assinaturas VIP";
+  const sectionIcon = emoji.getEmojiDetails(kind === "color" ? "palette" : "owner")?.imageUrl || null;
+
   const description = offers.length
     ? [
       kind === "color"
-        ? "Escolha um número para comprar o cargo de cor e aplicá-lo ao seu perfil."
-        : "Star VIP, Elite VIP e Super VIP, com bônus de cookies.",
+        ? "Selecione um número abaixo para adquirir e equipar uma cor exclusiva em seu nome."
+        : "Adquira cargos de prestígio com multiplicadores de cookies e acesso ao Mercado Negro.",
       "",
       ...lines,
       "",
-      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
-      notice,
+      `${emoji.application("cookie", "🍪")} **Seu Saldo:** \`${amount(profile.balance)}\` cookies`,
+      notice ? `\n${notice}` : "",
     ].filter(Boolean).join("\n")
     : [
       kind === "color"
-        ? "Não encontrei cargos de cor disponíveis. Os cargos numerados de cor do servidor serão detectados automaticamente."
-        : "Não encontrei os cargos Star VIP, Elite VIP ou Super VIP disponíveis. Confira se os nomes estão corretos e se o cargo do Rascal está acima deles.",
+        ? "Nenhuma cor disponível no momento. A equipe administrativa deve configurar os cargos numerados."
+        : "Nenhum plano VIP configurado. Verifique os nomes dos cargos e a hierarquia do Rascal.",
       "",
-      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
-      notice,
+      `${emoji.application("cookie", "🍪")} **Seu Saldo:** \`${amount(profile.balance)}\` cookies`,
+      notice ? `\n${notice}` : "",
     ].filter(Boolean).join("\n");
 
   const embed = new EmbedBuilder()
-    .setColor(randomColor())
-    .setAuthor({ name: `${interaction.guild.name} · Loja do Rascal` })
-    .setTitle(`${emoji.application(kind === "color" ? "palette" : "owner", kind === "color" ? "🎨" : "👑")} ${title}`)
-    .setDescription(description);
+    .setColor(0x2b2d31)
+    .setAuthor({
+      name: `Shopping Rascal • ${title}`,
+      iconURL: sectionIcon || undefined
+    })
+    .setThumbnail(sectionIcon)
+    .setDescription(description)
+    .setFooter({ text: `Página ${currentPage + 1} de ${pages} • Shopping Rascal` });
 
   return { embed, offers, page: currentPage, pages, visible, profile };
 }
 
 function buildHomeEmbed(interaction, notice: string) {
   const profile = getProfile(interaction.user);
+  const member = storeMember(interaction);
+  const marketAvailable = Boolean(member && blackMarket.isVipMember(interaction.guild, member));
+  const trophy = emoji.application("trophy", "🏆");
+
   return new EmbedBuilder()
-    .setColor(randomColor())
-    .setAuthor({ name: `Loja de ${interaction.guild.name}` })
-    .setTitle(`${emoji.application("shop", "🛍️")} Loja do Rascal`)
+    .setColor(0x2b2d31)
+    .setAuthor({
+      name: `Shopping Rascal • ${interaction.guild.name}`,
+      iconURL: interaction.guild.iconURL() || undefined
+    })
+    .setTitle(`${emoji.application("shop", "🛍️")} Loja de Itens e Vantagens`)
+    .setThumbnail(emoji.getEmojiDetails("shop")?.imageUrl || null)
     .setDescription([
-      "Escolha uma categoria. A loja usa os cargos e os cooldowns deste servidor.",
+      "Bem-vindo à loja oficial! Aqui você pode investir seus cookies em cargos de prestígio, cores personalizadas e itens táticos.",
       "",
-      `${emoji.application("palette", "🎨")} **CORES**\n↳ Cargos numerados de cor encontrados no servidor.`,
-      `${emoji.application("owner", "👑")} **VIPs**\n↳ Star VIP, Elite VIP e Super VIP disponíveis neste servidor.`,
-      `${emoji.application("clock", "⏳")} **ACELERADORES**\n↳ Libere Daily, Roubar ou Trabalhar antes do cooldown.`,
+      `${emoji.application("palette", "🎨")} **Categorias Disponíveis:**`,
+      `> • **Cores:** Personalize seu nome no chat com cores vibrantes.`,
+      `> • **VIPs:** Ganhe bônus de economia e acesso a áreas restritas.`,
+      `> • **Aceleradores:** Remova cooldowns de comandos instantaneamente.`,
+      ...(marketAvailable ? [`> • **Mercado Negro:** Itens exclusivos para membros VIP.`] : []),
       "",
-      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
-      notice,
-    ].filter(Boolean).join("\n\n"));
+      `${emoji.application("cookie", "🍪")} **Seu Saldo:** \`${amount(profile.balance)}\` cookies`,
+      notice ? `\n${notice}` : ""
+    ].join("\n"))
+    .setFooter({ text: "Use os botões abaixo para navegar entre as categorias." });
+}
+
+function buildBlackMarketEmbed(interaction, notice: string) {
+  const profile = getProfile(interaction.user);
+  const sectionIcon = emoji.getEmojiDetails("pand_police")?.imageUrl || null;
+  const lines = blackMarket.BLACK_MARKET_ITEMS.map((item) => {
+    const quantity = blackMarket.getInventoryCount(interaction.user.id, item.id);
+    return `${emoji.application("next", "›")} **${item.name}**\n   ${emoji.application("cookie", "🍪")} \`${amount(item.price)}\` cookies\n   ${emoji.application("warning", "📦")} No inventário: **${quantity}**\n   ${emoji.application("info", "ℹ️")} ${item.description}`;
+  });
+
+  return new EmbedBuilder()
+    .setColor(0x2b2d31)
+    .setAuthor({
+      name: "Shopping Rascal • Mercado Negro",
+      iconURL: sectionIcon || undefined
+    })
+    .setThumbnail(sectionIcon)
+    .setDescription([
+      "Equipamentos táticos exclusivos para membros VIP. Itens consumíveis usados automaticamente no próximo roubo.",
+      "",
+      ...lines,
+      "",
+      `${emoji.application("cookie", "🍪")} **Seu Saldo:** \`${amount(profile.balance)}\` cookies`,
+      notice ? `\n${notice}` : "",
+    ].filter(Boolean).join("\n"))
+    .setFooter({ text: "Acesso restrito a membros Star VIP ou superior. • Shopping Rascal" });
 }
 
 function buildAcceleratorEmbed(interaction, notice: string) {
@@ -206,21 +257,27 @@ function buildAcceleratorEmbed(interaction, notice: string) {
       const cooldown = cooldownsForUser[key];
       return cooldown?.ready ? null : `/${target} pronto ${timestamp(cooldown.expiresAt)}`;
     }).filter(Boolean).join(" · ");
-    return `${emoji.application(offer.emoji, offer.fallback)} **${offer.label}** — **${amount(offer.price)} cookies**${ready ? `\n   ${state}` : "\n   sem cooldown ativo"}`;
+    return `${emoji.application("next", "›")} **${offer.label}**\n   ${emoji.application("cookie", "🍪")} \`${amount(offer.price)}\` cookies\n   ${ready ? `${emoji.application("clock", "⏰")} ${state}` : `${emoji.application("correct", "✅")} Sem cooldown ativo`}`;
   });
 
+  const sectionIcon = emoji.getEmojiDetails("clock")?.imageUrl || null;
+
   return new EmbedBuilder()
-    .setColor(randomColor())
-    .setAuthor({ name: `Aceleradores · ${interaction.guild.name}` })
-    .setTitle(`${emoji.application("clock", "⏳")} Aceleradores de tempo`)
+    .setColor(0x2b2d31)
+    .setAuthor({
+      name: "Shopping Rascal • Aceleradores",
+      iconURL: sectionIcon || undefined
+    })
+    .setThumbnail(sectionIcon)
     .setDescription([
-      "Compre apenas quando houver cooldown ativo. Os cookies são descontados e o cooldown real é liberado imediatamente.",
+      "Remova restrições de tempo instantaneamente para voltar à ação.",
       "",
       ...lines,
       "",
-      `${emoji.application("cookie", "🍪")} Seu saldo: **${amount(profile.balance)} cookies**`,
-      notice,
-    ].filter(Boolean).join("\n\n"));
+      `${emoji.application("cookie", "🍪")} **Seu Saldo:** \`${amount(profile.balance)}\` cookies`,
+      notice ? `\n${notice}` : "",
+    ].filter(Boolean).join("\n"))
+    .setFooter({ text: "Aceleradores são de uso imediato após a compra. • Shopping Rascal" });
 }
 
 function buildRoleButtons(interaction, kind: ShopRoleKind, offers: ShopRoleOffer[], page: number) {
@@ -265,15 +322,30 @@ function buildComponents(interaction, sectionId: string, page: number, notice: s
   }
 
   if (sectionId === "aceleradores") {
-    rows.push(new ActionRowBuilder().addComponents(...ACCELERATORS.map((offer) => {
+    rows.push(new ActionRowBuilder<any>().addComponents(...ACCELERATORS.map((offer) => {
       const hasCooldown = offer.targets.some((target) => !cooldowns.check(interaction.user.id, target).ready);
       const canAfford = getProfile(interaction.user).balance >= offer.price;
-      return buttonEmoji(new ButtonBuilder()
+      const button = new ButtonBuilder()
         .setCustomId(`loja|acelerador|${offer.id}`)
-        .setLabel(`${offer.label} · ${amount(offer.price)}`)
+        .setLabel(`${offer.label} (${amount(offer.price)})`)
         .setStyle(offer.id === "todos" ? ButtonStyle.Secondary : ButtonStyle.Success)
-        .setDisabled(!hasCooldown || !canAfford), offer.emoji, offer.fallback);
+        .setDisabled(!hasCooldown || !canAfford);
+      return buttonEmoji(button, offer.emoji, offer.fallback);
     })));
+    rows.push(navigationRow(sectionId, 0, 1));
+    return rows;
+  }
+
+  if (sectionId === "mercado_negro") {
+    const buttons = blackMarket.BLACK_MARKET_ITEMS.map((item) => {
+      const button = new ButtonBuilder()
+        .setCustomId(`loja|mercado|comprar|${item.id}`)
+        .setLabel(`${item.name} (${amount(item.price)})`)
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(getProfile(interaction.user).balance < item.price);
+      return buttonEmoji(button, item.emoji, item.fallback);
+    });
+    rows.push(new ActionRowBuilder<any>().addComponents(...buttons));
     rows.push(navigationRow(sectionId, 0, 1));
     return rows;
   }
@@ -285,14 +357,14 @@ module.exports = defineCommand({
   category: "economy",
   data: new SlashCommandBuilder()
     .setName("loja")
-    .setDescription("Compre cargos de cor, VIPs e aceleradores do servidor"),
+    .setDescription("Adquira cores personalizadas, assinaturas VIP e aceleradores exclusivos"),
 
   async execute(interaction) {
     if (!interaction.guild) {
-      return interaction.reply({ content: "Use /loja dentro do servidor.", flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: "Por favor, utilize o comando `/loja` dentro de um servidor.", flags: MessageFlags.Ephemeral });
     }
     if (!PRIMARY_GUILD_ID || interaction.guildId !== PRIMARY_GUILD_ID) {
-      return interaction.reply({ content: "A loja do Rascal está disponível apenas no servidor oficial.", flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: "O Shopping Rascal está disponível exclusivamente no servidor oficial.", flags: MessageFlags.Ephemeral });
     }
 
     let sectionId = "home";
@@ -313,9 +385,9 @@ module.exports = defineCommand({
       }
 
       const id = component.customId;
-      const isPurchase = id.startsWith("loja|cargo|") || id.startsWith("loja|acelerador|");
+      const isPurchase = id.startsWith("loja|cargo|") || id.startsWith("loja|acelerador|") || id.startsWith("loja|mercado|comprar|");
       if (isPurchase && activePurchaseUsers.has(component.user.id)) {
-        await component.reply({ content: `${emoji.application("clock", "⏳")} Sua outra compra ainda está sendo processada. Aguarde.`, flags: MessageFlags.Ephemeral });
+        await component.reply({ content: `${emoji.clock} Sua outra compra ainda está sendo processada. Aguarde.`, flags: MessageFlags.Ephemeral });
         return;
       }
       if (isPurchase) activePurchaseUsers.add(component.user.id);
@@ -326,9 +398,14 @@ module.exports = defineCommand({
 
         if (id.startsWith("loja|categoria|")) {
           const selected = id.split("|")[2];
-          if (SHOP_SECTIONS.some((entry) => entry.id === selected)) {
+          const member = storeMember(component);
+          const canOpenMarket = selected === "mercado_negro" && Boolean(member && blackMarket.isVipMember(interaction.guild, member));
+          if (SHOP_SECTIONS.some((entry) => entry.id === selected) || canOpenMarket) {
             sectionId = selected;
             page = 0;
+          } else if (selected === "mercado_negro") {
+            sectionId = "home";
+            notice = `${emoji.redTick} O Mercado Negro é restrito aos VIPs deste servidor.`;
           }
         } else if (id === "loja|home") {
           sectionId = "home";
@@ -346,23 +423,38 @@ module.exports = defineCommand({
           const offer: ShopRoleOffer | undefined = guildRoleOffers(interaction.guild, kind)
             .find((candidate) => candidate.roleId === roleId);
           if (!role || !offer) {
-            notice = `${emoji.application("redTick", "❌")} Esse cargo não está mais disponível na loja.`;
+            notice = `${emoji.redTick} Esse cargo não está mais disponível na loja.`;
           } else {
             notice = await processGuildRolePurchase(component, member, role, offer);
           }
         } else if (id.startsWith("loja|acelerador|")) {
           const offer = ACCELERATORS.find((entry) => entry.id === id.split("|")[2]);
           if (!offer) {
-            notice = `${emoji.application("redTick", "❌")} Esse acelerador não existe.`;
+            notice = `${emoji.redTick} Esse acelerador não existe.`;
           } else {
             const result = purchaseCooldownUnlock(interaction.user, offer.targets, offer.price, {
               guildId: interaction.guildId,
               guildName: interaction.guild.name,
             });
-            if (result.ok) notice = `${emoji.application("correct", "✅")} Cooldown liberado: ${result.targets.map((target) => `/${target}`).join(", ")}.`;
-            else if (result.reason === "balance") notice = `${emoji.application("redTick", "❌")} Saldo insuficiente para esse acelerador.`;
-            else if (result.reason === "cooldown_ready") notice = `${emoji.application("thinking", "🤔")} Esse cooldown já está liberado.`;
-            else notice = `${emoji.application("redTick", "❌")} Não consegui aplicar esse acelerador.`;
+            if (result.ok) notice = `${emoji.correct} Cooldown liberado: ${result.targets.map((target) => `/${target}`).join(", ")}.`;
+            else if (result.reason === "balance") notice = `${emoji.redTick} Saldo insuficiente para esse acelerador.`;
+            else if (result.reason === "cooldown_ready") notice = `${emoji.thinking} Esse cooldown já está liberado.`;
+            else notice = `${emoji.redTick} Não consegui aplicar esse acelerador.`;
+          }
+        } else if (id.startsWith("loja|mercado|comprar|")) {
+          const itemId = id.split("|")[3];
+          const member = storeMember(component);
+          const item = blackMarket.BLACK_MARKET_ITEMS.find((entry) => entry.id === itemId);
+          if (!member || !blackMarket.isVipMember(interaction.guild, member)) {
+            sectionId = "home";
+            notice = `${emoji.redTick} O Mercado Negro é restrito aos VIPs deste servidor.`;
+          } else if (!item) {
+            notice = `${emoji.redTick} Esse item não está disponível.`;
+          } else {
+            const purchase = blackMarket.purchaseItem(interaction.user, item.id, interaction.guildId, interaction.guild.name);
+            notice = purchase.ok === true
+              ? `${emoji.correct} **${item.name}** comprado. Você tem ${blackMarket.getInventoryCount(interaction.user.id, item.id)} unidade(s).`
+              : `${emoji.redTick} ${purchase.reason === "balance" ? "Saldo insuficiente." : "Esse item não está disponível."}`;
           }
         } else if (id === "loja|fechar") {
           collector.stop("closed");
@@ -377,7 +469,9 @@ module.exports = defineCommand({
           ? [buildHomeEmbed(interaction, notice)]
           : sectionId === "aceleradores"
             ? [buildAcceleratorEmbed(interaction, notice)]
-            : [buildRoleEmbed(interaction, sectionId as "cores" | "vip", page, notice).embed];
+            : sectionId === "mercado_negro"
+              ? [buildBlackMarketEmbed(interaction, notice)]
+              : [buildRoleEmbed(interaction, sectionId as "cores" | "vip", page, notice).embed];
         await component.editReply({
           embeds,
           components: buildComponents(interaction, sectionId, page, notice),
@@ -389,7 +483,7 @@ module.exports = defineCommand({
           customId: component.customId,
         });
         await component.followUp({
-          content: `${emoji.application("redTick", "❌")} Não consegui concluir a ação. Tente novamente.`,
+          content: `${emoji.redTick} Não consegui concluir a ação. Tente novamente.`,
           flags: MessageFlags.Ephemeral,
         }).catch(() => undefined);
       } finally {
@@ -413,22 +507,22 @@ async function processGuildRolePurchase(
   const existing = getGuildShopRolePurchase(interaction.guildId, interaction.user.id, role.id, offer.kind);
 
   if (alreadyAssigned && offer.kind === "color") {
-    return `${emoji.application("thinking", "🤔")} Você já está usando essa cor; nenhum cookie foi cobrado.`;
+    return `${emoji.thinking} Você já está usando essa cor; nenhum cookie foi cobrado.`;
   }
   if (alreadyAssigned && offer.kind === "vip" && !existing) {
-    return `${emoji.application("thinking", "🤔")} Você já possui esse VIP; nenhum cookie foi cobrado.`;
+    return `${emoji.thinking} Você já possui esse VIP; nenhum cookie foi cobrado.`;
   }
 
   const activePurchase = existing && (offer.kind === "color" || Number(existing.expiresAt) > Date.now());
   if (!alreadyAssigned && activePurchase) {
     try {
       await member.roles.add(role, "Reaplicação de um cargo comprado na loja");
-      return `${emoji.application("correct", "✅")} Cargo ${role} reaplicado sem nova cobrança.`;
+      return `${emoji.correct} Cargo ${role} reaplicado sem nova cobrança.`;
     } catch (error) {
       logger.error("Falha ao reaplicar cargo comprado", error, { roleId: role.id, userId: interaction.user.id });
       return discordErrorCode(error) === 50013
-        ? `${emoji.application("redTick", "❌")} Não consigo aplicar o cargo. A equipe precisa mover o cargo do Rascal acima dele.`
-        : `${emoji.application("redTick", "❌")} Não consegui aplicar o cargo agora.`;
+        ? `${emoji.redTick} Não consigo aplicar o cargo. A equipe precisa mover o cargo do Rascal acima dele.`
+        : `${emoji.redTick} Não consegui aplicar o cargo agora.`;
     }
   }
 
@@ -438,10 +532,10 @@ async function processGuildRolePurchase(
     { guildId: interaction.guildId, guildName: interaction.guild.name },
   );
   if (reservation.ok === false) {
-    if (reservation.reason === "balance") return `${emoji.application("redTick", "❌")} Você precisa de ${amount(offer.price)} cookies para comprar esse cargo.`;
-    if (reservation.reason === "owned") return `${emoji.application("thinking", "🤔")} Essa cor já está registrada na sua coleção.`;
-    if (reservation.reason === "busy") return `${emoji.application("clock", "⏳")} Sua outra compra ainda está sendo processada.`;
-    return `${emoji.application("redTick", "❌")} Não consegui concluir essa compra.`;
+    if (reservation.reason === "balance") return `${emoji.redTick} Você precisa de ${amount(offer.price)} cookies para comprar esse cargo.`;
+    if (reservation.reason === "owned") return `${emoji.thinking} Essa cor já está registrada na sua coleção.`;
+    if (reservation.reason === "busy") return `${emoji.clock} Sua outra compra ainda está sendo processada.`;
+    return `${emoji.redTick} Não consegui concluir essa compra.`;
   }
 
   try {
@@ -468,20 +562,20 @@ async function processGuildRolePurchase(
     }
     if (applied === true) {
       rolePurchases.completeRolePurchase(reservation.reservation.id);
-      return `${emoji.application("correct", "✅")} Cargo aplicado e compra registrada.`;
+      return `${emoji.correct} Cargo aplicado e compra registrada.`;
     }
     if (applied === false) {
       const refunded = rolePurchases.refundRolePurchase(reservation.reservation.id, "Discord recusou a aplicação do cargo");
       return refunded
-        ? `${emoji.application("redTick", "❌")} A compra foi cancelada e os cookies devolvidos. Confira se o cargo do Rascal está acima do cargo da loja.`
-        : `${emoji.application("redTick", "❌")} O estorno está pendente de reconciliação; avise a equipe do servidor.`;
+        ? `${emoji.redTick} A compra foi cancelada e os cookies devolvidos. Confira se o cargo do Rascal está acima do cargo da loja.`
+        : `${emoji.redTick} O estorno está pendente de reconciliação; avise a equipe do servidor.`;
     }
-    return `${emoji.application("clock", "⏳")} O Discord não confirmou a aplicação. Mantive a compra pendente para proteger seu saldo.`;
+    return `${emoji.clock} O Discord não confirmou a aplicação. Mantive a compra pendente para proteger seu saldo.`;
   }
 
   const completed = rolePurchases.completeRolePurchase(reservation.reservation.id);
-  if (!completed) return `${emoji.application("clock", "⏳")} Cargo aplicado; o registro será reconciliado automaticamente.`;
-  return `${emoji.application("correct", "✅")} ${role} comprado e aplicado!` +
+  if (!completed) return `${emoji.clock} Cargo aplicado; o registro será reconciliado automaticamente.`;
+  return `${emoji.correct} ${role} comprado e aplicado!` +
     (completed.expiresAt ? ` Válido até ${timestamp(completed.expiresAt)}.` : "");
 }
 

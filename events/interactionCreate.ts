@@ -18,6 +18,7 @@ import type {
 } from "../types/command";
 import type { Logger } from "../types/logger";
 const { isPrimaryGuild } = require("../utils/primaryGuild") as typeof import("../utils/primaryGuild");
+const blackMarket = require("../utils/blackMarket") as typeof import("../utils/blackMarket");
 const { buildErrorEmbed } = require("../utils/cookieViews") as {
   buildErrorEmbed(source: RepliableInteraction, title: string, message: string): EmbedBuilder;
 };
@@ -30,7 +31,7 @@ const { handleButton: handleCooldownNotification } = require("../utils/cooldownN
 const { createRateLimiter } = require("../utils/interactionRateLimit") as typeof import("../utils/interactionRateLimit");
 const logger = require("../utils/logger") as Logger;
 
-
+// Limite generoso: barra apenas flood de comandos, sem atrapalhar o uso normal.
 const commandRateLimiter = createRateLimiter({ max: 10, windowMs: 10_000 });
 
 type RepliableInteraction =
@@ -106,6 +107,21 @@ async function dispatchCommand(
     return;
   }
 
+  if (command.category === "economy" && interaction.commandName !== "fianca") {
+    const prison = blackMarket.getActivePrisonStatus(interaction.user.id);
+    if (prison) {
+      await response.reply({
+        embeds: [buildErrorEmbed(
+          interaction,
+          "🚓 Você está na prisão",
+          `Você poderá sair <t:${Math.floor(prison.releaseAt / 1000)}:R>, ou pagar **${prison.bailAmount.toLocaleString("pt-BR")} cookies** com **/fianca**.`,
+        )],
+        flags: 64,
+      });
+      return;
+    }
+  }
+
   try {
     if (command.access && !(await hasAccess(interaction, command.access))) {
       await response.reply({
@@ -139,6 +155,21 @@ async function dispatchComponent(
   const customId = interaction.customId;
   const commandName = customId.split("|")[0];
   const command = client.commands.get(commandName);
+
+  if (command?.category === "economy" && commandName !== "fianca") {
+    const prison = blackMarket.getActivePrisonStatus(interaction.user.id);
+    if (prison) {
+      await withBrandedResponses(interaction, client).reply({
+        embeds: [buildErrorEmbed(
+          interaction,
+          "🚓 Você está na prisão",
+          `Você poderá sair <t:${Math.floor(prison.releaseAt / 1000)}:R>, ou pagar **${prison.bailAmount.toLocaleString("pt-BR")} cookies** com **/fianca**.`,
+        )],
+        flags: 64,
+      });
+      return;
+    }
+  }
 
   if (interaction.isButton()) {
     try {

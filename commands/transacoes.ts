@@ -20,35 +20,35 @@ const {
   totalPages,
 } = require("../utils/transactionHistory") as typeof import("../utils/transactionHistory");
 
-function buildPage(interaction, requestedPage: number) {
-  const total = getHistoryCount(interaction.user);
+function buildPage(interaction, requestedPage: number, global = false) {
+  const guildId = global ? interaction.guildId : null;
+  const total = getHistoryCount(interaction.user, guildId);
   const pages = totalPages(total);
   const current = clampPage(requestedPage, pages);
-  const rows = getHistory(interaction.user, PAGE_SIZE, current * PAGE_SIZE) as TransactionRow[];
+  const rows = getHistory(interaction.user, PAGE_SIZE, current * PAGE_SIZE, guildId) as TransactionRow[];
   const resolveEmoji = (name: string): string => emoji.getGuildEmoji(interaction.guild, name, "");
 
-  const description = [
-    rows.length
-      ? rows.map(row => describeTransaction(row, resolveEmoji)).join("\n\n")
-      : "Nenhuma transação foi registrada ainda.",
-    "",
-    `${emoji.application("clipboard", "📋")} \u00bb Página **${current + 1} de ${pages}** · Total: **${total.toLocaleString("pt-BR")} transações**.`,
-  ].join("\n");
+  const title = global
+    ? `Transações do Servidor • ${interaction.guild.name}`
+    : `Transações de ${interaction.user.username}`;
 
   const embed = new EmbedBuilder()
     .setColor(randomColor())
-    .setTitle(`${emoji.application("moneyIcon", "💸")} \u00bb Transações de ${interaction.user.username}`)
-    .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
-    .setDescription(description);
+    .setTitle(title)
+    .setThumbnail(global ? interaction.guild.iconURL({ size: 256 }) : interaction.user.displayAvatarURL({ size: 256 }))
+    .setDescription(rows.length
+      ? rows.map(row => describeTransaction(row, resolveEmoji)).join("\n\n")
+      : "Nenhuma transação registrada no momento.")
+    .setFooter({ text: `Página ${current + 1} de ${pages} · Total: ${total}` });
 
   const buttons = new ActionRowBuilder().addComponents(
     emoji.setGuildButtonEmoji(new ButtonBuilder()
-      .setCustomId(historyButtonId("prev", interaction.user.id, current))
+      .setCustomId(historyButtonId("prev", interaction.user.id, current) + (global ? "|global" : ""))
       .setStyle(ButtonStyle.Secondary)
-      .setLabel("Voltar")
+      .setLabel("Anterior")
       .setDisabled(current <= 0), interaction.guild, "previous", ""),
     emoji.setGuildButtonEmoji(new ButtonBuilder()
-      .setCustomId(historyButtonId("next", interaction.user.id, current))
+      .setCustomId(historyButtonId("next", interaction.user.id, current) + (global ? "|global" : ""))
       .setStyle(ButtonStyle.Success)
       .setLabel("Próxima")
       .setDisabled(current >= pages - 1), interaction.guild, "next", ""),
@@ -61,20 +61,29 @@ module.exports = defineCommand({
   category: "economy",
   data: new SlashCommandBuilder()
     .setName("transacoes")
-    .setDescription("Consulte seu histórico completo de transações de cookies"),
+    .setDescription("Consulte seu histórico ou o histórico global do servidor")
+    .addBooleanOption(option =>
+      option.setName("servidor")
+        .setDescription("Ver o histórico de todas as transações do servidor?")
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
-    return interaction.reply({ ...buildPage(interaction, 0), allowedMentions: { parse: [] } });
+    const global = interaction.options.getBoolean("servidor") ?? false;
+    return interaction.reply({ ...buildPage(interaction, 0, global), allowedMentions: { parse: [] } });
   },
 
   async handleButton(interaction) {
-    const button = parseHistoryButtonId(interaction.customId);
+    const isGlobal = interaction.customId.endsWith("|global");
+    const baseId = isGlobal ? interaction.customId.slice(0, -7) : interaction.customId;
+
+    const button = parseHistoryButtonId(baseId);
     if (!button) {
-      return interaction.reply({ content: "Este botão expirou. Use /transacoes novamente.", flags: 64 });
+      return interaction.reply({ content: "Esta interação expirou. Por favor, utilize o comando `/transacoes` novamente.", flags: 64 });
     }
     if (interaction.user.id !== button.ownerId) {
-      return interaction.reply({ content: "Este histórico foi aberto por outra pessoa.", flags: 64 });
+      return interaction.reply({ content: "Este histórico foi solicitado por outro usuário.", flags: 64 });
     }
-    return interaction.update({ ...buildPage(interaction, targetPage(button)), allowedMentions: { parse: [] } });
+    return interaction.update({ ...buildPage(interaction, targetPage(button), isGlobal), allowedMentions: { parse: [] } });
   },
 });

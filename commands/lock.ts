@@ -10,30 +10,30 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("lock")
-    .setDescription("Trava o canal atual para membros comuns")
+    .setDescription("Bloqueia o envio de mensagens no canal atual")
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addStringOption(option =>
       option
         .setName("motivo")
-        .setDescription("Motivo do bloqueio")
+        .setDescription("Razão do bloqueio")
         .setRequired(false)
         .setMaxLength(300)
     ),
 
   async execute(interaction) {
     if (!interaction.guild) {
-      return interaction.reply({ content: "Use esse comando em um servidor.", flags: 64 });
+      return interaction.reply({ content: "Este comando deve ser utilizado dentro de um servidor.", flags: 64 });
     }
 
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
-      return interaction.reply({ content: "Apenas a staff pode travar canais.", flags: 64 });
+      return interaction.reply({ content: "Apenas membros da equipe de moderação podem gerenciar o acesso aos canais.", flags: 64 });
     }
 
     const reason = interaction.options.getString("motivo") || "Não informado";
     const channel = interaction.channel;
     if (!channel || !("permissionOverwrites" in channel)) {
-      return interaction.reply({ content: "Esse tipo de canal não pode ser bloqueado por esse comando.", flags: 64 });
+      return interaction.reply({ content: "Este tipo de canal não suporta restrições de escrita via comando.", flags: 64 });
     }
 
     await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
@@ -43,11 +43,11 @@ module.exports = defineCommand({
 
     const embed = new EmbedBuilder()
       .setColor(0xf59e0b)
-      .setTitle("🔒 Canal bloqueado")
+      .setTitle("🔒 Canal Bloqueado")
       .setDescription(
         [
           `**Motivo:** ${reason}`,
-          `**Staff:** ${interaction.user}`,
+          `**Responsável:** ${interaction.user}`,
         ].join("\n")
       )
       .setTimestamp();

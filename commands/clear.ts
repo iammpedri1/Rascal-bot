@@ -48,17 +48,17 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("clear")
-    .setDescription("Ferramentas de limpeza da staff")
+    .setDescription("Ferramentas administrativas para limpeza de mensagens")
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addSubcommand(subcommand =>
       subcommand
         .setName("chat")
-        .setDescription("Apaga mensagens do canal atual")
+        .setDescription("Remove um volume específico de mensagens no canal atual")
         .addIntegerOption(option =>
           option
             .setName("quantidade")
-            .setDescription("Quantidade de mensagens para apagar, de 1 a 100")
+            .setDescription("Quantidade de mensagens para remoção (1 a 100)")
             .setRequired(true)
             .setMinValue(1)
             .setMaxValue(MAX_DELETE)
@@ -66,7 +66,7 @@ module.exports = defineCommand({
         .addUserOption(option =>
           option
             .setName("usuario")
-            .setDescription("Apaga apenas mensagens desse usuário")
+            .setDescription("Filtra e remove apenas mensagens de um usuário específico")
             .setRequired(false)
         )
     ),
@@ -74,21 +74,21 @@ module.exports = defineCommand({
   async execute(interaction) {
     if (!interaction.guild) {
       return interaction.reply({
-        content: `${emoji.crossed} Use esse comando em um servidor.`,
+        content: `${emoji.crossed} Este comando é restrito para uso em servidores.`,
         flags: MessageFlags.Ephemeral,
       });
     }
 
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
       return interaction.reply({
-        content: `${emoji.crossed} Apenas a staff pode usar esse comando.`,
+        content: `${emoji.crossed} Acesso restrito a membros da equipe administrativa.`,
         flags: MessageFlags.Ephemeral,
       });
     }
 
     if (![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(interaction.channel?.type)) {
       return interaction.reply({
-        content: `${emoji.crossed} Esse canal não permite limpeza de mensagens.`,
+        content: `${emoji.crossed} Este tipo de canal não suporta operações de limpeza em massa.`,
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -96,7 +96,7 @@ module.exports = defineCommand({
     const me = interaction.guild.members.me;
     if (!me?.permissionsIn(interaction.channel).has(PermissionFlagsBits.ManageMessages)) {
       return interaction.reply({
-        content: `${emoji.crossed} Eu preciso da permissão **Gerenciar mensagens** nesse canal.`,
+        content: `${emoji.crossed} Eu preciso da permissão **Gerenciar mensagens** neste canal para prosseguir.`,
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -114,21 +114,21 @@ module.exports = defineCommand({
         : fetched.first(amount);
 
       if (!messages.length) {
-        resultMessage = `${emoji.peepSad} Não encontrei mensagens para apagar.`;
+        resultMessage = `${emoji.peepSad} Nenhuma mensagem encontrada para remoção com os critérios informados.`;
       } else {
         const deleted = await interaction.channel.bulkDelete(messages, true);
         const skipped = messages.length - deleted.size;
         const targetText = target ? ` de ${target}` : "";
         const skippedText = skipped
-          ? `\n${emoji.sino} ${skipped} mensagem(ns) não puderam ser apagadas por serem antigas demais.`
+          ? `\n${emoji.sino} ${skipped} mensagem(ns) permanecem no canal devido à política de retenção do Discord (mais de 14 dias).`
           : "";
-        resultMessage = `${emoji.correct} Apaguei **${deleted.size}** mensagem(ns)${targetText}.${skippedText}`;
+        resultMessage = `${emoji.correct} Foram removidas **${deleted.size}** mensagem(ns)${targetText} com sucesso.${skippedText}`;
       }
     } catch (error) {
       if (discordErrorCode(error) !== 10008) console.error("Erro no /clear chat:", error);
       resultMessage = discordErrorCode(error) === 10008
-        ? `${emoji.sino} A lista de mensagens mudou durante a limpeza. Tente novamente.`
-        : `${emoji.crossed} Não consegui limpar as mensagens desse canal.`;
+        ? `${emoji.sino} A lista de mensagens foi alterada durante a operação. Por favor, tente novamente.`
+        : `${emoji.crossed} Não foi possível concluir a limpeza das mensagens neste canal.`;
     }
 
     return sendClearResult(interaction, resultMessage);

@@ -24,10 +24,10 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("hug")
-    .setDescription("Abraçar alguém")
+    .setDescription("Envia um abraço carinhoso a alguém")
     .addUserOption(opt =>
       opt.setName("usuario")
-        .setDescription("Quem você quer abraçar")
+        .setDescription("Usuário que deseja abraçar")
         .setRequired(true)
     ),
 
@@ -41,13 +41,13 @@ module.exports = defineCommand({
       const embed = new EmbedBuilder()
         .setColor(0xFF85A1)
         .setTitle(`${emoji} Abraço`)
-        .setDescription(`<@${interaction.user.id}> abraçou <@${target.id}>!`)
+        .setDescription(`<@${interaction.user.id}> enviou um abraço para <@${target.id}>!`)
         .setImage(gif || "https://media.tenor.com/ZJ7fGICF0yAAAAAC/anime-hug.gif");
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`hug|${interaction.user.id}|${target.id}`)
-          .setLabel("Retribuir")
+          .setLabel("Retribuir Gesto")
           .setStyle(ButtonStyle.Secondary)
       );
 
@@ -61,12 +61,12 @@ module.exports = defineCommand({
 
       if (interaction.deferred || interaction.replied) {
         await interaction.followUp({
-          content: "❌ Erro no comando hug",
+          content: "❌ Ocorreu um erro ao processar o comando hug.",
           flags: 64,
         });
       } else {
         await interaction.reply({
-          content: "❌ Erro no comando hug",
+          content: "❌ Ocorreu um erro ao processar o comando hug.",
           flags: 64,
         });
       }
@@ -81,7 +81,7 @@ module.exports = defineCommand({
 
       if (interaction.user.id !== targetId) {
         return interaction.reply({
-          content: "❌ Só quem recebeu pode retribuir!",
+          content: "❌ Apenas o destinatário do gesto pode retribuí-lo.",
           flags: 64,
         });
       }
@@ -90,7 +90,7 @@ module.exports = defineCommand({
 
       const embed = new EmbedBuilder()
         .setColor(0xFF85A1)
-        .setTitle(`${emoji} Abraço retribuído`)
+        .setTitle(`${emoji} Gesto Retribuído`)
         .setDescription(`<@${interaction.user.id}> retribuiu o abraço de <@${authorId}>!`)
         .setImage(gif || "https://media.tenor.com/ZJ7fGICF0yAAAAAC/anime-hug.gif");
 

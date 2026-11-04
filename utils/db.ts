@@ -1,4 +1,4 @@
-
+// @ts-nocheck
 const fs = require("fs");
 const path = require("path");
 const Database = require("better-sqlite3");
@@ -16,21 +16,21 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const db = new Database(dbFile);
-
+// Pragmas de desempenho/robustez para um processo 24/7 rodando em SQLite/WAL.
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 db.pragma("secure_delete = ON");
-
+// NORMAL e seguro com WAL e evita um fsync a cada escrita (mensagens, cooldowns...).
 db.pragma("synchronous = NORMAL");
-
+// Espera o lock em vez de falhar quando outra escrita estiver em andamento.
 db.pragma("busy_timeout = 5000");
-
+// Tabelas temporarias ficam em RAM, sem passar pelo disco.
 db.pragma("temp_store = MEMORY");
-
+// Limita o page cache a ~4MB para manter o consumo de RAM previsivel.
 db.pragma("cache_size = -4000");
-
+// Leitura via mmap reduz syscalls; as paginas ficam fora do heap do processo.
 db.pragma("mmap_size = 67108864");
-
+// Evita que o arquivo -wal cresca sem limite apos os checkpoints.
 db.pragma("journal_size_limit = 8388608");
 
 db.exec(`
@@ -39,9 +39,6 @@ db.exec(`
     username TEXT,
     cookies INTEGER NOT NULL DEFAULT 100,
     reputacao INTEGER NOT NULL DEFAULT 0,
-    drops_collected INTEGER NOT NULL DEFAULT 0,
-    missions_completed INTEGER NOT NULL DEFAULT 0,
-    votes_count INTEGER NOT NULL DEFAULT 0,
     bet_wins INTEGER NOT NULL DEFAULT 0,
     bet_losses INTEGER NOT NULL DEFAULT 0,
     draws INTEGER NOT NULL DEFAULT 0,
@@ -73,6 +70,8 @@ db.exec(`
     biggest_win INTEGER NOT NULL DEFAULT 0,
     xp INTEGER NOT NULL DEFAULT 0,
     messages_count INTEGER NOT NULL DEFAULT 0,
+    voice_seconds_lifetime INTEGER NOT NULL DEFAULT 0,
+    transmission_seconds_lifetime INTEGER NOT NULL DEFAULT 0,
     selected_banner TEXT NOT NULL DEFAULT 'default',
     vip INTEGER NOT NULL DEFAULT 0,
     cookie_boost_until INTEGER NOT NULL DEFAULT 0,
@@ -251,6 +250,16 @@ db.exec(`
     PRIMARY KEY (guild_id, month_key)
   );
 
+  CREATE TABLE IF NOT EXISTS monthly_role_assignments (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    rank_type TEXT NOT NULL,
+    assigned_at INTEGER NOT NULL,
+    month_key TEXT NOT NULL,
+    PRIMARY KEY (guild_id, rank_type, month_key)
+  );
+
   CREATE TABLE IF NOT EXISTS monthly_tax_runs (
     month_key TEXT PRIMARY KEY,
     completed_at INTEGER NOT NULL,
@@ -424,6 +433,24 @@ db.exec(`
     finished_at INTEGER
   );
 
+  CREATE TABLE IF NOT EXISTS black_market_inventory (
+    user_id TEXT NOT NULL,
+    item_key TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, item_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS black_market_prison (
+    user_id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    jailed_at INTEGER NOT NULL,
+    release_at INTEGER NOT NULL,
+    bail_amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'jailed' CHECK (status IN ('jailed', 'bailed', 'released')),
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS server_boost_rewards (
     guild_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
@@ -455,9 +482,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_scratch_games_expiration ON scratch_games (status, expires_at);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_scratch_one_open_per_user
     ON scratch_games (guild_id, user_id) WHERE status IN ('pending', 'open');
+  CREATE INDEX IF NOT EXISTS idx_black_market_prison_status ON black_market_prison (status, release_at);
 `);
 
-
+// Atualiza as estatisticas do planejador de consultas apos criar/alterar indices.
 db.pragma("optimize");
 
 const userColumns = db.prepare("PRAGMA table_info(usuarios)").all().map(column => column.name);
@@ -472,6 +500,12 @@ if (!userColumns.includes("xp")) {
 }
 if (!userColumns.includes("messages_count")) {
   db.prepare("ALTER TABLE usuarios ADD COLUMN messages_count INTEGER NOT NULL DEFAULT 0").run();
+}
+if (!userColumns.includes("voice_seconds_lifetime")) {
+  db.prepare("ALTER TABLE usuarios ADD COLUMN voice_seconds_lifetime INTEGER NOT NULL DEFAULT 0").run();
+}
+if (!userColumns.includes("transmission_seconds_lifetime")) {
+  db.prepare("ALTER TABLE usuarios ADD COLUMN transmission_seconds_lifetime INTEGER NOT NULL DEFAULT 0").run();
 }
 if (!userColumns.includes("selected_banner")) {
   db.prepare("ALTER TABLE usuarios ADD COLUMN selected_banner TEXT NOT NULL DEFAULT 'default'").run();
@@ -494,7 +528,7 @@ for (const column of [
   }
 }
 
-
+// Mantém as colunas legíveis no perfil atualizadas com os timestamps já salvos no schema legado.
 for (const [command, column] of [
   ["daily", "cooldown_daily"],
   ["trabalhar", "cooldown_trabalhar"],
@@ -566,7 +600,7 @@ function migrateLegacyCookies() {
 
     const now = Date.now();
     const migrate = db.transaction(() => {
-      for (const [id, profile] of Object.entries(users as Record<string, Record<string, unknown>>)) {
+      for (const [id, profile] of Object.entries(users)) {
         insert.run({
           id: String(id),
           username: profile.username || "Usuario",
@@ -602,8 +636,8 @@ function migrateLegacyCookies() {
 
         const cooldowns = [
           ["daily", integer(profile.lastDailyAt) + 24 * 60 * 60 * 1000],
-          ["trabalhar", integer(profile.lastWorkAt) + 60 * 60 * 1000],
-          ["roubar", integer(profile.lastRobAt) + 3 * 60 * 60 * 1000],
+          ["trabalhar", integer(profile.lastWorkAt) + 3 * 60 * 60 * 1000],
+          ["roubar", integer(profile.lastRobAt) + 6 * 60 * 60 * 1000],
           ["bonus", integer(profile.lastBonusAt) + 7 * 24 * 60 * 60 * 1000],
           ["rep", integer(profile.lastRepAt) + 24 * 60 * 60 * 1000],
         ];

@@ -40,18 +40,37 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("cookies")
-    .setDescription("Economia global de cookies")
+    .setDescription("Gestão da Economia Global de Cookies")
     .addSubcommand(subcommand =>
       subcommand
         .setName("saldo")
-        .setDescription("Mostra o saldo global de cookies")
+        .setDescription("Consulta o saldo global de cookies")
         .addUserOption(option =>
           option
             .setName("usuario")
-            .setDescription("Usuário para consultar")
+            .setDescription("Usuário para consulta")
             .setRequired(false)
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName("pagar")
+        .setDescription("Realiza a transferência de cookies para outro usuário")
+        .addUserOption(option =>
+          option
+            .setName("usuario")
+            .setDescription("Usuário destinatário")
+            .setRequired(true)
+        )
+        .addIntegerOption(option =>
+          option
+            .setName("quantidade")
+            .setDescription("Montante a ser transferido")
+            .setRequired(true)
+            .setMinValue(1)
+        )
     ),
+
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
 
@@ -78,16 +97,16 @@ module.exports = defineCommand({
           {
             name: `${emoji.clipboard} Movimentação`,
             value: [
-              `Ganhos totais: **${amount(profile.totalEarned)}**`,
-              `Gastos e perdas: **${amount(profile.totalSpent)}**`,
-              `Resultado em jogos: **${amount(netProfit)}**`,
+              `Rendimento total: **${amount(profile.totalEarned)}**`,
+              `Despesas e perdas: **${amount(profile.totalSpent)}**`,
+              `Resultado em apostas: **${amount(netProfit)}**`,
             ].join("\n"),
             inline: false,
           },
           {
             name: `${emoji.keyboardWumpus} Jogos`,
             value: [
-              `Vitorias: **${amount(profile.betWins)}**`,
+              `Vitórias: **${amount(profile.betWins)}**`,
               `Derrotas: **${amount(profile.betLosses)}**`,
               `Empates: **${amount(profile.draws)}**`,
               `Partidas: **${amount(profile.gamesPlayed)}**`,
@@ -97,17 +116,56 @@ module.exports = defineCommand({
           {
             name: `${emoji.calendar} Daily`,
             value: [
-              `Sequencia: **${amount(profile.dailyStreak)}**`,
-              `Melhor: **${amount(profile.bestDailyStreak)}**`,
-              `Coletas: **${amount(profile.dailyClaims)}**`,
+              `Sequência: **${amount(profile.dailyStreak)}**`,
+              `Melhor marca: **${amount(profile.bestDailyStreak)}**`,
+              `Resgates: **${amount(profile.dailyClaims)}**`,
             ].join("\n"),
             inline: true,
           },
           {
-            name: `${emoji.booster} Taxa diária`,
-            value: "1% ao dia apenas sobre saldo acima de **500 cookies**. Limite: **250 cookies/dia**.",
+            name: `${emoji.booster} Taxa de Manutenção Diária`,
+            value: "Incidência de 1% ao dia sobre saldos excedentes a **500 cookies**. Limite máximo de **250 cookies** por dia.",
             inline: false,
           }
+        )
+        .setFooter({
+          text: interaction.client.user?.username || "Bot",
+          iconURL: interaction.client.user?.displayAvatarURL() || undefined,
+        })
+        .setTimestamp();
+
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (subcommand === "pagar") {
+      const target = interaction.options.getUser("usuario");
+      const quantity = interaction.options.getInteger("quantidade");
+      const result = transfer(interaction.user, target, quantity, buildContext(interaction));
+
+      if (!result.ok && result.reason === "self") {
+        return interaction.reply({
+          embeds: [buildInlineErrorEmbed("Não é possível realizar transferências para a própria conta.")],
+          flags: 64,
+        });
+      }
+
+      if (!result.ok && result.reason === "balance") {
+        return interaction.reply({
+          embeds: [buildInlineErrorEmbed(`Saldo insuficiente. Você não possui ${cookieEmoji()} **${amount(quantity)} cookies** para esta transferência!`)],
+          flags: 64,
+        });
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x57f287)
+        .setTitle(`${emoji.greenTick} Transferência Realizada com Sucesso`)
+        .setDescription(
+          [
+            `<@${interaction.user.id}> enviou ${cookieEmoji()} **${amount(result.amount)} cookies** para <@${target.id}>.`,
+            "",
+            `Seu saldo: ${cookieEmoji()} **${amount(result.from.balance)}**`,
+            `Saldo de ${target.username}: ${cookieEmoji()} **${amount(result.to.balance)}**`,
+          ].join("\n")
         )
         .setFooter({
           text: interaction.client.user?.username || "Bot",

@@ -116,16 +116,16 @@ module.exports = defineCommand({
   category: "staff",
   data: new SlashCommandBuilder()
     .setName("ficha")
-    .setDescription("Consulta o histórico de moderação de um membro")
+    .setDescription("Exibe o registro histórico de moderação de um membro")
     .setDMPermission(false)
-    .addUserOption(option => option.setName("usuario").setDescription("Membro cuja ficha será consultada").setRequired(true)),
+    .addUserOption(option => option.setName("usuario").setDescription("Membro para consulta dos registros").setRequired(true)),
 
   async execute(interaction: CommandChatInputInteraction) {
     if (!interaction.guild || !isPrimaryGuild(interaction.guildId)) {
-      return interaction.reply({ content: "Este comando está disponível apenas no servidor principal.", flags: 64 });
+      return interaction.reply({ content: "Este comando é restrito ao servidor oficial.", flags: 64 });
     }
     if (!isStaff(interaction)) {
-      return interaction.reply({ content: "A ficha de moderação é restrita à equipe de moderação.", flags: 64 });
+      return interaction.reply({ content: "O acesso aos registros de moderação é restrito à equipe administrativa.", flags: 64 });
     }
 
     const target = interaction.options.getUser("usuario", true);
@@ -148,7 +148,7 @@ module.exports = defineCommand({
       let currentPage = 0;
       collector.on("collect", async buttonInteraction => {
         if (buttonInteraction.user.id !== interaction.user.id) {
-          return buttonInteraction.reply({ content: "Esta ficha foi aberta por outra pessoa.", flags: 64 });
+          return buttonInteraction.reply({ content: "Esta consulta foi iniciada por outro usuário.", flags: 64 });
         }
         await buttonInteraction.deferUpdate();
         currentPage = Math.max(0, Math.min(totalPages - 1, currentPage + (buttonInteraction.customId === "ficha:next" ? 1 : -1)));
@@ -163,9 +163,9 @@ module.exports = defineCommand({
     } catch (error) {
       console.error("Falha ao consultar ficha de moderação", error);
       if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ content: "Não consegui consultar a ficha agora. Tente novamente em instantes.", embeds: [], components: [] });
+        return interaction.editReply({ content: "Falha na consulta dos registros. Por favor, tente novamente em alguns instantes.", embeds: [], components: [] });
       }
-      return interaction.reply({ content: "Não consegui consultar a ficha agora. Tente novamente em instantes.", flags: 64 });
+      return interaction.reply({ content: "Falha na consulta dos registros. Por favor, tente novamente em alguns instantes.", flags: 64 });
     }
   },
 });

@@ -3,7 +3,7 @@ const logger = require("./logger");
 
 const PRESENCE_INTERVAL_MS = 8 * 60 * 1000;
 
-
+// Atividades ligadas a recursos que existem no bot, sem simular jogos ou músicas.
 const ACTIVITIES = [
   {
     name: "a comunidade",
@@ -21,7 +21,7 @@ const ACTIVITIES = [
     name: "os rankings da comunidade",
     type: ActivityType.Watching,
     details: "Mensagens, voz e cookies",
-    state: "Consulte /ranking",
+    state: "Consulte /rank e /rankmensagens",
   },
   {
     name: "com a comunidade",
@@ -45,7 +45,7 @@ const ACTIVITIES = [
     name: "a atividade do servidor",
     type: ActivityType.Watching,
     details: "Participação por mensagens, voz e transmissão",
-    state: "/ranking • escolha uma categoria",
+    state: "/rankmensagens • /rankvoz • /ranktransmissao",
   },
   {
     name: "com seus cookies",

@@ -1,7 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import type { User } from "discord.js";
 import type { SqliteDatabase } from "./sqliteTypes";
-import { rollScratchCookieCount } from "./gameRules";
 
 const db = require("./db") as SqliteDatabase;
 const economy = require("./cookieEconomy") as {
@@ -16,37 +15,7 @@ export const SCRATCH_TICKET_PRICE = 500;
 export const SCRATCH_COOKIE_PRIZE = 10_000;
 export const SCRATCH_GAME_TTL_MS = 15 * 60 * 1000;
 const COOKIE_SYMBOL = "cookie";
-
-
-const FILLER_SYMBOL_WEIGHTS: readonly (readonly [string, number])[] = [
-  ["ticket", 26],
-  ["gift", 22],
-  ["party", 18],
-  ["palette", 15],
-  ["trophy", 12],
-  ["booster", 7],
-];
-const FILLER_TOTAL_WEIGHT = FILLER_SYMBOL_WEIGHTS.reduce((sum, [, weight]) => sum + weight, 0);
-
-function rollFillerSymbol(random: () => number = Math.random): string {
-  let roll = random() * FILLER_TOTAL_WEIGHT;
-  for (const [symbol, weight] of FILLER_SYMBOL_WEIGHTS) {
-    roll -= weight;
-    if (roll < 0) return symbol;
-  }
-  return FILLER_SYMBOL_WEIGHTS[FILLER_SYMBOL_WEIGHTS.length - 1][0];
-}
-
-
-export const SCRATCH_SYMBOL_IMAGE_URLS: Readonly<Record<string, string>> = {
-  cookie: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f36a.png",
-  ticket: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f39f.png",
-  trophy: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f3c6.png",
-  gift: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f381.png",
-  party: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f389.png",
-  booster: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f680.png",
-  palette: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/1f3a8.png",
-};
+const OTHER_SYMBOLS = ["ticket", "trophy", "gift", "party", "booster", "palette"] as const;
 
 export interface ScratchGame {
   id: string;
@@ -97,12 +66,8 @@ function fromRow(row: ScratchRow | undefined): ScratchGame | null {
 }
 
 function rollGrid(): string[] {
-
-
-
-  const cookieCount = rollScratchCookieCount();
-  const symbols: string[] = Array<string>(cookieCount).fill(COOKIE_SYMBOL);
-  while (symbols.length < 9) symbols.push(rollFillerSymbol());
+  const symbols = [COOKIE_SYMBOL, COOKIE_SYMBOL, COOKIE_SYMBOL];
+  for (let index = 0; index < 6; index += 1) symbols.push(OTHER_SYMBOLS[randomInt(OTHER_SYMBOLS.length)]);
   for (let index = symbols.length - 1; index > 0; index -= 1) {
     const swapIndex = randomInt(index + 1);
     [symbols[index], symbols[swapIndex]] = [symbols[swapIndex], symbols[index]];

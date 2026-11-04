@@ -9,8 +9,6 @@ const {
 
 const emoji = require("../utils/emojis");
 const { getAnimeGif } = require("../utils/animeGifs");
-const { activeGames } = require("../utils/activeGames");
-const { simulateBoxingMatch } = require("../utils/gameRules");
 
 const CHALLENGE_TIMEOUT = 60_000;
 const pendingChallenges = new Map();
@@ -27,7 +25,7 @@ function challengeRow(challengeId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`boxing|accept|${challengeId}`)
-      .setLabel("Aceitar luta")
+      .setLabel("Aceitar Combate")
       .setEmoji(emoji.toComponentEmoji("\u{1F94A}"))
       .setStyle(ButtonStyle.Danger)
   );
@@ -38,11 +36,11 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("boxe")
-    .setDescription("Desafie alguém para uma luta de boxe")
+    .setDescription("Desafie um membro para um combate de boxe")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Quem você quer desafiar")
+        .setDescription("Usuário que deseja desafiar")
         .setRequired(true)
     ),
 
@@ -51,58 +49,41 @@ module.exports = defineCommand({
 
     if (opponent.id === interaction.user.id) {
       return interaction.reply({
-        content: `${boxingEmoji()} Você não pode desafiar a si mesmo.`,
+        content: `${boxingEmoji()} Não é possível desafiar a si próprio.`,
         flags: 64,
       });
     }
 
     if (opponent.bot) {
       return interaction.reply({
-        content: `${boxingEmoji()} Bots não podem participar dessa luta.`,
+        content: `${boxingEmoji()} Entidades robóticas não estão autorizadas a participar deste combate.`,
         flags: 64,
       });
     }
 
     const challengeId = createChallengeId();
-
-    if (!activeGames.reserveNew([interaction.user.id, opponent.id], challengeId)) {
-      return interaction.reply({
-        content: `${boxingEmoji()} Um dos jogadores já está em outro minijogo.`,
-        flags: 64,
-      });
-    }
+    pendingChallenges.set(challengeId, {
+      challengerId: interaction.user.id,
+      opponentId: opponent.id,
+    });
 
     const timeout = setTimeout(() => {
       pendingChallenges.delete(challengeId);
-      activeGames.releaseGame(challengeId);
-      message.edit({
-        content: `${boxingEmoji()} O desafio expirou.`,
-        embeds: [],
-        components: [],
-      }).catch(() => {});
     }, CHALLENGE_TIMEOUT);
     timeout.unref?.();
 
     const embed = new EmbedBuilder()
       .setColor(0xE53935)
-      .setTitle(`${boxingEmoji()} Desafio de boxe`)
+      .setTitle(`${boxingEmoji()} Desafio de Boxe`)
       .setDescription(
         `${interaction.user} desafiou ${opponent} para uma luta!\n` +
-        `A luta terá 3 rounds; cada round tem 50% de chance para cada lado.\n\n` +
+        `A chance de vitória é de **50% para cada lado**.\n\n` +
         `${opponent}, você tem 60 segundos para aceitar.`
       );
 
-    await interaction.reply({
+    return interaction.reply({
       embeds: [embed],
       components: [challengeRow(challengeId)],
-    });
-    const message = await interaction.fetchReply();
-
-    pendingChallenges.set(challengeId, {
-      challengerId: interaction.user.id,
-      opponentId: opponent.id,
-      message,
-      timeout,
     });
   },
 
@@ -114,27 +95,25 @@ module.exports = defineCommand({
 
     if (!challenge) {
       return interaction.reply({
-        content: `${boxingEmoji()} Esse desafio expirou.`,
+        content: `${boxingEmoji()} Este desafio expirou.`,
         flags: 64,
       });
     }
 
     if (interaction.user.id !== challenge.opponentId) {
       return interaction.reply({
-        content: `${boxingEmoji()} Só o usuário desafiado pode aceitar essa luta.`,
+        content: `${boxingEmoji()} Apenas o usuário desafiado tem permissão para aceitar o combate.`,
         flags: 64,
       });
     }
 
-    if (challenge.timeout) clearTimeout(challenge.timeout);
-    activeGames.releaseGame(challengeId);
     pendingChallenges.delete(challengeId);
 
-    const match = simulateBoxingMatch(3);
-    const winnerId = match.winner === "challenger"
+    const challengerWins = Math.random() < 0.5;
+    const winnerId = challengerWins
       ? challenge.challengerId
       : challenge.opponentId;
-    const loserId = match.winner === "challenger"
+    const loserId = challengerWins
       ? challenge.opponentId
       : challenge.challengerId;
 
@@ -143,12 +122,11 @@ module.exports = defineCommand({
 
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
-      .setTitle(`${boxingEmoji()} Resultado da luta`)
+      .setTitle(`${boxingEmoji()} Resultado do Combate`)
       .setDescription(
         `${boxingEmoji()} <@${challenge.challengerId}> e <@${challenge.opponentId}> lutaram!\n\n` +
-        match.rounds.map(round => `Round ${round.round}: ${round.winner === "challenger" ? `**<@${challenge.challengerId}>**` : `**<@${challenge.opponentId}>**`} venceu`).join("\n") +
-        `\n\n🏆 <@${winnerId}> venceu por ${match.challengerRounds} a ${match.opponentRounds}!\n` +
-        `💥 <@${loserId}> perdeu por pouco.`
+        `🏆 <@${winnerId}> consagrou-se vencedor!\n` +
+        `💥 <@${loserId}> foi superado no combate.`
       );
 
     embed.setImage(gif);

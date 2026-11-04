@@ -49,18 +49,18 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("lembrete")
-    .setDescription("Agenda um lembrete e envia uma notificação quando chegar a hora")
+    .setDescription("Agenda uma notificação personalizada para uma data futura")
     .addStringOption(option =>
       option
         .setName("tempo")
-        .setDescription("Quando lembrar: 10m, 2h, 3d, 1 semana")
+        .setDescription("Intervalo de tempo: 10m, 2h, 3d, 1 semana")
         .setRequired(true)
         .setMaxLength(20)
     )
     .addStringOption(option =>
       option
         .setName("mensagem")
-        .setDescription("O que eu devo te lembrar")
+        .setDescription("Conteúdo da notificação")
         .setRequired(true)
         .setMaxLength(300)
     ),
@@ -74,7 +74,7 @@ module.exports = defineCommand({
 
     if (!durationMs) {
       return interaction.reply({
-        content: "Tempo invalido. Use algo como `10m`, `2h`, `3d` ou `1 semana` (minimo 1 minuto, maximo 365 dias).",
+        content: "Formato de tempo inválido. Utilize padrões como `10m`, `2h`, `3d` ou `1 semana` (mínimo 1 minuto, máximo 365 dias).",
         flags: 64,
       });
     }

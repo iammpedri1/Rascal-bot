@@ -11,15 +11,15 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("afk")
-    .setDescription("Gerencia seu status AFK")
+    .setDescription("Gerencia seu estado de ausência (AFK)")
     .addSubcommand(subcommand =>
       subcommand
         .setName("set")
-        .setDescription("Ativa seu status AFK")
+        .setDescription("Define seu estado como ausente")
         .addStringOption(option =>
           option
             .setName("motivo")
-            .setDescription("Motivo do AFK")
+            .setDescription("Motivo da ausência")
             .setRequired(false)
             .setMaxLength(200)
         )
@@ -27,23 +27,23 @@ module.exports = defineCommand({
     .addSubcommand(subcommand =>
       subcommand
         .setName("remove")
-        .setDescription("Remove seu status AFK")
+        .setDescription("Remove seu estado de ausência")
     ),
 
   async execute(interaction) {
     if (!interaction.guild) {
-      return interaction.reply({ content: "Use esse comando em um servidor.", flags: 64 });
+      return interaction.reply({ content: "Este comando deve ser utilizado dentro de um servidor.", flags: 64 });
     }
 
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === "set") {
-      const reason = interaction.options.getString("motivo") || "Sem motivo informado.";
+      const reason = interaction.options.getString("motivo") || "Nenhum motivo informado.";
       const afk = setAfk(interaction.guildId, interaction.user.id, reason);
 
       return interaction.reply({
         content: [
-          `${emoji.clock} ${interaction.user}, seu AFK foi ativado.`,
+          `${emoji.clock} ${interaction.user}, seu estado de ausência foi ativado.`,
           `${REASON_EMOJI} Motivo: **${afk.reason}**`,
           `${emoji.sino} Desde: <t:${Math.floor(afk.createdAt / 1000)}:R>`,
         ].join("\n"),
@@ -55,8 +55,8 @@ module.exports = defineCommand({
 
       return interaction.reply({
         content: removed
-          ? `${emoji.correct} ${interaction.user}, seu AFK foi removido.`
-          : `${emoji.peepSad} ${interaction.user}, voc\u00ea n\u00e3o estava AFK.`,
+          ? `${emoji.correct} ${interaction.user}, seu estado de ausência foi removido.`
+          : `${emoji.peepSad} ${interaction.user}, você não estava em estado de ausência.`,
         flags: 64,
       });
     }

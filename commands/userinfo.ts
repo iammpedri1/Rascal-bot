@@ -22,6 +22,7 @@ const BADGES = [
   { flag: "VerifiedBot", name: "Bot verificado", emoji: "badge_verified_bot", fallback: "☑️" },
   { flag: "VerifiedDeveloper", name: "Desenvolvedor de bots verificados", emoji: "badge_verified_developer", fallback: "👨‍💻" },
   { flag: "CertifiedModerator", name: "Moderador certificado", emoji: "badge_certified_moderator", fallback: "🔨" },
+  { flag: "ActiveDeveloper", name: "Desenvolvedor Ativo", emoji: "badge_active_developer", fallback: "👨‍💻" },
 ];
 
 function timestamp(date) {

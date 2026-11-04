@@ -28,7 +28,7 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("ping")
-    .setDescription("Mostra a latência e o tempo ativo do bot"),
+    .setDescription("Exibe o estado de latência e tempo de atividade do sistema"),
 
   async execute(interaction) {
     const startedAt = Date.now();
@@ -38,11 +38,11 @@ module.exports = defineCommand({
     const apiPing = Number.isFinite(rawApiPing) && rawApiPing >= 0 ? Math.round(rawApiPing) : -1;
     const memory = collectRuntimeMetrics();
     const content = [
-      `${icon("ping", "🏓")} ${interaction.user} pong! Yay!`,
-      `${icon("clock", "🗓️")} **Uptime:** \`${formatUptime(interaction.client.uptime)}\``,
-      `${icon("server", "🌐")} **API Ping:** ${apiPing >= 0 ? `${apiPing}ms` : "reconectando"}`,
-      `${icon("botFlag", "💬")} **BOT Ping:** ${responseTime}ms`,
-      `${icon("botFlag", "💬")} **RAM:** ${formatBytes(memory.rssBytes)} (heap ${formatBytes(memory.heapUsedBytes)})`,
+      `${icon("ping", "🏓")} ${interaction.user} Latência verificada com sucesso.`,
+      `${icon("clock", "🗓️")} **Tempo de Atividade:** \`${formatUptime(interaction.client.uptime)}\``,
+      `${icon("server", "🌐")} **Latência da API:** ${apiPing >= 0 ? `${apiPing}ms` : "Reconectando..."}`,
+      `${icon("botFlag", "💬")} **Latência do Bot:** ${responseTime}ms`,
+      `${icon("botFlag", "💬")} **Memória RAM:** ${formatBytes(memory.rssBytes)} (Heap: ${formatBytes(memory.heapUsedBytes)})`,
     ].join("\n");
     return interaction.editReply({ content, allowedMentions: { users: [interaction.user.id] } });
   },

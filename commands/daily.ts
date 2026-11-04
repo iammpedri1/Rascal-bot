@@ -14,7 +14,7 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("daily")
-    .setDescription("Colete sua recompensa diária de cookies a cada 24 horas"),
+    .setDescription("Resgate sua recompensa diária de cookies a cada 24 horas"),
 
   async execute(interaction) {
     await interaction.deferReply();

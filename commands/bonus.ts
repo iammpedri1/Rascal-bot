@@ -13,7 +13,7 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("bonus")
-    .setDescription("Resgate seu b\u00f4nus semanal de cookies"),
+    .setDescription("Resgate sua bonificação semanal de cookies"),
 
   async execute(interaction) {
     const result = claimBonus(interaction.user, buildContext(interaction));

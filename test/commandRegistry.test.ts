@@ -8,7 +8,6 @@ const temporaryDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "rascal-command-r
 process.env.BOT_DATA_DIR = temporaryDataDir;
 
 const { CommandHandler } = require("../handlers/commandHandler");
-const db = require("../utils/db");
 
 test("slash command registry has unique schemas and excludes retired commands", () => {
   const commands = CommandHandler.discover();
@@ -27,9 +26,4 @@ test("slash command registry has unique schemas and excludes retired commands", 
   }
 });
 
-test.after(() => {
-
-
-  db.close();
-  fs.rmSync(temporaryDataDir, { recursive: true, force: true });
-});
+test.after(() => fs.rmSync(temporaryDataDir, { recursive: true, force: true }));

@@ -100,7 +100,7 @@ const CHEST_ITEMS = [
   },
 ];
 
-
+// VIPs are server roles and are loaded from the primary guild at runtime.
 const VIP_ITEMS = [];
 
 const BOOST_ITEMS = [
@@ -132,21 +132,21 @@ const UTILITY_ITEMS = [
 const SHOP_SECTIONS = [
   {
     id: "cores",
-    name: "Cores",
+    name: "Cores Personalizadas",
     get emoji() { return emoji.palette; },
-    description: "Cargos numerados de cor do servidor.",
+    description: "Cargos de cor exclusivos para destacar seu nome no chat.",
   },
   {
     id: "vip",
-    name: "VIPs",
+    name: "Assinaturas VIP",
     get emoji() { return emoji.owner; },
-    description: "Compre os cargos VIP configurados neste servidor usando cookies.",
+    description: "Cargos de prestígio com bônus reais em cookies e acesso ao Mercado Negro.",
   },
   {
     id: "aceleradores",
-    name: "Aceleradores de tempo",
+    name: "Aceleradores",
     get emoji() { return emoji.clock; },
-    description: "Desbloqueie daily, roubo ou trabalho na hora.",
+    description: "Elimine o tempo de espera dos seus comandos agora mesmo.",
   },
 ];
 
@@ -193,7 +193,7 @@ function normalizedRoleName(roleName) {
 }
 
 function colorRoleNumber(roleName) {
-
+  // Cargos de cor do servidor seguem o padrão 🎨 ・1 até 🎨 ・15.
   const match = String(roleName || "").trim().match(/^🎨\s*[・·•]\s*(1[0-5]|[1-9])$/u);
   return match ? Number(match[1]) : null;
 }
@@ -274,11 +274,11 @@ function guildRoleOffers(guild, kind) {
 
 function vipBenefitsFor(roleOrOffer) {
   const benefitPercent = vipBenefitPercent(roleOrOffer);
-  return `+${benefitPercent}% em cookies no /daily, /trabalhar e /bonus.`;
+  return `+${benefitPercent}% em cookies no /daily, /trabalhar e /bonus; acesso ao Mercado Negro VIP.`;
 }
 
 const SHOP_ITEMS = [...COLOR_ITEMS, ...VIP_ITEMS, ...BOOST_ITEMS, ...UTILITY_ITEMS];
-
+// Mantém itens antigos utilizáveis, sem oferecê-los no catálogo atual da loja.
 const SHOP_ITEMS_BY_ID = Object.fromEntries([...SHOP_ITEMS, ...CHEST_ITEMS].map(item => [item.id, item]));
 
 const COOLDOWN_TARGETS = [

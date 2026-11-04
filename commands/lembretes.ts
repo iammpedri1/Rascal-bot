@@ -10,7 +10,7 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("lembretes")
-    .setDescription("Mostra seus cooldowns de cookies"),
+    .setDescription("Visualize o tempo de espera para suas atividades de economia"),
 
   async execute(interaction) {
     const userCooldowns = cooldowns.allForUser(interaction.user.id);

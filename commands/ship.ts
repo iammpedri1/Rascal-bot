@@ -1,6 +1,6 @@
 import { defineCommand } from "../types/command";
 const { AttachmentBuilder, EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
-const { loadCanvas, loadImageCached } = require("../utils/canvas");
+const { loadCanvas } = require("../utils/canvas");
 
 const emoji = require("../utils/emojis");
 const { COLORS, setBrandFooter } = require("../utils/embedStyle");
@@ -8,10 +8,7 @@ const { COLORS, setBrandFooter } = require("../utils/embedStyle");
 const WIDTH = 1100;
 const HEIGHT = 520;
 const CARD_RADIUS = 28;
-
 function displayName(user) {
-  if (!user) return "Usuario";
-
   return user.globalName || user.username || "Usuario";
 }
 
@@ -89,23 +86,14 @@ function strokeRoundRect(ctx, x, y, width, height, radius) {
   ctx.stroke();
 }
 
-/**
- * Adjusts the canvas context font size so that `text` fits within `maxWidth`.
- * Returns the final font size used. The caller should then render the text
- * using `ctx.fillText(text, x, y, maxWidth)` to enable native horizontal
- * squeezing when the text is still slightly too wide.
- */
 function fitText(ctx, text, maxWidth, baseSize, weight = "700") {
   let size = baseSize;
 
   do {
     ctx.font = `${weight} ${size}px Arial`;
-    if (ctx.measureText(text).width <= maxWidth) return size;
+    if (ctx.measureText(text).width <= maxWidth) return;
     size -= 2;
   } while (size >= 16);
-
-  ctx.font = `${weight} 16px Arial`;
-  return 16;
 }
 
 function drawCircleAvatar(ctx, image, x, y, size) {
@@ -131,8 +119,9 @@ function drawCircleAvatar(ctx, image, x, y, size) {
 }
 
 async function loadAvatar(user) {
+  const { loadImage } = loadCanvas();
   try {
-    return await loadImageCached(user.displayAvatarURL({ extension: "png", size: 256 }));
+    return await loadImage(user.displayAvatarURL({ extension: "png", size: 256 }));
   } catch {
     return null;
   }

@@ -51,7 +51,7 @@ test("prunes stale keys to keep the tracked set bounded", () => {
   limiter.check("a", 0);
   limiter.check("b", 0);
   limiter.check("c", 0);
-
+  // a e b expiraram; após a poda o espaço volta a aceitar novas chaves
   assert.equal(limiter.check("d", 500).allowed, true);
   assert.equal(limiter.check("a", 500).allowed, true);
 });

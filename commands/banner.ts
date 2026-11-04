@@ -10,22 +10,22 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("banner")
-    .setDescription("Mostra o banner de um usuário")
+    .setDescription("Exibe o banner de perfil de um usuário")
     .addUserOption(option =>
       option
-        .setName("user")
-        .setDescription("Usuário")
+        .setName("usuario")
+        .setDescription("Usuário para consulta")
         .setRequired(true)
     ),
 
   async execute(interaction) {
-    const user = interaction.options.getUser("user");
+    const user = interaction.options.getUser("usuario");
     const fetchedUser = await user.fetch(true);
     const banner = fetchedUser.bannerURL({ size: 4096 });
 
     const embed = new EmbedBuilder()
       .setColor(randomColor())
-      .setDescription(banner ? `Banner do ${user}` : `${user} não possui banner`);
+      .setDescription(banner ? `Banner de perfil de ${user}` : `${user} não possui um banner configurado.`);
 
     if (banner) embed.setImage(banner);
 

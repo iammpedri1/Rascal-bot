@@ -3,7 +3,7 @@ const {
   AttachmentBuilder,
   SlashCommandBuilder,
 } = require("discord.js") as typeof import("discord.js");
-const { loadImageCached, loadCanvas } = require("../utils/canvas");
+const { loadCanvas } = require("../utils/canvas");
 const { generateFakeTweetMetrics } = require("../utils/fakeTweetMetrics");
 
 const CARD_WIDTH = 1240;
@@ -87,10 +87,11 @@ function drawAvatar(context, avatar, x, y, size) {
 }
 
 async function loadAvatar(url): Promise<any> {
+  const { loadImage } = loadCanvas();
   let timeout;
   try {
     return await Promise.race([
-      loadImageCached(url).catch(() => null),
+      loadImage(url).catch(() => null),
       new Promise<any>(resolve => {
         timeout = setTimeout(() => resolve(null), AVATAR_TIMEOUT_MS);
         timeout.unref?.();
@@ -209,11 +210,11 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("fake-tweet")
-    .setDescription("Cria um card no estilo Twitter com sua mensagem")
+    .setDescription("Gera uma imagem simulando uma publicação no Twitter (X)")
     .addStringOption(option =>
       option
         .setName("mensagem")
-        .setDescription("Texto que aparecerá no tweet")
+        .setDescription("Texto que aparecerá na publicação")
         .setRequired(true)
         .setMaxLength(280)
     ),
@@ -223,7 +224,7 @@ module.exports = defineCommand({
 
     if (!message) {
       return interaction.reply({
-        content: "Digite uma mensagem para criar o tweet.",
+        content: "Por favor, insira uma mensagem para gerar a publicação.",
         flags: 64,
       });
     }

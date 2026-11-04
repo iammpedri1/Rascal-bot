@@ -46,15 +46,15 @@ module.exports = defineCommand({
   category: "info",
   data: new SlashCommandBuilder()
     .setName("bot")
-    .setDescription("Comandos de informações do bot")
+    .setDescription("Informações detalhadas sobre o Rascal")
     .addSubcommand(subcommand => subcommand
       .setName("info")
-      .setDescription("Mostra informações técnicas do bot")),
+      .setDescription("Exibe os dados técnicos e estatísticas do bot")),
 
   async execute(interaction: CommandChatInputInteraction) {
     await interaction.deferReply();
     const botUser = interaction.client.user;
-    if (!botUser) return interaction.editReply({ content: "As informações do bot ainda não estão disponíveis." });
+    if (!botUser) return interaction.editReply({ content: "Os dados do sistema estão sendo processados e ficarão disponíveis em breve." });
 
     const uptimeSeconds = Math.floor((interaction.client.uptime ?? process.uptime() * 1000) / 1000);
     const ping = interaction.client.ws.ping;

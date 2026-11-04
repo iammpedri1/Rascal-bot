@@ -1,66 +1,55 @@
-import { defineCommand, type CommandChatInputInteraction } from "../types/command";
-import { EmbedBuilder, SlashCommandBuilder, type User } from "discord.js";
+import { defineCommand } from "../types/command";
+// @ts-nocheck
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  SlashCommandBuilder,
+} = require("discord.js") as typeof import("discord.js");
 
-const emoji = require("../utils/emojis") as typeof import("../utils/emojis");
-const { rob } = require("../utils/cookieEconomy") as {
-  rob(thiefUser: User, targetUser: User, details?: Record<string, unknown>): RobResult;
-};
-const { buildContext, buildInlineCooldownEmbed } = require("../utils/cookieViews") as {
-  buildContext(interaction: CommandChatInputInteraction): Record<string, unknown>;
-  buildInlineCooldownEmbed(result: any, commandLabel?: string): any;
-};
+const { rob } = require("../utils/cookieEconomy");
+const emoji = require("../utils/emojis");
+const {
+  buildContext,
+  buildInlineCooldownEmbed,
+  buildInlineErrorEmbed,
+  buildRobEmbed,
+} = require("../utils/cookieViews");
 
-interface RobResult {
-  ok: boolean;
-  reason?: "self" | "target_balance" | "cooldown";
-  success?: boolean;
-  thief?: { balance: number };
-  target?: { balance: number };
-  stolen?: number;
-  percent?: number;
-  penalty?: number;
-  remaining?: number;
-  nextAt?: number;
+function buildRevengeButton(robberId, victimId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roubar|revenge|${robberId}|${victimId}`)
+      .setEmoji(emoji.toComponentEmoji(emoji.pepeReeeee))
+      .setLabel("Retaliação")
+      .setStyle(ButtonStyle.Danger)
+  );
 }
 
+function replyPayload(interaction, target, result) {
+  const payload: { embeds: unknown[]; components?: unknown[] } = {
+    embeds: [buildRobEmbed(interaction, target, result)],
+  };
 
-const PEPE_POLICE_GIF = "https://media.tenor.com/PLACEHOLDER_POLICE/pepe-policial-cassetete.gif"; // Pepe policial com cassetete
-const PEPE_THIEF_GIF = "https://media.tenor.com/PLACEHOLDER_THIEF/pepe-ladrao.gif"; // Pepe ladrão (sucesso)
+  if (result.success) {
+    payload.components = [buildRevengeButton(interaction.user.id, target.id)];
+  }
 
-function amount(value: number): string {
-  return Number(value || 0).toLocaleString("pt-BR");
+  return payload;
 }
 
-function buildSuccessEmbed(thief: User, target: User, result: RobResult): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(0x57f287)
-    .setTitle("💰 » ROUBO BEM-SUCEDIDO")
-    .setThumbnail(PEPE_THIEF_GIF)
-    .setDescription(
-      [
-        `${emoji.application("pand_happy", "🎉")} \u00bb <@${thief.id}> roubou **${result.percent}%** (${amount(result.stolen ?? 0)} cookies) de <@${target.id}>!`,
-        `${emoji.application("cookie", "🍪")} \u00bb Novo saldo: **${amount(result.thief?.balance ?? 0)} cookies**.`,
-      ].join("\n"),
-    );
+function blocked(message) {
+  return {
+    embeds: [buildInlineErrorEmbed(message)],
+    flags: 64,
+  };
 }
 
-function buildFailureEmbed(thief: User, target: User, result: RobResult): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(0xed4245)
-    .setTitle("🚨 » TENTATIVA DE ROUBO FRUSTRADA")
-    .setThumbnail(PEPE_POLICE_GIF)
-    .setDescription(
-      [
-        `🚨 » <@${thief.id}> tentou roubar <@${target.id}> e acabou sendo pego pela polícia perdendo ${amount(result.penalty ?? 0)} moedas!`,
-        `${emoji.application("cookie", "🍪")} \u00bb Saldo atual: **${amount(result.thief?.balance ?? 0)} cookies**.`,
-      ].join("\n"),
-    );
-}
-
-function inlineError(message: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(0xed4245)
-    .setDescription(`${emoji.application("crossed", "❌")} \u00bb ${message}`);
+function cooldown(result) {
+  return {
+    embeds: [buildInlineCooldownEmbed(result, "/roubar")],
+    flags: 64,
+  };
 }
 
 module.exports = defineCommand({
@@ -68,44 +57,65 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("roubar")
-    .setDescription("Tente roubar cookies de outro usuário a cada 3 horas")
-    .addUserOption((option) => option
-      .setName("usuario")
-      .setDescription("Usuário que você quer roubar")
-      .setRequired(true)),
+    .setDescription("Tente subtrair cookies de outro membro (sujeito a penalidades)")
+    .addUserOption(option =>
+      option
+        .setName("usuario")
+        .setDescription("Usuário que será o alvo da ação")
+        .setRequired(true)
+    ),
 
-  async execute(interaction: CommandChatInputInteraction): Promise<void> {
-    const target = interaction.options.getUser("usuario", true);
+  async execute(interaction) {
+    const target = interaction.options.getUser("usuario");
 
     if (target.bot) {
-      await interaction.reply({ embeds: [inlineError("Você não pode roubar bots!")], flags: 64 });
-      return;
+      return interaction.reply(blocked("Não é possível realizar esta ação contra perfis robóticos."));
     }
 
     const result = rob(interaction.user, target, buildContext(interaction));
 
     if (!result.ok && result.reason === "self") {
-      await interaction.reply({ embeds: [inlineError("Você não pode roubar a si mesmo!")], flags: 64 });
-      return;
+      return interaction.reply(blocked("Você não pode realizar esta ação contra o próprio perfil."));
+    }
+
+    if (!result.ok && result.reason === "prison") {
+      return interaction.reply(blocked(`Você encontra-se em detenção até <t:${Math.floor(result.prison.releaseAt / 1000)}:R>. Utilize /fianca para solicitar a liberação.`));
     }
 
     if (!result.ok && result.reason === "target_balance") {
-      await interaction.reply({ embeds: [inlineError("O membro escolhido não tem saldo suficiente para ser roubado!")], flags: 64 });
-      return;
+      return interaction.reply(blocked("O alvo selecionado não possui cookies suficientes para esta operação."));
     }
 
     if (!result.ok && result.reason === "cooldown") {
-      await interaction.reply({
-            embeds: [buildInlineCooldownEmbed(result, "/roubar")],
-        flags: 64,
-      });
-      return;
+      return interaction.reply(cooldown(result));
     }
 
-    const embed = result.success
-      ? buildSuccessEmbed(interaction.user, target, result)
-      : buildFailureEmbed(interaction.user, target, result);
+    return interaction.reply(replyPayload(interaction, target, result));
+  },
 
-    await interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
+  async handleButton(interaction) {
+    const [, action, robberId, victimId] = interaction.customId.split("|");
+    if (action !== "revenge") return;
+
+    if (interaction.user.id !== victimId) {
+      return interaction.reply(blocked("Este botão é restrito à vítima da ação original."));
+    }
+
+    const target = await interaction.client.users.fetch(robberId);
+    const result = rob(interaction.user, target, buildContext(interaction));
+
+    if (!result.ok && result.reason === "cooldown") {
+      return interaction.reply(cooldown(result));
+    }
+
+    if (!result.ok && result.reason === "target_balance") {
+      return interaction.reply(blocked("O alvo selecionado não possui cookies suficientes para esta operação."));
+    }
+
+    if (!result.ok) {
+      return interaction.reply(blocked("Não foi possível processar a retaliação no momento."));
+    }
+
+    return interaction.reply(replyPayload(interaction, target, result));
   },
 });

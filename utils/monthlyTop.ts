@@ -8,6 +8,11 @@ const { getMonthlyVoiceLeaderboard } = require("./voiceStats");
 const { isPrimaryGuild } = require("./primaryGuild");
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const ROLE_NAMES = {
+  messages: "Top 1 Mensagens",
+  voice: "Top 1 Voz",
+};
+
 let schedulerStarted = false;
 
 function monthKey(now = Date.now()) {
@@ -17,6 +22,48 @@ function monthKey(now = Date.now()) {
 function previousMonthKey(current) {
   const [year, month] = current.split("-").map(Number);
   return new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7);
+}
+
+async function assignMonthlyRoles(guild: import("discord.js").Guild, month: string) {
+  const messages = getMonthlyMessageLeaderboard(guild.id, month, 1);
+  const voice = getMonthlyVoiceLeaderboard(guild.id, month, 1);
+
+  const assignments = [
+    { type: "messages" as const, winner: messages[0], roleName: ROLE_NAMES.messages },
+    { type: "voice" as const, winner: voice[0], roleName: ROLE_NAMES.voice },
+  ];
+
+  for (const { type, winner, roleName } of assignments) {
+    if (!winner) continue;
+
+    const role = guild.roles.cache.find(r => r.name === roleName);
+    if (!role) {
+      logger.warn(`Cargo de ranking não encontrado: "${roleName}" no servidor ${guild.name}`);
+      continue;
+    }
+
+    // Remover vencedor anterior
+    const prev = db.prepare(`
+      SELECT user_id FROM monthly_role_assignments 
+      WHERE guild_id = ? AND rank_type = ?
+      ORDER BY assigned_at DESC LIMIT 1
+    `).get(guild.id, type);
+
+    if (prev && prev.user_id !== winner.id) {
+      const prevMember = await guild.members.fetch(prev.user_id).catch(() => null);
+      if (prevMember) await prevMember.roles.remove(role, `Novo vencedor do mês: ${month}`).catch(() => null);
+    }
+
+    // Atribuir novo vencedor
+    const member = await guild.members.fetch(winner.id).catch(() => null);
+    if (member) {
+      await member.roles.add(role, `Vencedor do ranking mensal (${type}): ${month}`).catch(() => null);
+      db.prepare(`
+        INSERT OR REPLACE INTO monthly_role_assignments (guild_id, user_id, role_id, rank_type, assigned_at, month_key)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(guild.id, winner.id, role.id, type, Date.now(), month);
+    }
+  }
 }
 
 function monthLabel(key) {
@@ -103,6 +150,9 @@ async function publishPreviousMonth(client) {
     embeds: [buildMonthlyTopEmbed(channel.guild, targetMonth)],
     allowedMentions: { parse: [] },
   });
+
+  await assignMonthlyRoles(channel.guild, targetMonth);
+
   db.prepare(`
     INSERT OR IGNORE INTO monthly_top_posts (guild_id, month_key, posted_at) VALUES (?, ?, ?)
   `).run(String(channel.guild.id), targetMonth, Date.now());

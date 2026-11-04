@@ -7,8 +7,8 @@ import type {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 
-
-
+// Catálogo em memória. A troca do mapa é atômica para manter a última versão
+// válida enquanto uma atualização de rede está em andamento.
 let emojiMap = new Map<string, string>();
 let applicationEmojiAssets = new Map<string, ApplicationEmojiAsset>();
 let refreshInFlight: Promise<void> | null = null;
@@ -105,9 +105,9 @@ export function getGuildEmoji(
   name: string,
   fallback = "",
 ): string {
-
-
-
+  // Os emojis do Developer Portal são a identidade padrão do bot; o cache do
+  // servidor entra apenas como alternativa quando o catálogo da aplicação não
+  // contém o nome solicitado.
   const portalEmoji = portalEmojiFor(name);
   if (portalEmoji) return portalEmoji;
 
@@ -217,10 +217,21 @@ const legacyAliases: Record<string, string> = {
   humanIcon: "1users",
   previous: "voltar",
   next: "avancar",
+  moneyIcon: "Peep_Money",
+  vip1: "Vip1",
+  vip2: "Vip2",
+  megavip: "MegaVip",
+  bronze: "bronze",
+  silver: "silver",
+  gold: "Gold",
+  platinum: "platinum",
+  diamond: "Diamond",
+  ruby: "ruby",
+  opal: "Opal",
+  programmer: "programmer",
   pand_police: "blobPolice",
   pand_happy: "pand_happy",
   peep_police: "peep_police",
-  moneyIcon: "BlobCookies",
   magicWand: "Menu",
   sparkles: "CookieStar",
   streaming: "Voice",
@@ -288,6 +299,7 @@ const legacyAliases: Record<string, string> = {
   badge_verified_bot: "Discord_bot",
   badge_verified_developer: "6587earlyverifiedbotdevelopera",
   badge_certified_moderator: "2731certifiedmoderator",
+  badge_active_developer: "active_developer",
 };
 
 const normalizedAliases = new Map(
@@ -365,6 +377,17 @@ const fallbacks: Record<string, string> = {
   homeIcon: "🏠",
   previous: "◀️",
   next: "▶️",
+  vip1: "⭐",
+  vip2: "🌟",
+  megavip: "✨",
+  bronze: "🥉",
+  silver: "🥈",
+  gold: "🥇",
+  platinum: "💎",
+  diamond: "💎",
+  ruby: "🔻",
+  opal: "⚪",
+  programmer: "💻",
   moneyIcon: "💸",
   magicWand: "🪄",
   sparkles: "✨",

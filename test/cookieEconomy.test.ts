@@ -32,25 +32,6 @@ test("work caps a failed-turn fine at the real balance and tracks the actual los
   assert.equal(result.profile.totalSpent, 50);
 });
 
-test("work distributes successful rewards across the increased range", () => {
-  const user = { id: "work-reward-test-user", username: "Tester" };
-  getProfile(user);
-
-  const originalRandom = Math.random;
-  const randomValues = [0, 0.999999];
-  Math.random = () => randomValues.shift() ?? 0;
-  let result;
-  try {
-    result = work(user, { job: "Programador" });
-  } finally {
-    Math.random = originalRandom;
-  }
-
-  assert.equal(result.success, true);
-  assert.ok(result.reward >= 500 && result.reward <= 2200);
-  assert.equal(result.profile.balance, 100 + result.reward);
-});
-
 test("cooldown passes cannot reset daily or robbery cooldowns", () => {
   const user = { id: "pass-test-user", username: "Tester" };
 

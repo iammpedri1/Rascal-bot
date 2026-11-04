@@ -27,11 +27,11 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("inventario")
-    .setDescription("Mostra seu inventário de cookies")
+    .setDescription("Exibe seu inventário pessoal e estatísticas de cookies")
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuário para consultar")
+        .setDescription("Usuário para consulta")
         .setRequired(false)
     ),
 
@@ -57,16 +57,16 @@ module.exports = defineCommand({
     const selectedTheme = SHOP_ITEMS_BY_ID[profile.selectedBanner];
     const colorCollection = ownedColors.length
       ? ownedColors.map(item => item.name).join(" · ")
-      : "Nenhuma ainda. Use `/loja` para ver as cores.";
+      : "Nenhum item adquirido. Utilize `/loja` para explorar as opções disponíveis.";
     const chestCollection = chests.length
       ? chests.map(item => `${item.name} × ${item.quantity}`).join("\n")
-      : "Nenhum baú guardado.";
+      : "Nenhum baú disponível no inventário.";
     const utilityCollection = utilityItems.length
       ? utilityItems.map(item => `${item.name} × ${item.quantity}`).join("\n")
-      : "Nenhum passe guardado.";
+      : "Nenhum passe disponível no inventário.";
     const boostCollection = boostItems.length
       ? boostItems.map(item => `${item.name} × ${item.quantity}`).join("\n")
-      : "Nenhum boost guardado.";
+      : "Nenhum acelerador disponível no inventário.";
 
     const embed = new EmbedBuilder()
       .setColor(selectedTheme?.color || 0xf5a623)
@@ -81,26 +81,26 @@ module.exports = defineCommand({
           `${emoji.cookie} \u00bb Carteira: **${amount(profile.balance)} cookies**`,
           `\u2764\uFE0F \u00bb Reputação: **${amount(profile.repsReceived)}**`,
           "",
-          `${emoji.clap} \u00bb Ganhos totais: **${amount(profile.totalEarned)} cookies**`,
-          `${emoji.peepSad} \u00bb Perdidos/gastos: **${amount(profile.totalSpent)} cookies**`,
-          `${emoji.ticket} \u00bb Lucro em jogos: **${amount(getNetProfit(profile))} cookies**`,
+          `${emoji.clap} \u00bb Rendimento total: **${amount(profile.totalEarned)} cookies**`,
+          `${emoji.peepSad} \u00bb Despesas e perdas: **${amount(profile.totalSpent)} cookies**`,
+          `${emoji.ticket} \u00bb Resultado em apostas: **${amount(getNetProfit(profile))} cookies**`,
           "",
-          `${emoji.work} \u00bb Trabalhos feitos: **${amount(profile.workCount)}**`,
-          `${emoji.gift} \u00bb Recompensas diárias: **${amount(profile.dailyClaims)}**`,
+          `${emoji.work} \u00bb Atividades concluídas: **${amount(profile.workCount)}**`,
+          `${emoji.gift} \u00bb Resgates diários: **${amount(profile.dailyClaims)}**`,
         ].join("\n")
       )
       .addFields({
-        name: `${emoji.settingsIcon} Cores (${ownedColors.length})`,
+        name: `${emoji.settingsIcon} Paleta de Cores (${ownedColors.length})`,
         value: `Equipada: **${selectedTheme?.name || "Clássico"}**\n${colorCollection}`,
       }, {
         name: `${emoji.owner} VIP`,
         value: profile.isVip
-          ? "Ativo permanentemente · +10% nas recompensas elegíveis."
-          : "Não adquirido. Consulte `/loja`.",
+          ? "Benefício Vitalício · Adicional de 10% em recompensas qualificadas."
+          : "Benefício não ativo. Consulte `/loja`.",
         inline: true,
       }, {
         name: `${emoji.booster} Boosts`,
-        value: `${profile.cookieBoostUntil > Date.now() ? `Ativo até <t:${Math.floor(profile.cookieBoostUntil / 1000)}:R>` : "Nenhum boost ativo."}\n${boostCollection}`,
+        value: `${profile.cookieBoostUntil > Date.now() ? `Ativo até <t:${Math.floor(profile.cookieBoostUntil / 1000)}:R>` : "Nenhum acelerador ativo no momento."}\n${boostCollection}`,
         inline: true,
       }, {
         name: `${emoji.gift} Baús`,
@@ -111,7 +111,7 @@ module.exports = defineCommand({
         value: utilityCollection,
         inline: true,
       }, {
-        name: `${emoji.roles} Cargos comprados neste servidor`,
+        name: `${emoji.roles} Aquisições de Cargos no Servidor`,
         value: guildRolePurchases.length
           ? guildRolePurchases.map(purchase => {
             const role = interaction.guild.roles.cache.get(purchase.roleId);
@@ -122,7 +122,7 @@ module.exports = defineCommand({
               : " · permanente";
             return `• ${kind}: ${roleName}${expiry}`;
           }).join("\n").slice(0, 1000)
-          : "Nenhum cargo comprado nesta loja ainda.",
+          : "Nenhuma aquisição de cargo registrada nesta loja.",
         inline: false,
       })
       .setFooter({

@@ -8,12 +8,10 @@ import {
   type Message,
 } from "discord.js";
 import { defineCommand } from "../types/command";
-import type { CommandButtonInteraction, CommandChatInputInteraction } from "../types/command";
+import type { CommandChatInputInteraction } from "../types/command";
 import type { Logger } from "../types/logger";
 import { activeGames } from "../utils/activeGames";
 import { refundGameBets, reserveStakes, resolveGame } from "../utils/gameEconomy";
-import { JOKENPO_MOVES, jokenpoWinner } from "../utils/gameRules";
-import type { DuelWinner, JokenpoMove } from "../utils/gameRules";
 import {
   buttonRow,
   contextFor,
@@ -30,6 +28,15 @@ import {
 const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
 const logger = require("../utils/logger") as Logger;
 
+type Move = "pedra" | "papel" | "tesoura";
+type DuelWinner = "challenger" | "opponent" | "draw";
+
+const MOVE_DATA: Record<Move, { label: string; emoji: string; icon: string; beats: Move }> = {
+  pedra: { label: "Pedra", emoji: "🪨", icon: "rock", beats: "tesoura" },
+  papel: { label: "Papel", emoji: "📄", icon: "paper", beats: "pedra" },
+  tesoura: { label: "Tesoura", emoji: "✂️", icon: "scissors", beats: "papel" },
+};
+
 function invitationRow(gameId: string): ActionRowBuilder<ButtonBuilder> {
   return buttonRow(
     gameButton(`jokenpo|aceitar|${gameId}`, "Aceitar", "correct", "✅", ButtonStyle.Success),
@@ -45,6 +52,11 @@ function moveRow(gameId: string): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
+function winnerFor(first: Move, second: Move): DuelWinner {
+  if (first === second) return "draw";
+  return MOVE_DATA[first].beats === second ? "challenger" : "opponent";
+}
+
 async function executeJokenpo(interaction: CommandChatInputInteraction): Promise<void> {
   const opponent = interaction.options.getUser("usuario", true);
   const bet = interaction.options.getInteger("aposta") ?? 0;
@@ -53,22 +65,22 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
   const context = contextFor(interaction);
 
   if (!interaction.guild) {
-    await interaction.reply({ content: "Este jogo só pode ser iniciado em um servidor.", flags: 64 });
+    await interaction.reply({ content: "Este minijogo deve ser iniciado dentro de um servidor.", flags: 64 });
     return;
   }
   if (opponent.id === challenger.id || opponent.bot) {
-    await interaction.reply({ content: "Desafie outra pessoa. O /jokenpo é uma partida entre dois membros.", flags: 64 });
+    await interaction.reply({ content: "Por favor, desafie outro membro. O Jokenpô requer dois participantes.", flags: 64 });
     return;
   }
   if (!activeGames.reserveNew([challenger.id, opponent.id], gameId)) {
     await interaction.reply({
-      content: `${icon("crossed", "❌")} Um dos jogadores já está em outro minijogo.`,
+      content: `${icon("crossed", "❌")} Um dos participantes já está em outro minijogo.`,
       flags: 64,
     });
     return;
   }
 
-  const moves = new Map<string, JokenpoMove>();
+  const moves = new Map<string, Move>();
   let phase: "invite" | "playing" = "invite";
   let stakeReserved = false;
   let settled = false;
@@ -79,11 +91,11 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
     await interaction.reply({
       content: `${opponent}`,
       embeds: [gameEmbed(
-        `${icon("gamesIcon", "🎮")} Pedra, Papel e Tesoura`,
+        `${icon("gamesIcon", "🎮")} Pedra, Papel e Tesoura (Jokenpô)`,
         [
           `${challenger} desafiou ${opponent}.`,
           bet > 0 ? `${icon("cookie", "🍪")} Aposta por jogador: **${formatCookies(bet)} cookies**.` : "Partida amistosa, sem aposta.",
-          `${opponent}, aceite para escolher sua jogada.`,
+          `${opponent}, aceite para realizar sua jogada.`,
         ].join("\n\n"),
       )],
       components: [invitationRow(gameId)],
@@ -96,7 +108,7 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
 
     collector.on("collect", async (button: ButtonInteraction) => {
       if (processing) {
-        await button.reply({ content: "Aguarde a jogada atual ser processada.", flags: 64 }).catch(() => undefined);
+        await button.reply({ content: "Aguarde o processamento da jogada atual.", flags: 64 }).catch(() => undefined);
         return;
       }
       const [command, action, id, rawMove] = button.customId.split("|");
@@ -111,7 +123,7 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
       try {
         if (phase === "invite") {
           if (button.user.id !== opponent.id) {
-            await button.reply({ content: "Somente a pessoa desafiada pode responder.", flags: 64 });
+            await button.reply({ content: "Apenas o usuário desafiado tem permissão para responder.", flags: 64 });
             return;
           }
           if (action === "recusar") {
@@ -138,7 +150,7 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
               activeGames.releaseGame(gameId);
               await button.update({
                 content: "",
-                embeds: [gameEmbed("Aposta cancelada", "Um dos jogadores não tem cookies suficientes.", LOSS_COLOR)],
+                embeds: [gameEmbed("Aposta cancelada", "Saldo insuficiente para um dos participantes. A aposta foi cancelada.", LOSS_COLOR)],
                 components: [],
               });
               return;
@@ -150,10 +162,10 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
           await button.update({
             content: "",
             embeds: [gameEmbed(
-              `${icon("gamesIcon", "🎮")} Escolham sem revelar a jogada`,
+              `${icon("gamesIcon", "🎮")} Realizem suas jogadas em segredo`,
               [
-                `${challenger} e ${opponent}, façam uma escolha nos botões.`,
-                "As escolhas ficam ocultas até os dois confirmarem.",
+                `${challenger} e ${opponent}, façam uma escolha nos botões abaixo.`,
+                "As jogadas permanecerão ocultas até que ambos os participantes confirmem.",
                 bet > 0 ? `${icon("cookie", "🍪")} Aposta total: **${formatCookies(bet * 2)} cookies**.` : "Partida amistosa, sem aposta.",
               ].join("\n\n"),
             )],
@@ -164,25 +176,25 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
 
         if (phase !== "playing" || action !== "jogada") return;
         if (moves.has(button.user.id)) {
-          await button.reply({ content: "Sua jogada já foi registrada e está oculta.", flags: 64 });
+          await button.reply({ content: "Sua escolha já foi processada e permanece em sigilo.", flags: 64 });
           return;
         }
-        if (!(rawMove in JOKENPO_MOVES)) {
+        if (!(rawMove in MOVE_DATA)) {
           await button.reply({ content: "Essa jogada não é válida.", flags: 64 });
           return;
         }
 
-        moves.set(button.user.id, rawMove as JokenpoMove);
+        moves.set(button.user.id, rawMove as Move);
         await button.deferUpdate();
         if (moves.size < 2) {
-          await button.followUp({ content: "Sua escolha foi registrada em segredo.", flags: 64 });
+          await button.followUp({ content: "Sua jogada foi registrada com sucesso e permanece oculta.", flags: 64 });
           return;
         }
 
         const challengerMove = moves.get(challenger.id);
         const opponentMove = moves.get(opponent.id);
         if (!challengerMove || !opponentMove) throw new Error("Uma das jogadas não foi encontrada.");
-        const outcome = jokenpoWinner(challengerMove, opponentMove);
+        const outcome = winnerFor(challengerMove, opponentMove);
         const results = outcome === "draw"
           ? [
             { userId: challenger.id, username: challenger.username, outcome: "draw" as const, payout: bet, note: "/jokenpo empatado" },
@@ -208,27 +220,26 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
         settled = true;
         finished = true;
         collector.stop("finished");
-        activeGames.releaseGame(gameId);
 
         const winnerId = outcome === "challenger" ? challenger.id : outcome === "opponent" ? opponent.id : null;
         const description = [
-          `${challenger}: ${icon(JOKENPO_MOVES[challengerMove].icon, JOKENPO_MOVES[challengerMove].emoji)} **${JOKENPO_MOVES[challengerMove].label}**`,
-          `${opponent}: ${icon(JOKENPO_MOVES[opponentMove].icon, JOKENPO_MOVES[opponentMove].emoji)} **${JOKENPO_MOVES[opponentMove].label}**`,
+          `${challenger}: ${icon(MOVE_DATA[challengerMove].icon, MOVE_DATA[challengerMove].emoji)} **${MOVE_DATA[challengerMove].label}**`,
+          `${opponent}: ${icon(MOVE_DATA[opponentMove].icon, MOVE_DATA[opponentMove].emoji)} **${MOVE_DATA[opponentMove].label}**`,
           "",
           outcome === "draw"
-            ? `${icon("handshake", "🤝")} Empate! As apostas foram devolvidas.`
-            : `${icon("trophy", "🏆")} ${winnerId === challenger.id ? challenger : opponent} venceu e recebeu **${formatCookies(bet * 2)} cookies**.`,
+            ? `${icon("handshake", "🤝")} Empate! As apostas reservadas foram estornadas.`
+            : `${icon("trophy", "🏆")} ${winnerId === challenger.id ? challenger : opponent} consagrou-se vencedor e recebeu **${formatCookies(bet * 2)} cookies**.`,
           ...(bet > 0 ? balances.map((balance) => `${icon("cookie", "🍪")} <@${balance.userId}>: **${formatCookies(balance.balance)} cookies**`) : []),
         ].join("\n");
 
         await message.edit({
           content: "",
           embeds: [gameEmbed(
-            outcome === "draw" ? "Pedra, Papel e Tesoura · Empate" : "Pedra, Papel e Tesoura · Resultado",
+            outcome === "draw" ? "Jokenpô · Empate" : "Jokenpô · Resultado",
             description,
             outcome === "draw" ? DRAW_COLOR : winnerId ? WIN_COLOR : LOSS_COLOR,
           )],
-          components: [buttonRow(gameButton(`jokenpo|revanche|${challenger.id}|${opponent.id}|${bet}`, "Revanche", "revanche", "🔁", ButtonStyle.Secondary))],
+          components: [],
         });
       } catch (error) {
         logger.error("Falha durante partida de /jokenpo", error, { gameId, userId: button.user.id });
@@ -242,11 +253,11 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
         activeGames.releaseGame(gameId);
         await message.edit({
           content: "",
-          embeds: [gameEmbed("Partida cancelada", "Não consegui concluir o jogo. As apostas reservadas foram devolvidas.", LOSS_COLOR)],
+          embeds: [gameEmbed("Partida cancelada", "Não foi possível finalizar a partida. As apostas reservadas foram estornadas.", LOSS_COLOR)],
           components: [],
         }).catch(() => undefined);
         if (button.deferred || button.replied) {
-          await button.followUp({ content: "A partida foi cancelada. Se houve aposta, ela foi devolvida.", flags: 64 }).catch(() => undefined);
+          await button.followUp({ content: "A partida foi cancelada. As apostas reservadas foram estornadas.", flags: 64 }).catch(() => undefined);
         }
       } finally {
         processing = false;
@@ -266,10 +277,10 @@ async function executeJokenpo(interaction: CommandChatInputInteraction): Promise
       void message.edit({
         content: "",
         embeds: [gameEmbed(
-          wasPlaying ? "Partida cancelada por inatividade" : "Desafio expirado",
+          wasPlaying ? "Partida encerrada por inatividade" : "Desafio expirado",
           wasPlaying
-            ? "O tempo de inatividade terminou. A aposta foi devolvida."
-            : "O desafio expirou sem começar.",
+            ? "O tempo de inatividade terminou. As apostas foram estornadas."
+            : "O convite de desafio expirou.",
           0x747f8d,
         )],
         components: [],
@@ -286,10 +297,10 @@ module.exports = defineCommand({
   category: "games",
   data: new SlashCommandBuilder()
     .setName("jokenpo")
-    .setDescription("Desafie outro membro para Pedra, Papel e Tesoura")
+    .setDescription("Desafie um membro para uma partida de Jokenpô (Pedra, Papel e Tesoura)")
     .addUserOption((option) => option
       .setName("usuario")
-      .setDescription("Pessoa que você quer desafiar")
+      .setDescription("Usuário que deseja desafiar")
       .setRequired(true))
     .addIntegerOption((option) => option
       .setName("aposta")
@@ -299,29 +310,5 @@ module.exports = defineCommand({
       .setRequired(false)),
   async execute(interaction: CommandChatInputInteraction): Promise<void> {
     await executeJokenpo(interaction);
-  },
-
-  async handleButton(interaction: CommandButtonInteraction): Promise<void> {
-    const [command, action, challengerId, opponentId, amountRaw] = interaction.customId.split("|");
-    if (command !== "jokenpo" || action !== "revanche") return;
-
-    if (![challengerId, opponentId].includes(interaction.user.id)) {
-      await interaction.reply({ content: "Esta revanche pertence a outros jogadores.", flags: 64 });
-      return;
-    }
-
-    const nextOpponentId = interaction.user.id === challengerId ? opponentId : challengerId;
-    const opponent = await interaction.client.users.fetch(nextOpponentId).catch(() => null);
-    const bet = Number(amountRaw);
-
-    if (!opponent || !Number.isFinite(bet) || bet < 1) {
-      await interaction.reply({ content: "Não consegui iniciar a revanche.", flags: 64 });
-      return;
-    }
-
-    const rematch = Object.create(interaction);
-    rematch.options = { getUser: () => opponent, getInteger: () => bet };
-
-    await module.exports.execute(rematch);
   },
 });

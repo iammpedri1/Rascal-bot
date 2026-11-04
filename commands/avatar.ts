@@ -10,21 +10,21 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("avatar")
-    .setDescription("Mostra o avatar de um usuário")
+    .setDescription("Exibe a imagem de perfil de um usuário")
     .addUserOption(option =>
       option
-        .setName("user")
-        .setDescription("Usuário")
+        .setName("usuario")
+        .setDescription("Usuário para consulta")
         .setRequired(true)
     ),
 
   async execute(interaction) {
-    const user = interaction.options.getUser("user");
+    const user = interaction.options.getUser("usuario");
     const avatar = user.displayAvatarURL({ size: 4096 });
 
     const embed = new EmbedBuilder()
       .setColor(randomColor())
-      .setDescription(`Avatar do ${user}`)
+      .setDescription(`Imagem de perfil de ${user}`)
       .setImage(avatar);
 
     await interaction.reply({ embeds: [embed] });

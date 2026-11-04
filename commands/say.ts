@@ -10,12 +10,12 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("say")
-    .setDescription("Faz o bot enviar uma mensagem no canal")
+    .setDescription("Envia uma mensagem oficial através do sistema")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addStringOption(option =>
       option
         .setName("texto")
-        .setDescription("Mensagem que o bot vai enviar")
+        .setDescription("Conteúdo da mensagem a ser enviada")
         .setRequired(true)
     ),
 
@@ -31,7 +31,7 @@ module.exports = defineCommand({
         const remaining = Math.ceil((expiresAt - now) / 1000);
 
         return interaction.reply({
-          content: `Aguarde ${remaining}s para usar o /say novamente.`,
+          content: `Por favor, aguarde ${remaining}s antes de enviar uma nova mensagem oficial.`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -52,15 +52,15 @@ module.exports = defineCommand({
 
       if (interaction.deferred || interaction.replied) {
         return interaction.followUp({
-          content: "Erro ao enviar mensagem.",
+          content: "Falha ao processar o envio da mensagem oficial.",
           flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       return interaction.reply({
-        content: "Erro ao enviar mensagem.",
+        content: "Falha ao processar o envio da mensagem oficial.",
         flags: MessageFlags.Ephemeral,
-      }).catch(() => {});
+      }).catch(() => { });
     }
   },
 });

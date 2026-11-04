@@ -15,12 +15,12 @@ module.exports = defineCommand({
   access: { level: ACCESS_LEVELS.MODERATOR, permission: PermissionFlagsBits.ManageGuild },
   data: new SlashCommandBuilder()
     .setName("raidmode")
-    .setDescription("Ativa, desativa ou consulta o lockdown anti-raid")
+    .setDescription("Gerencia o estado de bloqueio de segurança (lockdown) do servidor")
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption(option => option
       .setName("acao")
-      .setDescription("Ação do lockdown")
+      .setDescription("Ação do sistema de segurança")
       .setRequired(true)
       .addChoices(
         { name: "Ativar", value: "ativar" },
@@ -29,13 +29,13 @@ module.exports = defineCommand({
       ))
     .addStringOption(option => option
       .setName("motivo")
-      .setDescription("Motivo da ativação manual")
+      .setDescription("Razão da ativação manual")
       .setMaxLength(300)
       .setRequired(false)),
 
   async execute(interaction) {
-    if (!interaction.guild) return interaction.reply({ content: "Use este comando dentro do servidor.", flags: 64 });
-    if (!isStaff(interaction)) return interaction.reply({ content: "Apenas a staff pode controlar o lockdown.", flags: 64 });
+    if (!interaction.guild) return interaction.reply({ content: "Este comando deve ser utilizado dentro de um servidor.", flags: 64 });
+    if (!isStaff(interaction)) return interaction.reply({ content: "Apenas membros da equipe de moderação podem controlar o estado de segurança.", flags: 64 });
 
     const action = interaction.options.getString("acao", true);
     if (action === "status") {
@@ -43,8 +43,8 @@ module.exports = defineCommand({
       const state = getRaidMode(interaction.guildId);
       return interaction.reply({
         content: active
-          ? `🚨 Lockdown ativo desde <t:${Math.floor((state?.enabledAt || Date.now()) / 1000)}:R>. Motivo: ${state?.reason || "não informado"}`
-          : "✅ Lockdown anti-raid desativado.",
+          ? `🚨 Estado de bloqueio ativo desde <t:${Math.floor((state?.enabledAt || Date.now()) / 1000)}:R>. Motivo: ${state?.reason || "Não informado"}.`
+          : "✅ Sistema de segurança operando em modo normal.",
         flags: 64,
       });
     }

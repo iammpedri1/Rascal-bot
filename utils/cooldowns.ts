@@ -2,8 +2,8 @@ const db = require("./db");
 
 const DURATIONS = {
   daily: 24 * 60 * 60 * 1000,
-  trabalhar: 60 * 60 * 1000,
-  roubar: 3 * 60 * 60 * 1000,
+  trabalhar: 3 * 60 * 60 * 1000,
+  roubar: 60 * 60 * 1000,
   bonus: 7 * 24 * 60 * 60 * 1000,
   rep: 12 * 60 * 60 * 1000,
 };
@@ -30,12 +30,8 @@ function formatDuration(ms) {
 }
 
 function get(userId, command) {
-
-  if (userId === process.env.OWNER_ID) return { ready: true, remaining: 0, expiresAt: 0 };
-
   const column = USER_COOLDOWN_COLUMNS[command];
   const row = db.prepare(`
-
     SELECT
       (SELECT expira_em FROM cooldowns WHERE user_id = ? AND comando = ?) AS storedAt,
       ${column ? `(SELECT ${column} FROM usuarios WHERE id = ?)` : "NULL"} AS profileAt

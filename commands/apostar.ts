@@ -1,18 +1,18 @@
-import { ButtonStyle, SlashCommandBuilder } from "discord.js";
+import { SlashCommandBuilder } from "discord.js";
 import { defineCommand } from "../types/command";
 import type { CommandChatInputInteraction } from "../types/command";
 import type { Logger } from "../types/logger";
 import { activeGames } from "../utils/activeGames";
 import { refundGameBets, reserveStakes, resolveGame } from "../utils/gameEconomy";
-import { betAgainstHouseOutcome, betAgainstHousePayout, HOUSE_PAYOUT_MULTIPLIER, HOUSE_WIN_CHANCE_PERCENT } from "../utils/gameRules";
-import { buttonRow, contextFor, formatCookies, gameButton, gameEmbed, icon, LOSS_COLOR, WIN_COLOR } from "../utils/gameUi";
+import { contextFor, formatCookies, gameEmbed, icon, LOSS_COLOR, WIN_COLOR } from "../utils/gameUi";
 
 const { randomUUID, randomInt } = require("node:crypto") as typeof import("node:crypto");
 const { setTimeout: delay } = require("node:timers/promises") as typeof import("node:timers/promises");
 const logger = require("../utils/logger") as Logger;
+const emoji = require("../utils/emojis");
 const WON_EMOJI = "<a:Correct:1501637592817602630>";
 const LOST_EMOJI = "<a:Crossed:1501637659305705516>";
-
+// GIFs públicos do Tenor: jackpot (vitória) e perda de dinheiro (derrota).
 const BET_RESULT_GIFS = {
   win: "https://media1.tenor.com/m/hv0J_QfWhOYAAAAd/jackpot-casino.gif",
   loss: "https://media1.tenor.com/m/0pgJh8gr5IAAAAAd/down-bad-gambling.gif",
@@ -28,7 +28,7 @@ async function executeBet(interaction: CommandChatInputInteraction): Promise<voi
 
   if (!activeGames.reserveNew([userId], gameId)) {
     await interaction.reply({
-      content: `${icon("crossed", "❌")} Você já está em outro minijogo. Termine ou aguarde a partida atual.`,
+      content: `${icon("crossed", "❌")} Você já possui uma partida em andamento. Por favor, finalize-a antes de iniciar uma nova.`,
       flags: 64,
     });
     return;
@@ -44,8 +44,8 @@ async function executeBet(interaction: CommandChatInputInteraction): Promise<voi
 
     if (!reservation.ok) {
       const message = reservation.reason === "balance"
-        ? `Saldo insuficiente: você tem **${formatCookies(reservation.balance ?? 0)}** cookies.`
-        : "Não consegui reservar essa aposta. Tente novamente.";
+        ? `Saldo insuficiente. Seu saldo atual é de **${formatCookies(reservation.balance ?? 0)}** cookies.`
+        : "Falha na reserva da aposta. Por favor, tente novamente.";
       await interaction.editReply({ embeds: [gameEmbed("Aposta não iniciada", message, LOSS_COLOR)] });
       return;
     }
@@ -53,15 +53,14 @@ async function executeBet(interaction: CommandChatInputInteraction): Promise<voi
 
     await interaction.editReply({
       embeds: [gameEmbed(
-        `${icon("roulette", "🎰")} A banca está girando...`,
-        `${interaction.user} apostou **${formatCookies(amount)} cookies**.\n\n${icon("sparkles", "✨")} Boa sorte!\nChance de vitória: **${HOUSE_WIN_CHANCE_PERCENT}%** · retorno de **${HOUSE_PAYOUT_MULTIPLIER}x** na vitória.`,
+        `${icon("roulette", "🎰")} A roleta está em movimento...`,
+        `${interaction.user} apostou **${formatCookies(amount)} cookies**.\n\n${icon("sparkles", "✨")} Boa sorte!`,
       )],
     });
 
     await delay(1_400);
-    const outcome = betAgainstHouseOutcome(randomInt(100));
-    const won = outcome === "win";
-    const payout = betAgainstHousePayout(outcome, amount);
+    const won = randomInt(100) < 46;
+    const payout = won ? amount * 2 : 0;
     const result = resolveGame(gameId, [{
       userId,
       username: interaction.user.username,
@@ -72,27 +71,25 @@ async function executeBet(interaction: CommandChatInputInteraction): Promise<voi
     settled = true;
 
     const resultEmbed = gameEmbed(
-      won ? `${WON_EMOJI} VITÓRIA CONTRA A BANCA` : `${LOST_EMOJI} DERROTA CONTRA A BANCA`,
+      won ? `${WON_EMOJI} VITÓRIA NO CASSINO` : `${LOST_EMOJI} DERROTA NO CASSINO`,
       won
-        ? `${interaction.user} acertou o resultado e dobrou a aposta.\n\n${WON_EMOJI} **Lucro líquido:** +${formatCookies(amount)} cookies.`
-        : `${interaction.user} não levou esta rodada. A aposta foi debitada da carteira.\n\n${LOST_EMOJI} **Perda:** −${formatCookies(amount)} cookies.`,
+        ? `${interaction.user} obteve o resultado esperado e duplicou sua aposta!\n\n${emoji.application("correct", "✅")} **Lucro líquido:** +${formatCookies(amount)} cookies.`
+        : `${interaction.user} não obteve sucesso nesta rodada. A sorte poderá sorrir na próxima tentativa.\n\n${emoji.application("crossed", "❌")} **Perda:** −${formatCookies(amount)} cookies.`,
       won ? WIN_COLOR : LOSS_COLOR,
     )
       .setAuthor({
-        name: `Cassino Rascal · ${interaction.user.globalName || interaction.user.username}`,
+        name: `Cassino Rascal • ${interaction.user.username}`,
         iconURL: interaction.user.displayAvatarURL({ size: 128 }),
       })
       .addFields(
-        { name: "Aposta", value: `${formatCookies(amount)} cookies`, inline: true },
-        { name: won ? "Retorno total" : "Retorno", value: `${formatCookies(payout)} cookies`, inline: true },
-        { name: "Saldo atualizado", value: `${formatCookies(result.balance)} cookies`, inline: true },
+        { name: `${emoji.application("cookie", "🍪")} Aposta`, value: `\`${formatCookies(amount)}\``, inline: true },
+        { name: won ? `${emoji.application("announcement", "📈")} Retorno` : `${emoji.application("announcement", "📉")} Retorno`, value: `\`${formatCookies(payout)}\``, inline: true },
+        { name: `${emoji.application("shop", "💰")} Saldo Atual`, value: `\`${formatCookies(result.balance)}\``, inline: true },
       )
-      .setImage(won ? BET_RESULT_GIFS.win : BET_RESULT_GIFS.loss);
+      .setImage(won ? BET_RESULT_GIFS.win : BET_RESULT_GIFS.loss)
+      .setFooter({ text: "Discord Brasil™ • Cassino Rascal" });
 
-    await interaction.editReply({
-      embeds: [resultEmbed],
-      components: [buttonRow(gameButton(`apostar|jogar_novamente|${amount}`, "Apostar novamente", "revanche", "🔁", ButtonStyle.Secondary))],
-    });
+    await interaction.editReply({ embeds: [resultEmbed] });
   } catch (error) {
     logger.error("Erro no minijogo /apostar", error, { userId, gameId });
     if (stakeReserved && !settled) {
@@ -104,7 +101,7 @@ async function executeBet(interaction: CommandChatInputInteraction): Promise<voi
     }
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({
-        embeds: [gameEmbed("Rodada cancelada", "Não consegui concluir a partida. Se cookies foram reservados, já foram devolvidos.", LOSS_COLOR)],
+        embeds: [gameEmbed("Partida Cancelada", "Não foi possível finalizar a rodada. Eventuais cookies reservados foram estornados.", LOSS_COLOR)],
       }).catch(() => undefined);
     }
   } finally {
@@ -116,31 +113,14 @@ module.exports = defineCommand({
   category: "games",
   data: new SlashCommandBuilder()
     .setName("apostar")
-    .setDescription("Aposte cookies contra a banca em uma rodada de cassino")
+    .setDescription("Realize apostas de cookies contra a banca no Cassino Rascal")
     .addIntegerOption((option) => option
       .setName("quantidade")
-      .setDescription("Quantidade de cookies apostada")
+      .setDescription("Quantidade de cookies para aposta")
       .setRequired(true)
       .setMinValue(1)
       .setMaxValue(1_000_000_000)),
   async execute(interaction) {
     await executeBet(interaction);
-  },
-
-  async handleButton(interaction) {
-    const [command, action, amountRaw] = interaction.customId.split("|");
-    if (command !== "apostar" || action !== "jogar_novamente") return;
-
-    const amount = Number(amountRaw);
-    if (!Number.isFinite(amount) || amount < 1) {
-      return interaction.reply({
-        content: "Não consegui apostar novamente.",
-        flags: 64,
-      });
-    }
-
-    const replay = Object.create(interaction);
-    replay.options = { getInteger: () => amount };
-    return module.exports.execute(replay);
   },
 });

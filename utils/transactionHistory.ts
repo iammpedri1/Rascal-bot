@@ -39,6 +39,7 @@ export const TRANSACTION_STYLES: Record<string, TransactionStyle> = {
   rob_loss_target: { emoji: "pand_police", action: "Foi roubado", verb: "Perdeu" },
   rob_fail: { emoji: "pand_police", action: "Foi pego tentando roubar", verb: "Perdeu" },
   rob_blocked: { emoji: "pand_police", action: "Roubo bloqueado por proteção" },
+  rob_camera_protection: { emoji: "pand_police", action: "Protegeu-se de um roubo" },
   rifa_win: { emoji: "minigame", action: "Ganhou na rifa", verb: "Recebeu" },
   rifa_loss: { emoji: "minigame", action: "Perdeu na rifa", verb: "Perdeu" },
   rep: { emoji: "heartmine", action: "Enviou reputação" },
@@ -72,10 +73,12 @@ export const TRANSACTION_STYLES: Record<string, TransactionStyle> = {
   scratch_ticket: { emoji: "ticket", action: "Comprou uma raspadinha", verb: "Pagou" },
   scratch_win: { emoji: "trophy", action: "Ganhou na raspadinha", verb: "Recebeu" },
   scratch_refund: { emoji: "correct", action: "Recebeu estorno da raspadinha", verb: "Recebeu" },
+  black_market_purchase: { emoji: "pand_police", action: "Comprou item no Mercado Negro", verb: "Pagou" },
+  bail_paid: { emoji: "pand_police", action: "Pagou a fiança da prisão", verb: "Pagou" },
   boost_welcome_bonus: { emoji: "booster", action: "Recebeu bônus por impulsionar o servidor", verb: "Recebeu" },
 };
 
-
+// Preposition used before the target mention, per transaction type.
 const TARGET_PREPOSITIONS = new Map<string, string>([
   ["rob_loss_target", "por"],
   ["rep", "para"],
@@ -86,7 +89,7 @@ const TARGET_PREPOSITIONS = new Map<string, string>([
   ["duel_draw", "contra"],
 ]);
 
-
+// Types whose note is appended to the action as **note**.
 const BOLD_NOTE_TYPES = new Set([
   "shop_purchase",
   "shop_chest_open",
@@ -96,17 +99,19 @@ const BOLD_NOTE_TYPES = new Set([
   "scratch_ticket",
   "scratch_win",
   "scratch_refund",
+  "black_market_purchase",
+  "bail_paid",
   "boost_welcome_bonus",
 ]);
 
-
+// Types whose note is appended to the action as plain text.
 const PLAIN_NOTE_TYPES = new Set([
   "shop_server_role_purchase",
   "shop_server_role_purchase_pending",
   "shop_server_role_refund",
 ]);
 
-
+// Types that never get a separate "> note" line.
 export const NOTE_LINE_HIDDEN_TYPES: ReadonlySet<string> = new Set([
   "work",
   "work_loss",

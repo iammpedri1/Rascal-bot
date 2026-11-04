@@ -18,25 +18,25 @@ module.exports = defineCommand({
   category: "economy",
   data: new SlashCommandBuilder()
     .setName("loteria")
-    .setDescription("Compre bilhetes para a loteria semanal do servidor")
+    .setDescription("Participe da loteria semanal e concorra a prêmios em cookies")
     .addSubcommand((subcommand) => subcommand
       .setName("comprar")
-      .setDescription("Compre de 1 a 50 bilhetes para o próximo sorteio")
+      .setDescription("Adquira de 1 a 50 bilhetes para o próximo sorteio")
       .addIntegerOption((option) => option
         .setName("quantidade")
-        .setDescription("Quantidade de bilhetes; cada um custa 500 cookies")
+        .setDescription("Quantidade de bilhetes; custo individual de 500 cookies")
         .setMinValue(1)
         .setMaxValue(50)
         .setRequired(false)))
     .addSubcommand((subcommand) => subcommand
       .setName("status")
-      .setDescription("Veja o prêmio acumulado e seus bilhetes"))
+      .setDescription("Consulte o prêmio acumulado e seus bilhetes atuais"))
     .addSubcommand((subcommand) => subcommand
       .setName("canal")
-      .setDescription("Configure o canal de anúncio (administradores)")
+      .setDescription("Configura o canal de anúncios (Administradores)")
       .addChannelOption((option) => option
         .setName("canal")
-        .setDescription("Canal de texto onde sairá o resultado de domingo")
+        .setDescription("Canal de texto onde o resultado será publicado aos domingos")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true))),
 
@@ -45,7 +45,7 @@ module.exports = defineCommand({
     const guild = interaction.guild;
     if (!guild) {
       return interaction.reply({
-        embeds: [embed("Use a loteria no servidor", "Este comando só funciona no servidor do Rascal.")],
+        embeds: [embed("Comando Restrito", "Este comando está disponível apenas no servidor oficial.")],
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -53,7 +53,7 @@ module.exports = defineCommand({
     if (action === "canal") {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
         return interaction.reply({
-          embeds: [embed("Sem permissão", "Somente quem pode gerenciar o servidor configura o canal da loteria.")],
+          embeds: [embed("Acesso Negado", "A configuração do canal de loteria é restrita a administradores.")],
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -61,8 +61,8 @@ module.exports = defineCommand({
       lottery.setAnnouncementChannel(guild.id, channel.id, interaction.user.id);
       return interaction.reply({
         embeds: [embed(
-          `${emoji.application("correct", "✅")} Canal da loteria configurado`,
-          `O resultado será anunciado em <#${channel.id}> aos domingos, às 20h (horário de São Paulo).`,
+          `${emoji.application("correct", "✅")} Canal de Loteria Configurado`,
+          `O resultado será anunciado em <#${channel.id}> aos domingos, às 20:00 (Horário de Brasília).`,
         )],
         flags: MessageFlags.Ephemeral,
       });
@@ -71,16 +71,16 @@ module.exports = defineCommand({
     if (action === "status") {
       const status = lottery.getLotteryStatus(guild.id, interaction.user.id);
       const channelLine = status.channelId
-        ? `Canal do resultado: <#${status.channelId}>`
-        : "O canal do sorteio ainda precisa ser configurado por um administrador com `/loteria canal`.";
+        ? `Canal de anúncios: <#${status.channelId}>`
+        : "O canal do sorteio ainda não foi definido. Administradores podem configurá-lo via `/loteria canal`.";
       return interaction.reply({
         embeds: [embed(
-          `${emoji.application("ticket", "🎟️")} Loteria acumulada`,
+          `${emoji.application("ticket", "🎟️")} Loteria Acumulada`,
           [
-            `${emoji.application("cookie", "🍪")} Pote: **${status.potCookies.toLocaleString("pt-BR")} cookies**.`,
-            `Bilhetes vendidos: **${status.ticketCount.toLocaleString("pt-BR")}**; seus bilhetes: **${status.userTickets}**.`,
+            `${emoji.application("cookie", "🍪")} Prêmio Acumulado: **${status.potCookies.toLocaleString("pt-BR")} cookies**.`,
+            `Bilhetes vendidos: **${status.ticketCount.toLocaleString("pt-BR")}** | Seus bilhetes: **${status.userTickets}**.`,
             `Próximo sorteio: <t:${Math.floor(status.drawAt / 1000)}:F> (<t:${Math.floor(status.drawAt / 1000)}:R>).`,
-            "Cada bilhete custa **500 cookies**; metade de cada compra aumenta o prêmio.",
+            "Custo por bilhete: **500 cookies**. Metade do valor arrecadado é destinado ao prêmio.",
             channelLine,
           ].join("\n"),
         )],
@@ -91,22 +91,22 @@ module.exports = defineCommand({
     const result = lottery.buyTickets(interaction.user, guild.id, guild.name, quantity);
     if (result.ok === false) {
       const message = result.reason === "channel"
-        ? "A loteria ainda não está aberta: um administrador precisa configurar o canal com `/loteria canal`."
+        ? "A loteria está temporariamente fechada: um administrador deve configurar o canal via `/loteria canal`."
         : result.reason === "balance"
-          ? "Você não tem cookies suficientes para essa quantidade de bilhetes."
-          : "Escolha entre 1 e 50 bilhetes.";
-      return interaction.reply({ embeds: [embed("Não consegui comprar os bilhetes", message)], flags: MessageFlags.Ephemeral });
+          ? "Saldo insuficiente para concluir a aquisição dos bilhetes."
+          : "Por favor, selecione uma quantidade entre 1 e 50 bilhetes.";
+      return interaction.reply({ embeds: [embed("Falha na Operação", message)], flags: MessageFlags.Ephemeral });
     }
 
     return interaction.reply({
       embeds: [embed(
-        `${emoji.application("ticket", "🎟️")} Bilhetes registrados`,
+        `${emoji.application("ticket", "🎟️")} Compra Realizada`,
         [
-          `Você comprou **${result.count}** bilhete(s) por **${result.spent.toLocaleString("pt-BR")} cookies**.`,
-          `${emoji.application("cookie", "🍪")} **${result.contribution.toLocaleString("pt-BR")} cookies** entraram no pote acumulado.`,
-          `Seus números: ${result.ticketIds.map((ticketId) => `**#${ticketId}**`).join(", ")}.`,
-          `Sorteio: <t:${Math.floor(result.drawAt / 1000)}:F>.`,
-          `Seu saldo agora: **${result.balance.toLocaleString("pt-BR")} cookies**.`,
+          `Você adquiriu **${result.count}** bilhete(s) por **${result.spent.toLocaleString("pt-BR")} cookies**.`,
+          `${emoji.application("cookie", "🍪")} **${result.contribution.toLocaleString("pt-BR")} cookies** foram adicionados ao prêmio.`,
+          `Seus números da sorte: ${result.ticketIds.map((ticketId) => `**#${ticketId}**`).join(", ")}.`,
+          `Data do sorteio: <t:${Math.floor(result.drawAt / 1000)}:F>.`,
+          `Saldo atualizado: **${result.balance.toLocaleString("pt-BR")} cookies**.`,
         ].join("\n"),
       )],
     });

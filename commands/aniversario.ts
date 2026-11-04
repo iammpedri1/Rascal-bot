@@ -30,15 +30,15 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("aniversario")
-    .setDescription("Guarda seu aniversário para o bot te dar parabéns")
+    .setDescription("Registra sua data de nascimento para celebrações futuras")
     .addSubcommand(subcommand =>
       subcommand
         .setName("definir")
-        .setDescription("Define ou atualiza seu aniversário")
+        .setDescription("Registra ou atualiza sua data de nascimento")
         .addIntegerOption(option =>
           option
             .setName("dia")
-            .setDescription("Dia do seu aniversário")
+            .setDescription("Dia do seu nascimento")
             .setRequired(true)
             .setMinValue(1)
             .setMaxValue(31)
@@ -46,7 +46,7 @@ module.exports = defineCommand({
         .addIntegerOption(option =>
           option
             .setName("mes")
-            .setDescription("Mês do seu aniversário")
+            .setDescription("Mês do seu nascimento")
             .setRequired(true)
             .addChoices(...monthChoices)
         )
@@ -54,24 +54,24 @@ module.exports = defineCommand({
     .addSubcommand(subcommand =>
       subcommand
         .setName("ver")
-        .setDescription("Mostra o aniversário salvo")
+        .setDescription("Exibe a data de nascimento registrada")
         .addUserOption(option =>
           option
             .setName("usuario")
-            .setDescription("Usuário para consultar")
+            .setDescription("Usuário para consulta")
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName("remover")
-        .setDescription("Remove seu aniversário salvo")
+        .setDescription("Remove o registro de sua data de nascimento")
     ),
 
   async execute(interaction) {
     if (!interaction.guild) {
       return interaction.reply({
-        content: `${emoji.crossed} | **Use esse comando em um servidor.**`,
+        content: `${emoji.crossed} | **Por favor, utilize este comando dentro de um servidor.**`,
         flags: 64,
       });
     }
@@ -84,7 +84,7 @@ module.exports = defineCommand({
 
       if (!isValidBirthday(day, month)) {
         return interaction.reply({
-          content: `${emoji.crossed} | **Data inválida. Confira o dia e o mês.**`,
+          content: `${emoji.crossed} | **Data inválida. Por favor, verifique o dia e o mês informados.**`,
           flags: 64,
         });
       }
@@ -99,8 +99,8 @@ module.exports = defineCommand({
 
       return interaction.reply({
         content: [
-          `${emoji.correct} | **Aniversário salvo:** ${formatBirthday(birthday.day, birthday.month)}.`,
-          `${emoji.sino} Eu vou te dar parabéns neste canal quando chegar o dia.`,
+          `${emoji.correct} | **Data de nascimento registrada:** ${formatBirthday(birthday.day, birthday.month)}.`,
+          `${emoji.sino} As felicitações serão enviadas neste canal na data correspondente.`,
         ].join("\n"),
         flags: 64,
       });
@@ -112,7 +112,7 @@ module.exports = defineCommand({
 
       if (!birthday) {
         return interaction.reply({
-          content: `${emoji.peepSad} | **${user.username} ainda não salvou um aniversário.**`,
+          content: `${emoji.peepSad} | **${user.username} ainda não possui uma data de nascimento registrada.**`,
           flags: 64,
         });
       }
@@ -128,8 +128,8 @@ module.exports = defineCommand({
 
       return interaction.reply({
         content: removed
-          ? `${emoji.correct} | **Removi seu aniversário salvo.**`
-          : `${emoji.peepSad} | **Você não tinha aniversário salvo.**`,
+          ? `${emoji.correct} | **O registro da sua data de nascimento foi removido.**`
+          : `${emoji.peepSad} | **Você não possuía uma data de nascimento registrada.**`,
         flags: 64,
       });
     }

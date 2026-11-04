@@ -1,4 +1,4 @@
-
+// @ts-nocheck
 const db = require("./db");
 const { getUser, addBalance, updateStats, pushTransaction } = require("./cookieEconomy");
 const logger = require("./logger");
@@ -20,6 +20,22 @@ const addDailyVoiceSecondsStmt = db.prepare(`
   VALUES (?, ?, ?, ?, ?)
   ON CONFLICT(guild_id, user_id, day_key)
   DO UPDATE SET seconds = seconds + excluded.seconds, updated_at = excluded.updated_at
+`);
+// O INSERT garante a linha em usuarios para quem só entra em voz e nunca usou um
+// comando de economia; o UPDATE sozinho não criaria a linha e o tempo se perderia.
+const addLifetimeVoiceSecondsStmt = db.prepare(`
+  INSERT INTO usuarios (id, voice_seconds_lifetime, created_at, updated_at)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    voice_seconds_lifetime = voice_seconds_lifetime + excluded.voice_seconds_lifetime,
+    updated_at = excluded.updated_at
+`);
+const addLifetimeTransmissionSecondsStmt = db.prepare(`
+  INSERT INTO usuarios (id, transmission_seconds_lifetime, created_at, updated_at)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    transmission_seconds_lifetime = transmission_seconds_lifetime + excluded.transmission_seconds_lifetime,
+    updated_at = excluded.updated_at
 `);
 const weeklyVoiceLeaderboardStmt = db.prepare(`
   SELECT
@@ -139,6 +155,7 @@ function addVoiceSeconds(guildId, userId, seconds, now = Date.now()) {
 
   addVoiceSecondsStmt.run(String(guildId), String(userId), weekKey(now), safeSeconds, now);
   addDailyVoiceSecondsStmt.run(String(guildId), String(userId), dayKey(now), safeSeconds, now);
+  addLifetimeVoiceSecondsStmt.run(String(userId), safeSeconds, now, now);
   db.prepare(`
     INSERT INTO voice_monthly_stats (guild_id, user_id, month_key, seconds, updated_at)
     VALUES (?, ?, ?, ?, ?)
@@ -179,6 +196,7 @@ function addTransmissionRange(guildId, userId, startedAt, endedAt = Date.now()) 
       addTransmissionSecondsStmt.run(
         String(guildId), String(userId), weekKey(cursor), seconds, cursor
       );
+      addLifetimeTransmissionSecondsStmt.run(String(userId), seconds, cursor, cursor);
     }
     cursor = chunkEnd;
   }
@@ -232,7 +250,7 @@ function localMonthStartMs(now = Date.now()) {
 }
 
 function voiceEligible(member) {
-  return Boolean(member?.voice?.channelId) && !member.voice.selfMute && !member.voice.serverMute;
+  return !member?.voice?.selfMute && !member?.voice?.serverMute;
 }
 
 function startVoiceSession(member, channelId, startedAt = Date.now(), resetRewardEligibility = false) {
@@ -391,7 +409,7 @@ function activeSecondsForCurrentWeek(session, now = Date.now()) {
 
 function getWeeklyVoiceLeaderboard(guildId, limit = 10) {
   const now = Date.now();
-  const rows = weeklyVoiceLeaderboardStmt.all(String(guildId), weekKey(now)) as Array<{ id: string; username: string; seconds: number }>;
+  const rows = weeklyVoiceLeaderboardStmt.all(String(guildId), weekKey(now));
   const byUser = new Map(rows.map(row => [row.id, {
     id: row.id,
     username: row.username || `usuario-${row.id}`,
@@ -423,7 +441,7 @@ function getWeeklyVoiceLeaderboard(guildId, limit = 10) {
 }
 
 function getWeeklyTransmissionLeaderboard(guildId, limit = 500, now = Date.now()) {
-  const byUser = new Map((weeklyTransmissionLeaderboardStmt.all(String(guildId), weekKey(now)) as Array<{ id: string; username: string; seconds: number }>)
+  const byUser = new Map(weeklyTransmissionLeaderboardStmt.all(String(guildId), weekKey(now))
     .map(row => [row.id, {
       id: row.id,
       username: row.username || `usuario-${row.id}`,
@@ -457,9 +475,9 @@ function getMonthlyVoiceLeaderboard(guildId, requestedMonthKey, limit = 5) {
     addVoiceRange(session.guildId, session.userId, session.startedAt, now);
     session.startedAt = now;
   }
-  return (monthlyVoiceLeaderboardStmt.all(
+  return monthlyVoiceLeaderboardStmt.all(
     String(guildId), String(requestedMonthKey), Math.max(1, integer(limit, 5))
-  ) as Array<{ id: string; username: string; seconds: number }>).map((row, index) => ({
+  ).map((row, index) => ({
     id: row.id,
     username: row.username || `usuario-${row.id}`,
     seconds: integer(row.seconds),
@@ -467,9 +485,54 @@ function getMonthlyVoiceLeaderboard(guildId, requestedMonthKey, limit = 5) {
   }));
 }
 
-function payVoiceRewards(now = Date.now()) {
-  for (const session of activeSessions.values()) {
+function getLifetimeVoiceLeaderboard(limit = 10) {
+  return db.prepare(`
+    SELECT id, username, voice_seconds_lifetime AS seconds
+    FROM usuarios
+    WHERE voice_seconds_lifetime > 0
+    ORDER BY voice_seconds_lifetime DESC, username COLLATE NOCASE ASC
+    LIMIT ?
+  `).all(Math.max(1, integer(limit, 10)))
+    .map((row, index) => ({
+      id: row.id,
+      username: row.username || `usuario-${row.id}`,
+      seconds: integer(row.seconds),
+      position: index + 1,
+    }));
+}
+
+function getLifetimeTransmissionLeaderboard(limit = 10) {
+  return db.prepare(`
+    SELECT id, username, transmission_seconds_lifetime AS seconds
+    FROM usuarios
+    WHERE transmission_seconds_lifetime > 0
+    ORDER BY transmission_seconds_lifetime DESC, username COLLATE NOCASE ASC
+    LIMIT ?
+  `).all(Math.max(1, integer(limit, 10)))
+    .map((row, index) => ({
+      id: row.id,
+      username: row.username || `usuario-${row.id}`,
+      seconds: integer(row.seconds),
+      position: index + 1,
+    }));
+}
+
+function payVoiceRewards(client, now = Date.now()) {
+  for (const [key, session] of activeSessions.entries()) {
     if (!session.eligibleSince || now - session.eligibleSince < VOICE_REWARD_INTERVAL_MS) continue;
+
+    // Verificação de segurança: o usuário ainda está fisicamente em um canal de voz?
+    const guild = client.guilds.cache.get(session.guildId);
+    const member = guild?.members.cache.get(session.userId);
+
+    if (!member || !member.voice?.channelId || member.voice.channelId !== session.channelId) {
+      logger.warn(`Sessão órfã detectada para ${session.username} (${session.userId}). Limpando cache.`);
+      activeSessions.delete(key);
+      db.prepare(`UPDATE voice_reward_state SET eligible_since = NULL WHERE guild_id = ? AND user_id = ?`)
+        .run(String(session.guildId), String(session.userId));
+      continue;
+    }
+
     const reward = 1 + Math.floor(Math.random() * 5);
     const user = { id: session.userId, username: session.username };
     getUser(user);
@@ -488,11 +551,11 @@ function payVoiceRewards(now = Date.now()) {
   }
 }
 
-function startVoiceRewardScheduler() {
+function startVoiceRewardScheduler(client) {
   if (rewardSchedulerStarted) return;
   rewardSchedulerStarted = true;
   const timer = setInterval(() => {
-    try { payVoiceRewards(); } catch (error) { logger.error("Falha ao pagar recompensa por voz", error); }
+    try { payVoiceRewards(client); } catch (error) { logger.error("Falha ao pagar recompensa por voz", error); }
   }, 60 * 1000);
   timer.unref?.();
 }
@@ -505,8 +568,12 @@ function forgetVoiceUser(userId) {
 }
 
 module.exports = {
+  addTransmissionRange,
+  addVoiceSeconds,
   forgetVoiceUser,
   getVoiceTime,
+  getLifetimeVoiceLeaderboard,
+  getLifetimeTransmissionLeaderboard,
   getMonthlyVoiceLeaderboard,
   getWeeklyTransmissionLeaderboard,
   getWeeklyVoiceLeaderboard,

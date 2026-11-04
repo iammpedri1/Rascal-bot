@@ -15,7 +15,7 @@ module.exports = defineCommand({
 
   data: new SlashCommandBuilder()
     .setName("rifa")
-    .setDescription("Aposte cookies na rifa")
+    .setDescription("Participe da rifa instantânea utilizando seus cookies")
     .addIntegerOption(option =>
       option
         .setName("aposta")
@@ -32,8 +32,8 @@ module.exports = defineCommand({
       return interaction.reply({
         embeds: [buildErrorEmbed(
           interaction,
-          "\uD83C\uDF9F\uFE0F RIFA BLOQUEADA",
-          `Você não tem ${emoji.cookie} **${amount(result.amount)} cookies** para apostar.`
+          "\uD83C\uDF9F\uFE0F OPERAÇÃO CANCELADA",
+          `Saldo insuficiente para realizar esta aposta de ${emoji.cookie} **${amount(result.amount)} cookies**.`
         )],
         flags: 64,
       });

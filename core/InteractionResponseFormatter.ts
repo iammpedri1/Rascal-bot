@@ -12,9 +12,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function brandFooter(client: Client, guildName?: string | null) {
+  const username = client.user?.username || "Rascal";
+  const avatar = client.user?.displayAvatarURL({ size: 64 });
+  return {
+    text: guildName ? `${username} · ${guildName}` : username,
+    ...(avatar ? { iconURL: avatar } : {}),
+  };
+}
+
 function formatEmbed(embed: unknown, client: Client, guildName?: string | null): unknown {
+  const footer = brandFooter(client, guildName);
+
   if (embed instanceof EmbedBuilder) {
     embed.setColor(randomColor());
+    if (!embed.data.footer) embed.setFooter(footer);
     return embed;
   }
 
@@ -23,14 +35,20 @@ function formatEmbed(embed: unknown, client: Client, guildName?: string | null):
   }
 
   if (!isRecord(embed)) return embed;
-  return { ...embed, color: randomColor() };
+  return {
+    ...embed,
+    color: randomColor(),
+    footer: isRecord(embed.footer) ? embed.footer : footer,
+  };
 }
 
-function textEmbed(text: string): EmbedBuilder {
-  return new EmbedBuilder()
+function textEmbed(text: string, client: Client, guildName?: string | null): EmbedBuilder {
+  const embed = new EmbedBuilder()
     .setColor(randomColor())
     .setDescription(text.slice(0, 4096))
     .setTimestamp();
+  embed.setFooter(brandFooter(client, guildName));
+  return embed;
 }
 
 function mentionTokens(text: string): string[] {
@@ -42,7 +60,7 @@ function formatPayload(payload: unknown, client: Client, guildName?: string | nu
     if (!payload.trim()) return { content: payload };
     const mentions = mentionTokens(payload);
     return {
-      embeds: [textEmbed(payload)],
+      embeds: [textEmbed(payload, client, guildName)],
       ...(mentions.length ? { content: [...new Set(mentions)].join(" ") } : {}),
     };
   }
@@ -59,10 +77,10 @@ function formatPayload(payload: unknown, client: Client, guildName?: string | nu
   const mentions = mentionTokens(content);
   const formatted: Record<string, unknown> = {
     ...payload,
-    embeds: [textEmbed(content)],
+    embeds: [textEmbed(content, client, guildName)],
   };
 
-
+  // Keep only explicit mentions in message content so Discord can deliver the ping.
   if (mentions.length) formatted.content = [...new Set(mentions)].join(" ");
   else delete formatted.content;
 
