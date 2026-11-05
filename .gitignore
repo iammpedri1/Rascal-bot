@@ -18,3 +18,4 @@ data/backups/
 bot.out.log
 bot.err.log
 npm-debug.log*
+.env
