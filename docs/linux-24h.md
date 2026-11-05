@@ -32,6 +32,7 @@ O SQLite e os JSON persistentes ficam em `data/` por padrão, fora de `dist/`, p
 ## VM gratuita na nuvem
 
 Uma opção gratuita com VM é OCI Always Free. Crie a conta e a VM no painel da OCI, conecte por SSH e instale Node.js 22+, Git e as dependências nativas do `better-sqlite3`. Envie o repositório para a VM, configure `.env`, execute `npm ci`, `npm run register` e `npm run service:install`.
+Para execução manual, `npm start` compila, publica os slash commands e inicia o bot em uma única etapa.
 
 A oferta depende de capacidade da região e conta; a Oracle pode recuperar VMs Always Free que considerar ociosas. Portanto, “grátis e 24/7 garantido” não é uma promessa segura. Faça backup regular de `data/` antes de atualizações.
 
