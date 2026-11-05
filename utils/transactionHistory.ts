@@ -27,14 +27,15 @@ const NOTE_MAX_LENGTH = 120;
 const FALLBACK_STYLE: TransactionStyle = { emoji: "cookie", action: "Movimentou cookies" };
 
 export const TRANSACTION_STYLES: Record<string, TransactionStyle> = {
-  daily: { emoji: "cookie", action: "Resgatou o /daily", verb: "Recebeu" },
+  daily: { emoji: "cookie", action: "Resgatou", verb: "Recebeu" }, // Ajustado para bater com a imagem
   daily_streak_bonus: { emoji: "CookieStar", action: "Recebeu bônus de sequência diária", verb: "Recebeu" },
   inactivity_tax: { emoji: "cookie", action: "Pagou taxa de inatividade (1% a cada 25 dias)", verb: "Pagou" },
   daily_tax: { emoji: "cookie", action: "Pagou taxa antiga de inatividade", verb: "Pagou" },
-  monthly_tax: { emoji: "cookie", action: "Pagou taxa mensal de 2%", verb: "Pagou" },
-  work: { emoji: "work", action: "Trabalhou na firma", verb: "Recebeu" },
-  work_dismissal: { emoji: "peepSad", action: "Foi demitido(a)", verb: "Perdeu" },
-  work_loss: { emoji: "peepSad", action: "Foi demitido(a)", verb: "Perdeu" },
+  monthly_tax: { emoji: "cookie", action: "Pagou a Taxa Mensal", verb: "Pagou" },
+  work: { emoji: "work", action: "Trabalhou", verb: "Recebeu" },
+  work_dismissal: { emoji: "peepSad", action: "Perdeu", verb: "Perdeu" },
+  work_tool_break: { emoji: "pand_scary", action: "Perdeu", verb: "Perdeu" },
+  work_loss: { emoji: "peepSad", action: "Perdeu", verb: "Perdeu" },
   bonus: { emoji: "gift", action: "Resgatou o bônus semanal", verb: "Recebeu" },
   rob_win: { emoji: "pand_happy", action: "Conseguiu roubar", verb: "Recebeu" },
   rob_loss_target: { emoji: "pand_police", action: "Foi roubado", verb: "Perdeu" },
@@ -79,7 +80,6 @@ export const TRANSACTION_STYLES: Record<string, TransactionStyle> = {
   boost_welcome_bonus: { emoji: "booster", action: "Recebeu bônus por impulsionar o servidor", verb: "Recebeu" },
 };
 
-// Preposition used before the target mention, per transaction type.
 const TARGET_PREPOSITIONS = new Map<string, string>([
   ["rob_loss_target", "por"],
   ["rep", "para"],
@@ -90,40 +90,20 @@ const TARGET_PREPOSITIONS = new Map<string, string>([
   ["duel_draw", "contra"],
 ]);
 
-// Types whose note is appended to the action as **note**.
 const BOLD_NOTE_TYPES = new Set([
-  "shop_purchase",
-  "shop_chest_open",
-  "shop_color_drop",
-  "lottery_ticket",
-  "lottery_win",
-  "scratch_ticket",
-  "scratch_win",
-  "scratch_refund",
-  "black_market_purchase",
-  "bail_paid",
-  "boost_welcome_bonus",
+  "shop_purchase", "shop_chest_open", "shop_color_drop", "lottery_ticket", 
+  "lottery_win", "scratch_ticket", "scratch_win", "scratch_refund", 
+  "black_market_purchase", "bail_paid", "boost_welcome_bonus"
 ]);
 
-// Types whose note is appended to the action as plain text.
 const PLAIN_NOTE_TYPES = new Set([
-  "shop_server_role_purchase",
-  "shop_server_role_purchase_pending",
-  "shop_server_role_refund",
+  "shop_server_role_purchase", "shop_server_role_purchase_pending", "shop_server_role_refund"
 ]);
 
-// Types that never get a separate "> note" line.
 export const NOTE_LINE_HIDDEN_TYPES: ReadonlySet<string> = new Set([
-  "work",
-  "work_dismissal",
-  "work_loss",
-  "game_stake_reserved",
-  "game_refund",
-  "shop_cooldown_unlock",
-  "shop_cooldown_reset",
-  "daily_streak_bonus",
-  ...Array.from(BOLD_NOTE_TYPES),
-  ...Array.from(PLAIN_NOTE_TYPES),
+  "work", "work_dismissal", "work_loss", "game_stake_reserved", "game_refund",
+  "shop_cooldown_unlock", "shop_cooldown_reset", "daily_streak_bonus",
+  ...Array.from(BOLD_NOTE_TYPES), ...Array.from(PLAIN_NOTE_TYPES),
 ]);
 
 export function getTransactionStyle(type: string): TransactionStyle {
@@ -142,10 +122,15 @@ export function transactionAction(row: TransactionRow): string {
   const target = row.targetId ? ` <@${row.targetId}>` : "";
   const preposition = TARGET_PREPOSITIONS.get(row.type);
 
+  if (row.type === "work" && note) return `Trabalhou como **${note}**`;
+  if (row.type === "work") return "Trabalhou na firma";
+  if (row.type === "work_loss" || row.type === "work_dismissal") {
+    return `Foi demitido(a)${note ? ` ${note}` : ""}`;
+  }
+
   if (row.type === "rob_win" || row.type === "rob_fail") return `${style.action} de${target || " alguém"}`;
   if (preposition) return `${style.action}${target ? ` ${preposition}${target}` : ""}`;
-  if (row.type === "work" && note) return `Trabalhou como **${note}**`;
-  if ((row.type === "work_dismissal" || row.type === "work_loss") && note) return `Foi demitido(a) ${note}`;
+  
   if (row.type === "shop_cooldown_unlock" && note.startsWith("Acelerador:")) {
     const targets = note.slice("Acelerador:".length).trim().split(",").map(command => command.trim()).join(", ");
     return `${style.action}: ${targets}`;
@@ -165,23 +150,35 @@ function formatTimestamp(createdAt: number): string {
 export function describeTransaction(row: TransactionRow, resolveEmoji: EmojiResolver): string {
   const style = getTransactionStyle(row.type);
   const value = Number(row.amount) || 0;
-  const cookie = resolveEmoji("cookie");
-  const icon = value < 0
-    ? resolveEmoji("loss") || (cookie ? "❌" : "")
-    : cookie || resolveEmoji(style.emoji);
-  const amount = Math.abs(value).toLocaleString("pt-BR");
-  const iconPrefix = icon ? `${icon} ` : "";
-  const amountPrefix = cookie ? `${cookie} ` : "";
+  const fallbackEmoji = row.type === "rob_fail" || row.type === "work_dismissal"
+    ? "<a:peep_police:1507835774308188301>"
+    : row.type === "work_tool_break" || row.type === "rob_loss_target"
+      ? "<a:pand_scary:1507835761934991412>"
+      : "";
+  const emoji = resolveEmoji(style.emoji) || fallbackEmoji;
+  const timestamp = formatTimestamp(row.createdAt);
+  
+  const actionText = transactionAction(row);
   const verb = style.verb || (value > 0 ? "Recebeu" : "Perdeu");
-  const valueLine = value ? `> ${verb} ${amountPrefix}**${amount} cookies**` : "";
+  const amount = Math.abs(value).toLocaleString("pt-BR");
   const note = safeNote(row.note);
-  const noteLine = note && !NOTE_LINE_HIDDEN_TYPES.has(row.type) ? `> ${note}` : "";
 
-  return [
-    `${iconPrefix}${formatTimestamp(row.createdAt)} — ${transactionAction(row)}`,
-    valueLine,
-    noteLine,
-  ].filter(Boolean).join("\n");
+  let bodyText = "";
+
+  const emojiPrefix = emoji ? `${emoji} ` : "";
+  let action = actionText;
+  if (row.type === "daily") action = "Resgatou o /daily";
+  if (row.type === "monthly_tax") action = "Pagou a Taxa Mensal de 2% dos seus cookies";
+
+  const lines = [`${emojiPrefix}${timestamp} — ${action}`];
+  if (value !== 0) {
+    lines.push(`> ${verb} ${emojiPrefix}**${amount} cookies**`);
+  }
+  if (note && !NOTE_LINE_HIDDEN_TYPES.has(row.type)) {
+    lines.push(`> ${note}`);
+  }
+
+  return lines.join("\n");
 }
 
 export function totalPages(total: number): number {

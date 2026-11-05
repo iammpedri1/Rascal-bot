@@ -25,6 +25,6 @@ test("/clear sends an ephemeral follow-up when Discord has removed the original 
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].flags, 64);
-  assert.equal(calls[0].fetchReply, true);
+  assert.equal(calls[0].fetchReply, undefined);
   assert.match(calls[0].content, /Apaguei/);
 });

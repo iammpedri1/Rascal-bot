@@ -192,8 +192,8 @@ async function handleCommandInteraction(
   try {
     await command.execute(withBrandedResponses(interaction, client));
   } catch (error) {
-    console.error(`[comando:${interaction.commandName}] erro:`, error);
     if (isDeadInteractionError(error)) return;
+    console.error(`[comando:${interaction.commandName}] erro:`, error);
     await respondWithError(interaction);
   }
 }

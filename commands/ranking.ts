@@ -22,6 +22,12 @@ const CATEGORIES: Record<RankingCategory, CategoryConfig> = {
   votes: { label: "Votos", emoji: "🗳️", periods: ["total"] },
 };
 
+function isDeadInteractionError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as { code?: number; rawError?: { code?: number } };
+  return [10062, 40060, 10015].includes(value.code ?? value.rawError?.code ?? -1);
+}
+
 function getRankData(category: RankingCategory, period: RankingPeriod, guildId: string) {
   const getWeekKey = (): string => new Date().toISOString().slice(0, 10);
   const getMonthKey = (): string => new Date().toISOString().slice(0, 7);
@@ -92,11 +98,11 @@ module.exports = defineCommand({
       )
     );
 
-    const response = await interaction.reply({ 
+    await interaction.reply({
       embeds: [mainEmbed], 
       components: [row1, row2],
-      fetchReply: true 
     });
+    const response = await interaction.fetchReply();
 
     const collector = response.createMessageComponentCollector({ 
       time: 120000 
@@ -107,12 +113,13 @@ module.exports = defineCommand({
         return i.reply({ content: "Este painel não é seu!", flags: 64 });
       }
 
-      const customId = i.customId;
-      
-      if (customId === "rank_back") {
-        await i.update({ embeds: [mainEmbed], components: [row1, row2] });
-        return;
-      }
+      try {
+        const customId = i.customId;
+        
+        if (customId === "rank_back") {
+          await i.update({ embeds: [mainEmbed], components: [row1, row2] });
+          return;
+        }
 
       if (customId.startsWith("rank_cat_")) {
         const catId = customId.replace("rank_cat_", "") as RankingCategory;
@@ -159,10 +166,14 @@ module.exports = defineCommand({
           await i.update({ embeds: [resultEmbed], components: [backRow] });
         }
       } else if (customId.startsWith("rank_per_")) {
-        const [, catId, period] = customId.split("_");
-        const category = catId as RankingCategory;
+        const [categoryId, period] = customId.slice("rank_per_".length).split("_");
+        const category = categoryId as RankingCategory;
         const p = period as RankingPeriod;
         const config = CATEGORIES[category];
+        if (!config || !config.periods.includes(p)) {
+          await i.reply({ content: "Este ranking expirou. Execute `/ranking` novamente.", flags: 64 });
+          return;
+        }
         
         const data = getRankData(category, p, guildId);
         const rankingText = formatRanking(data, `${config.label} (${p})`);
@@ -177,6 +188,12 @@ module.exports = defineCommand({
         );
 
         await i.update({ embeds: [resultEmbed], components: [backRow] });
+      }
+      } catch (error) {
+        if (!isDeadInteractionError(error)) {
+          console.error("Falha ao processar botão do /ranking", error);
+          await i.followUp({ content: "Não foi possível atualizar o ranking.", flags: 64 }).catch(() => undefined);
+        }
       }
     });
 

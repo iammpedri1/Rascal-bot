@@ -150,12 +150,20 @@ module.exports = defineCommand({
         if (buttonInteraction.user.id !== interaction.user.id) {
           return buttonInteraction.reply({ content: "Esta consulta foi iniciada por outro usuário.", flags: 64 });
         }
-        await buttonInteraction.deferUpdate();
-        currentPage = Math.max(0, Math.min(totalPages - 1, currentPage + (buttonInteraction.customId === "ficha:next" ? 1 : -1)));
-        await buttonInteraction.editReply({
-          embeds: [buildEmbed(interaction.guild, target, summary, getCases(interaction.guildId, target.id, currentPage * PAGE_SIZE), count, currentPage)],
-          components: buildComponents(currentPage, totalPages),
-        });
+        try {
+          await buttonInteraction.deferUpdate();
+          currentPage = Math.max(0, Math.min(totalPages - 1, currentPage + (buttonInteraction.customId === "ficha:next" ? 1 : -1)));
+          await buttonInteraction.editReply({
+            embeds: [buildEmbed(interaction.guild, target, summary, getCases(interaction.guildId, target.id, currentPage * PAGE_SIZE), count, currentPage)],
+            components: buildComponents(currentPage, totalPages),
+          });
+        } catch (error) {
+          const code = typeof error === "object" && error !== null ? (error as { code?: number }).code : undefined;
+          if (![10062, 40060, 10015].includes(code ?? -1)) {
+            console.error("Falha ao atualizar paginação da ficha", error);
+            await buttonInteraction.followUp({ content: "Não foi possível carregar esta página.", flags: 64 }).catch(() => undefined);
+          }
+        }
       });
       collector.on("end", async () => {
         await message.edit({ components: buildComponents(currentPage, totalPages, true) }).catch(() => null);

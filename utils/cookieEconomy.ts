@@ -3,6 +3,7 @@ const cooldowns = require("./cooldowns");
 const { PRIMARY_GUILD_ID } = require("./primaryGuild");
 const blackMarket = require("./blackMarket") as typeof import("./blackMarket");
 const { COLOR_ITEMS, COOLDOWN_TARGETS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
+const MAX_COOKIE_AMOUNT = 2_147_483_647;
 
 interface TransactionDetails {
   guildId?: string | null;
@@ -303,6 +304,14 @@ function getUser(user) {
 
 function getProfile(user) {
   return getUser(user);
+}
+
+function setBalance(user, amount) {
+  const balance = Math.max(0, Math.min(MAX_COOKIE_AMOUNT, Math.floor(Number(amount))));
+  const profile = getUser(user);
+  db.prepare("UPDATE usuarios SET cookies = ?, updated_at = ? WHERE id = ?")
+    .run(balance, Date.now(), profile.id);
+  return getById(profile.id);
 }
 
 // ─── Daily com multiplicador de streak ───────────────────────────────────────
@@ -1169,6 +1178,7 @@ module.exports = {
   getGuildShopRolePurchases,
   getNetProfit,
   getProfile,
+  setBalance,
   getRank,
   getShopInventory,
   getUser,

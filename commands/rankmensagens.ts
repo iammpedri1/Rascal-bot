@@ -14,6 +14,12 @@ const { getLifetimeMessageLeaderboard } = require("../utils/messageStats");
 const RANK_COLOR = 0xf5a623;
 const RANK_LIMIT = 10;
 
+function isDeadInteractionError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as { code?: number; rawError?: { code?: number } };
+  return [10062, 40060, 10015].includes(value.code ?? value.rawError?.code ?? -1);
+}
+
 function amount(value) {
   return Number(value || 0).toLocaleString("pt-BR");
 }
@@ -118,8 +124,19 @@ module.exports = defineCommand({
         });
       }
 
-      await buttonInteraction.deferUpdate();
-      return refreshMessage();
+      try {
+        await buttonInteraction.deferUpdate();
+        return await refreshMessage();
+      } catch (error) {
+        if (!isDeadInteractionError(error)) {
+          console.error("Falha ao atualizar /rankmensagens", error);
+          await buttonInteraction.followUp({
+            content: "Não foi possível atualizar a classificação no momento.",
+            flags: 64,
+          }).catch(() => undefined);
+        }
+        return undefined;
+      }
     });
 
     collector.on("end", () => {

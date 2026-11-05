@@ -20,6 +20,12 @@ const PAGE_SIZE = 10;
 const RANK_LIMIT = 500;
 const WEEKLY_PRIZES = [15000, 10000, 5000];
 
+function isDeadInteractionError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as { code?: number; rawError?: { code?: number } };
+  return [10062, 40060, 10015].includes(value.code ?? value.rawError?.code ?? -1);
+}
+
 function medal(position: number): string {
   return `#${position}`;
 }
@@ -129,8 +135,8 @@ module.exports = defineCommand({
         return buttonInteraction.reply({ content: "Esta interação é exclusiva para o autor do comando.", flags: 64 });
       }
 
-      await buttonInteraction.deferUpdate();
       try {
+        await buttonInteraction.deferUpdate();
         const nextRank = await getLiveRank(interaction);
         const maxPage = Math.max(1, Math.ceil(nextRank.length / PAGE_SIZE));
         if (buttonInteraction.customId.endsWith("|previous")) page = Math.max(0, page - 1);
@@ -141,8 +147,15 @@ module.exports = defineCommand({
           components: [buildButtons(interaction, page, maxPage)],
         });
       } catch (error) {
-        logger.error("Falha ao atualizar /ranktransmissao", error);
-        await buttonInteraction.followUp({ content: "Não foi possível atualizar a classificação no momento.", flags: 64 }).catch(() => { });
+        if (!isDeadInteractionError(error)) {
+          logger.error("Falha ao atualizar /ranktransmissao", error);
+          await buttonInteraction.followUp({
+            content: "Não foi possível atualizar a classificação no momento.",
+            flags: 64,
+          }).catch((replyError) => {
+            if (!isDeadInteractionError(replyError)) logger.error("Falha ao informar erro de paginação", replyError);
+          });
+        }
       }
     });
 

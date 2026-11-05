@@ -36,7 +36,6 @@ async function sendClearResult(interaction, content) {
     const fallback = await interaction.followUp({
       content,
       flags: MessageFlags.Ephemeral,
-      fetchReply: true,
     });
     scheduleReplyDeletion(interaction, fallback.id);
   }
