@@ -7,8 +7,6 @@ import type {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 
-// Catálogo em memória. A troca do mapa é atômica para manter a última versão
-// válida enquanto uma atualização de rede está em andamento.
 let emojiMap = new Map<string, string>();
 let applicationEmojiAssets = new Map<string, ApplicationEmojiAsset>();
 let refreshInFlight: Promise<void> | null = null;
@@ -71,7 +69,6 @@ function buildEmojiAssets(emojis: Iterable<ApplicationEmojiLike>): Map<string, A
   return next;
 }
 
-/** Busca todos os emojis cadastrados no Developer Portal para esta aplicação. */
 export async function loadEmojis(client: Client): Promise<void> {
   if (!client.isReady()) return;
   if (refreshInFlight) return refreshInFlight;
@@ -89,25 +86,19 @@ export async function loadEmojis(client: Client): Promise<void> {
   return refreshInFlight;
 }
 
-/** Retorna um emoji pelo nome. Se não existir, retorna o fallback informado. */
 export function getEmoji(name: string, fallback = "❔"): string {
   return portalEmojiFor(name) ?? fallback;
 }
 
-/** Metadados reais do emoji de aplicação, inclusive nome e URL da imagem do Portal. */
 export function getEmojiDetails(name: string): ApplicationEmojiAsset | null {
   return applicationEmojiAssets.get(normalizedName(portalNameFor(name))) ?? null;
 }
 
-/** Prioriza o cache do servidor e usa os emojis da aplicação como segunda opção. */
 export function getGuildEmoji(
   guild: Pick<Guild, "emojis"> | null | undefined,
   name: string,
   fallback = "",
 ): string {
-  // Os emojis do Developer Portal são a identidade padrão do bot; o cache do
-  // servidor entra apenas como alternativa quando o catálogo da aplicação não
-  // contém o nome solicitado.
   const portalEmoji = portalEmojiFor(name);
   if (portalEmoji) return portalEmoji;
 
@@ -123,7 +114,6 @@ export function getGuildEmoji(
   return guildEmoji?.toString() ?? fallback;
 }
 
-/** Lista os emojis carregados para consumidores internos e validações. */
 export function getEmojiEntries(): Array<[string, string]> {
   return Array.from(emojiMap.values())
     .map(mention => [mention.match(/^<a?:([^:]+):\d+>$/)?.[1] || mention, mention] as [string, string])
@@ -134,7 +124,6 @@ export function getEmojiCount(): number {
   return emojiMap.size;
 }
 
-/** Converte uma menção ou emoji Unicode para o formato que os componentes do Discord aceitam. */
 export function toComponentEmoji(value: string): APIMessageComponentEmoji {
   const mention = String(value || "").match(/^<(a?):([a-zA-Z0-9_]+):(\d+)>$/);
   if (mention) {
@@ -147,7 +136,6 @@ export function toComponentEmoji(value: string): APIMessageComponentEmoji {
   return { name: String(value || "▫️") };
 }
 
-/** Aplica emoji do servidor/aplicação em um botão, preservando animações. */
 export function setGuildButtonEmoji(
   button: ButtonBuilder,
   guild: Pick<Guild, "emojis"> | null | undefined,
@@ -158,7 +146,6 @@ export function setGuildButtonEmoji(
   return value ? button.setEmoji(toComponentEmoji(value)) : button;
 }
 
-/** Aplica diretamente um emoji do Developer Portal em um botão. */
 export function setApplicationButtonEmoji(
   button: ButtonBuilder,
   name: string,
@@ -168,7 +155,6 @@ export function setApplicationButtonEmoji(
   return value ? button.setEmoji(toComponentEmoji(value)) : button;
 }
 
-/** Aplica emoji do servidor/aplicação em uma opção de menu de seleção. */
 export function setGuildOptionEmoji(
   option: StringSelectMenuOptionBuilder,
   guild: Pick<Guild, "emojis"> | null | undefined,
@@ -307,6 +293,14 @@ const normalizedAliases = new Map(
 );
 
 const fallbacks: Record<string, string> = {
+  // 🚨 SEUS EMOJIS CUSTOMIZADOS AQUI (Garante que funcionem mesmo sem estar no portal)
+  peep_police: "<a:peep_police:1507835774308188301>",
+  pand_scary: "<a:pand_scary:1507835761934991412>",
+  pandaWHY: "<a:pandaWHY:1507515891753947187>",
+  peep_happy: "<a:peep_happy:1507835778426732694>",
+  peep_sad: "<a:peep_sad:1501627001730105435>",
+  work: "<a:work:1564005889973944431>",
+  
   typescript: "🟦",
   node: "🟩",
   discord: "💬",
@@ -360,7 +354,6 @@ const fallbacks: Record<string, string> = {
   thinking: "🤔",
   info: "ℹ️",
   party: "🎉",
-  work: "💼",
   gift: "🎁",
   clock: "⏰",
   peepSad: "😔",
