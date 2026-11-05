@@ -20,6 +20,8 @@ const pandHappy = () => emoji.getEmoji("pand_happy", emoji.party || "🎉");
 const pandPolice = () => emoji.getEmoji("pand_police", emoji.policePanda || "👮");
 const peepPolice = "<a:peep_police:1507835774308188301>";
 const pandScary = "<a:pand_scary:1507835761934991412>";
+const PEEP_HAPPY_GIF = "https://cdn.discordapp.com/emojis/1507835778426732694.gif?quality=lossless";
+const PEEP_SAD_GIF = "https://cdn.discordapp.com/emojis/1501627001730105435.gif?quality=lossless";
 const peepHappy = () => emoji.getEmoji("peep_happy", emoji.getEmoji("peepHappy", "😄"));
 const peepSad = () => emoji.getEmoji("peep_sad", emoji.getEmoji("peepSad", "😔"));
 
@@ -65,8 +67,8 @@ const dailyTips = [
 const workSuccessMessages = [
   "Médico(a) 🏥",
   "Cozinheiro(a) 🍳",
-  "Programador(a) 💻",
-  "Policial 👮",
+  "Programador(a) <a:programmer:1564005742326059159>",
+  "Policial <a:blobPolice:1507515900134297752>",
   "Mecânico(a) 🔧",
   "Entregador(a) 📦",
   "Atendente 🛍️",
@@ -136,7 +138,7 @@ function buildDailyEmbed(source, result) {
       { name: `${ICONS.COOKIE_EMOJI} Saldo atual`, value: `**${amount(result.profile.balance)} cookies**`, inline: true },
       ...(result.perkBonus ? [{ name: `${ICONS.GIFT_EMOJI} Benefícios`, value: `+${amount(result.perkBonus)} cookies`, inline: true }] : []),
       ...(result.dailyMultiplier === 2 ? [{ name: `${emoji.booster || "⚡"} Multiplicador`, value: "**x2 no /daily**", inline: true }] : []),
-      { name: "💡 Dica", value: "*Use /votar para obter cookies adicionais.*", inline: false },
+      { name: "<a:pandaWHY:1507515891753947187> Dica", value: "*Use /votar para obter cookies adicionais.*", inline: false },
     );
 
   return finish(embed, source);
@@ -147,66 +149,62 @@ function buildDailyCooldownEmbed(source, result) {
 }
 
 function buildWorkEmbed(source, result) {
-  const peepoSuit = "https://cdn.discordapp.com/emojis/1059245824036962324.png";
   const channelId = source?.channelId || source?.channel?.id || "canal de comandos";
 
   if (result.event === "tool_break") {
     return finish(new EmbedBuilder()
       .setColor(0xf1c40f)
-      .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
-      .setThumbnail(peepoSuit)
+      .setTitle("<a:work:1564005889973944431> TRABALHANDO NA FIRMA <a:work:1564005889973944431>")
+      .setThumbnail(PEEP_SAD_GIF)
       .setDescription([
-        `🔧 Você trabalhou como **${result.job}**, mas quebrou uma ferramenta durante o expediente.`,
+        `<a:work:1564005889973944431> Você trabalhou como **${result.job}**, mas quebrou uma ferramenta durante o expediente.`,
         "",
-        `💸 O conserto custou **${amount(result.loss)} cookies**.`,
-        `🍪 Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        `<a:repair:1564005889973944431> O conserto custou **${amount(result.loss)} cookies**.`,
+        `<a:CookieStar:1506439863782867065> Agora você possui: **${amount(result.profile.balance)} cookies**.`,
         "",
-        `👉 Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
+        `<a:pandaWHY:1507515891753947187> Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
       ].join("\n")), source);
   }
 
   if (result.event === "critical") {
     return finish(new EmbedBuilder()
       .setColor(0xf1c40f)
-      .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
-      .setThumbnail(peepoSuit)
+      .setTitle("<a:work:1564005889973944431> TRABALHANDO NA FIRMA <a:work:1564005889973944431>")
+      .setThumbnail(PEEP_HAPPY_GIF)
       .setDescription([
-        "🌟 Sucesso crítico! O chefe reconheceu seu esforço e dobrou seu salário.",
-        `👨‍💼 Você trabalhou como **${result.job}** e ganhou **${amount(result.reward)} cookies**!`,
-        `🎁 Bônus extraordinário incluído: **${amount(result.bonus)} cookies**.`,
-        `🍪 Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        `<a:work:1564005889973944431> Você trabalhou como **${result.job}** e ganhou **${amount(result.reward)} cookies**!`,
+        `<a:blobgift:1507515893003845744> Bônus extraordinário incluído: **${amount(result.bonus)} cookies**.`,
+        `<a:CookieStar:1506439863782867065> Agora você possui: **${amount(result.profile.balance)} cookies**.`,
         "",
-        `👉 Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
+        `<a:pandaWHY:1507515891753947187> Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
       ].join("\n")), source);
   }
 
   if (!result.success) {
     return finish(new EmbedBuilder()
       .setColor(0xe74c3c)
-      .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
-      .setThumbnail(peepoSuit)
+      .setTitle("<a:work:1564005889973944431> TRABALHANDO NA FIRMA <a:work:1564005889973944431>")
+      .setThumbnail(PEEP_SAD_GIF)
       .setDescription([
-        `😞 Hoje você foi pro trabalho, mas foi **despedido(a)**!`,
+        `<a:peepsad:1501627001730105435> Hoje você foi pro trabalho, mas foi **despedido(a)**!`,
         "",
         `É, saiu no prejuízo... Você teve que pagar **${amount(result.loss)} cookies** para sua antiga empresa ${result.reason || "por desempenho inadequado"}.`,
         "",
-        "🥺 Se acalme! Tudo ficará bem! Tente novamente mais tarde para tentar arranjar outro trabalho.",
-        "",
-        `🍪 Agora você possui: **${amount(result.profile.balance)} cookies**.`,
-        `👉 Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
+        `<a:CookieStar:1506439863782867065> Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        `<a:pandaWHY:1507515891753947187> Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
       ].join("\n")), source);
   }
 
   const embed = new EmbedBuilder()
     .setColor(0x2ecc71)
-    .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
-    .setThumbnail(peepoSuit)
+    .setTitle("<a:work:1564005889973944431> TRABALHANDO NA FIRMA <a:work:1564005889973944431>")
+    .setThumbnail(PEEP_HAPPY_GIF)
     .setDescription(
       [
-        "📕 \u00bb Parabéns! Você acaba de realizar um trabalho!",
+        "<a:pand_happy:1507835778426732694> \u00bb Parabéns! Você acaba de realizar um trabalho!",
         `${ICONS.WORK_EMOJI} \u00bb Você trabalhou como **${result.job || pick(workSuccessMessages)}** e ganhou **${amount(result.reward)} cookies**!`,
-        `🍪 \u00bb Agora você possui: **${amount(result.profile.balance)} cookies**.`,
-        "💁‍♀️ \u00bb Veja o que pode fazer com os seus cookies!",
+        `<a:CookieStar:1506439863782867065> \u00bb Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        "<a:pandaWHY:1507515891753947187> \u00bb Veja o que pode fazer com os seus cookies!",
         `↳ Use \`/info cookies\` em <#${channelId}>.`,
       ].join("\n")
     );
@@ -225,7 +223,7 @@ function buildBonusEmbed(source, result) {
     .setThumbnail(thumbnailFor(source, [emojiImageUrl(emoji.gift), emojiImageUrl(emoji.cookie), emojiImageUrl(emoji.party)].filter(Boolean)))
     .setDescription(
       [
-        `${emoji.correct} \u00bb Você recebeu **${amount(result.reward)} cookies**.`,
+        `<a:check:1507515891753947187> \u00bb Você recebeu **${amount(result.reward)} cookies**.`,
         ...(result.perkBonus ? [`${ICONS.GIFT_EMOJI} \u00bb Seus benefícios adicionaram **${amount(result.perkBonus)} cookies**.`] : []),
         `${ICONS.COOKIE_EMOJI} \u00bb Saldo total: **${amount(result.profile.balance)} cookies**.`,
         `${ICONS.CLOCK_EMOJI} \u00bb Próximo resgate disponível ${timestamp(result.nextAt)}.`,

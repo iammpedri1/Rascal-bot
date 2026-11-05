@@ -13,6 +13,12 @@ const {
   workSuccessMessages,
 } = require("../utils/cookieViews");
 
+function isDeadInteractionError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as { code?: number; rawError?: { code?: number } };
+  return [10062, 40060, 10015].includes(value.code ?? value.rawError?.code ?? -1);
+}
+
 module.exports = defineCommand({
   category: "economy",
 
@@ -41,6 +47,7 @@ module.exports = defineCommand({
         ? sendViaWebhook(interaction, payload)
         : interaction.editReply(payload);
     } catch (error) {
+      if (isDeadInteractionError(error)) return undefined;
       console.error("[trabalhar] falha ao processar comando:", error);
       if (interaction.deferred && !interaction.replied) {
         return interaction.editReply("Não foi possível concluir seu turno agora.");
