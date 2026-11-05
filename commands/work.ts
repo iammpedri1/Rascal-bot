@@ -1,5 +1,7 @@
 import { defineCommand } from "../types/command";
 import { sendViaWebhook } from "../core/InteractionResponseFormatter";
+import { MessageFlags } from "discord.js";
+
 const { SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 
 const { work } = require("../utils/cookieEconomy");
@@ -10,13 +12,19 @@ const {
   buildWorkEmbed,
   pick,
   workFailReasons,
-  workSuccessMessages,
 } = require("../utils/cookieViews");
 
 function isDeadInteractionError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
-  const value = error as { code?: number; rawError?: { code?: number } };
-  return [10062, 40060, 10015].includes(value.code ?? value.rawError?.code ?? -1);
+
+  const value = error as {
+    code?: unknown;
+    rawError?: { code?: unknown };
+  };
+
+  return [value.code, value.rawError?.code].some((code) =>
+    [10062, 40060, 10015].includes(Number(code))
+  );
 }
 
 module.exports = defineCommand({
@@ -29,30 +37,61 @@ module.exports = defineCommand({
   async execute(interaction) {
     try {
       await interaction.deferReply();
+
+      // work() é síncrono e transacional; não precisa de await.
       const result = work(interaction.user, {
         ...buildContext(interaction),
         reason: pick(workFailReasons),
-        job: pick(workSuccessMessages),
       });
+
       const embed = result.worked
         ? buildWorkEmbed(interaction, result)
         : buildWorkCooldownEmbed(interaction, result);
 
       const payload = {
         embeds: [embed],
-        components: buildButtons(interaction.user.id, {}, { trabalhar: result.nextAt }, ["trabalhar"], interaction.guild),
+        components: buildButtons(
+          interaction.user.id,
+          {},
+          { trabalhar: result.nextAt },
+          ["trabalhar"],
+          interaction.guild
+        ),
       };
 
-      return result.worked
-        ? sendViaWebhook(interaction, payload)
-        : interaction.editReply(payload);
+      // Mantém o webhook já utilizado pelo projeto nas respostas de trabalho.
+      // Mantém o helper de webhook já integrado ao projeto.
+      if (result.worked) {
+        return await sendViaWebhook(interaction, payload);
+      }
+
+      return await interaction.editReply(payload);
     } catch (error) {
       if (isDeadInteractionError(error)) return undefined;
-      console.error("[trabalhar] falha ao processar comando:", error);
-      if (interaction.deferred && !interaction.replied) {
-        return interaction.editReply("Não foi possível concluir seu turno agora.");
+
+      console.error("[trabalhar] Falha ao processar comando:", error);
+
+      const fallback = {
+        content: "Não foi possível concluir seu turno agora.",
+        embeds: [],
+        components: [],
+      };
+
+      try {
+        if (interaction.deferred || interaction.replied) {
+          return await interaction.editReply(fallback);
+        }
+
+        return await interaction.reply({
+          ...fallback,
+          flags: MessageFlags.Ephemeral,
+        });
+      } catch (responseError) {
+        if (!isDeadInteractionError(responseError)) {
+          console.error("[trabalhar] Falha ao responder à interação:", responseError);
+        }
+        return undefined;
       }
-      return undefined;
     }
   },
 });
