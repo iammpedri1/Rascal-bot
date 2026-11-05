@@ -1,6 +1,0 @@
-- [x] O embed do /daily contém a barra de progresso 2/5 conforme a imagem.
-- [x] O comando /trabalhar exibe trabalhos aleatórios com emojis (ex: Médico(a) 🏥).
-- [x] O saldo em todos os embeds está formatado com separadores de milhar (ex: 2.622.743).
-- [ ] O agendador de voz não paga cookies para usuários que saíram da call mas ficaram no cache.
-- [ ] O comando /transacoes permite visualizar o histórico de todo o servidor.
-- [ ] Todos os textos estão em português correto e profissional.
