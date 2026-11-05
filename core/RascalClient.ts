@@ -9,6 +9,7 @@ import { CommandHandler } from "../handlers/commandHandler";
 import { EventHandler } from "../handlers/eventHandler";
 import type { CommandDefinition } from "../types/command";
 import type { Logger } from "../types/logger";
+
 const logger = require("../utils/logger") as Logger;
 const { latestDiscordCommand } = require("../utils/discordDiagnostics") as typeof import("../utils/discordDiagnostics");
 
@@ -34,8 +35,6 @@ function buildClientOptions(): ClientOptions {
       ReactionManager: 0,
       ReactionUserManager: 0,
     }),
-    // Descarta mensagens antigas de canais ociosos, além do limite por canal
-    // aplicado acima; mantém o cache de mensagens baixo em execução contínua.
     sweepers: {
       ...Options.DefaultSweeperSettings,
       messages: {
@@ -56,24 +55,53 @@ export class RascalClient extends Client {
     this.attachClientDiagnostics();
   }
 
-  async start(token: string): Promise<string> {
-    if (this.initialized) throw new Error("O cliente Rascal já foi inicializado.");
-    this.initialized = true;
+  /**
+   * Inicializa handlers e conecta ao Discord.
+   * Retorna a própria instância para permitir chaining.
+   */
+  async start(token: string): Promise<this> {
+    if (this.initialized) {
+      throw new Error("[RascalClient] O cliente já foi inicializado.");
+    }
+    if (!token) {
+      throw new Error("[RascalClient] Token não fornecido.");
+    }
 
-    new CommandHandler(this).load();
-    new EventHandler(this).load();
+    try {
+      // Carrega handlers (podem lançar erro se algum arquivo estiver corrompido)
+      new CommandHandler(this).load();
+      new EventHandler(this).load();
 
-    return this.login(token);
+      // Efetua o login
+      await this.login(token);
+      
+      this.initialized = true;
+      logger.info("RascalClient inicializado e conectado.");
+      return this;
+    } catch (error) {
+      // Se algo falhar, reseta o estado para permitir tentar de novo, e repassa o erro
+      this.initialized = false;
+      logger.error("[RascalClient] Falha fatal ao iniciar o bot", error);
+      throw error;
+    }
   }
 
-  shutdown(): void {
-    this.destroy();
-    this.commands.clear();
+  /** Desliga o bot de forma segura (aguardando o gateway). */
+  async shutdown(): Promise<void> {
+    try {
+      await this.destroy();
+      this.commands.clear();
+      this.initialized = false;
+      logger.info("RascalClient desligado com sucesso.");
+    } catch (error) {
+      logger.error("[RascalClient] Erro ao desligar", error);
+    }
   }
 
   private attachClientDiagnostics(): void {
     this.on("error", (error) => logger.error("Erro do client Discord", error));
     this.on("warn", (warning) => logger.warn("Aviso do client Discord", { warning }));
+    
     this.on("shardDisconnect", (event) => {
       logger.warn("Shard desconectada", { code: event.code, reason: event.reason });
     });
@@ -81,6 +109,7 @@ export class RascalClient extends Client {
     this.on("shardResume", (id, replayedEvents) => {
       logger.info("Shard reconectada", { id, replayedEvents });
     });
+    
     this.on("rateLimit", (info) => {
       logger.warn("Rate limit do Discord acionado", {
         route: info.route,

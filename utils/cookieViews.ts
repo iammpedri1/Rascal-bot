@@ -18,6 +18,8 @@ const ICONS = {
 };
 const pandHappy = () => emoji.getEmoji("pand_happy", emoji.party || "🎉");
 const pandPolice = () => emoji.getEmoji("pand_police", emoji.policePanda || "👮");
+const peepPolice = "<a:peep_police:1507835774308188301>";
+const pandScary = "<a:pand_scary:1507835761934991412>";
 const peepHappy = () => emoji.getEmoji("peep_happy", emoji.getEmoji("peepHappy", "😄"));
 const peepSad = () => emoji.getEmoji("peep_sad", emoji.getEmoji("peepSad", "😔"));
 
@@ -98,17 +100,6 @@ function sourceUser(source) {
 }
 
 function finish(embed, source) {
-  const clientUser = source?.client?.user || sourceUser(source)?.client?.user;
-
-  embed.setTimestamp();
-
-  if (clientUser) {
-    embed.setFooter({
-      text: clientUser.username,
-      iconURL: clientUser.displayAvatarURL({ size: 64 }),
-    });
-  }
-
   return embed;
 }
 
@@ -159,24 +150,56 @@ function buildWorkEmbed(source, result) {
   const peepoSuit = "https://cdn.discordapp.com/emojis/1059245824036962324.png";
   const channelId = source?.channelId || source?.channel?.id || "canal de comandos";
 
-  if (!result.success) {
+  if (result.event === "tool_break") {
     return finish(new EmbedBuilder()
-      .setColor(0x2b2d31)
-      .setTitle("🧑‍🏭 DEMITIDO(A) 🧑‍🏭")
+      .setColor(0xf1c40f)
+      .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
       .setThumbnail(peepoSuit)
       .setDescription([
-        `📕 \u00bb Você foi demitido(a) após tentar trabalhar e perdeu **${amount(result.loss)} cookies**.`,
+        `🔧 Você trabalhou como **${result.job}**, mas quebrou uma ferramenta durante o expediente.`,
         "",
-        `🍪 \u00bb Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        `💸 O conserto custou **${amount(result.loss)} cookies**.`,
+        `🍪 Agora você possui: **${amount(result.profile.balance)} cookies**.`,
         "",
-        `💁‍♀️ \u00bb Veja o que pode fazer com os seus cookies!`,
-        `↳ Use \`/info cookies\` em <#${channelId}>.`,
+        `👉 Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
+      ].join("\n")), source);
+  }
+
+  if (result.event === "critical") {
+    return finish(new EmbedBuilder()
+      .setColor(0xf1c40f)
+      .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
+      .setThumbnail(peepoSuit)
+      .setDescription([
+        "🌟 Sucesso crítico! O chefe reconheceu seu esforço e dobrou seu salário.",
+        `👨‍💼 Você trabalhou como **${result.job}** e ganhou **${amount(result.reward)} cookies**!`,
+        `🎁 Bônus extraordinário incluído: **${amount(result.bonus)} cookies**.`,
+        `🍪 Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        "",
+        `👉 Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
+      ].join("\n")), source);
+  }
+
+  if (!result.success) {
+    return finish(new EmbedBuilder()
+      .setColor(0xe74c3c)
+      .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
+      .setThumbnail(peepoSuit)
+      .setDescription([
+        `😞 Hoje você foi pro trabalho, mas foi **despedido(a)**!`,
+        "",
+        `É, saiu no prejuízo... Você teve que pagar **${amount(result.loss)} cookies** para sua antiga empresa ${result.reason || "por desempenho inadequado"}.`,
+        "",
+        "🥺 Se acalme! Tudo ficará bem! Tente novamente mais tarde para tentar arranjar outro trabalho.",
+        "",
+        `🍪 Agora você possui: **${amount(result.profile.balance)} cookies**.`,
+        `👉 Use \`/info cookies\` em <#${channelId}> para conhecer outras formas de ganhar cookies.`,
       ].join("\n")), source);
   }
 
   const embed = new EmbedBuilder()
-    .setColor(0x2b2d31)
-    .setTitle("🧑‍🏭 TRABALHANDO NA FIRMA 🧑‍🏭")
+    .setColor(0x2ecc71)
+    .setTitle("👨‍🌾 TRABALHANDO NA FIRMA 👨‍🌾")
     .setThumbnail(peepoSuit)
     .setDescription(
       [
@@ -260,14 +283,14 @@ function buildRobEmbed(source, target, result) {
 
   return new EmbedBuilder()
     .setColor(randomColor())
-    .setTitle(`${pandPolice()} OPERAÇÃO FRUSTRADA ${pandPolice()}`)
+    .setTitle(`${peepPolice} OPERAÇÃO FRUSTRADA ${peepPolice}`)
     .setThumbnail(emojiImageUrl(peepSad()) || user?.displayAvatarURL?.({ size: 256 }))
     .setDescription(
       [
         `${pandPolice()} \u00bb <@${user.id}> foi interceptado(a) ao tentar subtrair cookies de <@${target.id}>.`,
         "",
-        `${ICONS.COOKIE_EMOJI} \u00bb As autoridades apreenderam **${amount(result.penalty)} cookies** como sanção.`,
-        `${pandPolice()} \u00bb Você permanecerá em detenção até ${timestamp(result.jail?.releaseAt)}. Fiança estabelecida: **${amount(result.jail?.bailAmount)} cookies**${result.lawyerUsed ? " (valor reduzido por assessoria jurídica)" : ""}.`,
+        `${pandScary} \u00bb As autoridades apreenderam **${amount(result.penalty)} cookies** como sanção.`,
+        `${peepPolice} \u00bb Você permanecerá em detenção até ${timestamp(result.jail?.releaseAt)}. Fiança estabelecida: **${amount(result.jail?.bailAmount)} cookies**${result.lawyerUsed ? " (valor reduzido por assessoria jurídica)" : ""}.`,
         ...(result.crowbarUsed ? [`${pandHappy()} \u00bb A ferramenta foi confiscada; sua chance era de **${Math.round(result.chance * 100)}%**.`] : []),
         `${ICONS.COOKIE_EMOJI} \u00bb Saldo total: **${amount(result.thief?.balance)} cookies**.`,
         "",

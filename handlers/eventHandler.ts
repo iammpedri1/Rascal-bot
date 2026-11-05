@@ -1,70 +1,49 @@
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
-import { Events, type ClientEvents } from "discord.js";
-import type { ClientEventName, EventDefinition } from "../types/event";
-import type { RascalClient } from "../core/RascalClient";
-import type { Logger } from "../types/logger";
-const logger = require("../utils/logger") as Logger;
-const validEventNames = new Set<string>(Object.values(Events));
+import { withBrandedResponses } from "../core/InteractionResponseFormatter";
+import type { RascalClient } from "../core/RascalClient"; // Ajuste o caminho se necessário
+import { MessageFlags } from "discord.js";
 
-function isEventDefinition(value: unknown): value is EventDefinition<ClientEventName> {
-  if (typeof value !== "object" || value === null) return false;
-  const event = value as Partial<EventDefinition<ClientEventName>>;
-  return typeof event.name === "string" &&
-    validEventNames.has(event.name) &&
-    typeof event.execute === "function";
+function isDeadInteractionError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as { code?: number; rawError?: { code?: number } };
+  return [10062, 40060].includes(value.code ?? value.rawError?.code ?? -1);
 }
 
-/** Discovers event modules and attaches guarded listeners to the client. */
 export class EventHandler {
-  constructor(
-    private readonly client: RascalClient,
-    private readonly eventsDirectory = join(__dirname, "../events"),
-  ) {}
+  // O construtor recebe o client para que possamos usá-lo aqui dentro
+  constructor(private client: RascalClient) {}
 
-  load(): number {
-    const files = readdirSync(this.eventsDirectory)
-      .filter((file) => file.endsWith(".js"))
-      .sort((left, right) => left.localeCompare(right));
+  load(): void {
+    // Aqui usamos this.client em vez de apenas client
+    this.client.on("interactionCreate", async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
 
-    let loaded = 0;
-    for (const file of files) {
+      // Aplica o proxy que remove rodapé e timestamp
+      const cleanInteraction = withBrandedResponses(interaction, this.client);
+
+      // Usa this.client para buscar os comandos
+      const command = this.client.commands.get(cleanInteraction.commandName);
+      if (!command) return;
+
       try {
-        const exported: unknown = require(join(this.eventsDirectory, file));
-        if (!isEventDefinition(exported)) {
-          logger.warn(`Ignorando evento inválido: ${file}`);
-          continue;
-        }
-
-        this.register(exported);
-        loaded += 1;
-        logger.debug(`Evento carregado: ${exported.name}`);
+        await command.execute(cleanInteraction, this.client);
       } catch (error) {
-        logger.error(`Falha ao carregar evento ${file}`, error);
+        if (isDeadInteractionError(error)) return;
+        console.error(`Erro no comando ${cleanInteraction.commandName}:`, error);
+        try {
+          if (cleanInteraction.replied || cleanInteraction.deferred) {
+            await cleanInteraction.editReply("Não foi possível concluir este comando.");
+          } else {
+            await cleanInteraction.reply({
+              content: "Não foi possível concluir este comando.",
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+        } catch (replyError) {
+          if (!isDeadInteractionError(replyError)) {
+            console.error("Falha ao enviar erro para a interação:", replyError);
+          }
+        }
       }
-    }
-
-    logger.info(`Handler de eventos pronto (${loaded} eventos)`);
-    return loaded;
-  }
-
-  private register<K extends ClientEventName>(event: EventDefinition<K>): void {
-    const listener = (...args: ClientEvents[K]): void => {
-      void this.run(event, args);
-    };
-
-    if (event.once) this.client.once(event.name, listener);
-    else this.client.on(event.name, listener);
-  }
-
-  private async run<K extends ClientEventName>(
-    event: EventDefinition<K>,
-    args: ClientEvents[K],
-  ): Promise<void> {
-    try {
-      await event.execute(...args, this.client);
-    } catch (error) {
-      logger.error(`Erro no evento ${event.name}`, error);
-    }
+    });
   }
 }

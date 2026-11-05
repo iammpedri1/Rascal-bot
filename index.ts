@@ -1,67 +1,204 @@
 import {
   Client,
+  Collection,
   GatewayIntentBits,
+  MessageFlags,
   REST,
   Routes,
-  Collection,
+  type ChatInputCommandInteraction,
+  type Interaction,
+  type InteractionReplyOptions, // <--- Adicionado para corrigir o erro de tipagem
 } from "discord.js";
-import { MessageFlags } from "discord.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as dotenv from "dotenv";
+import { withBrandedResponses } from "./core/InteractionResponseFormatter";
 
 dotenv.config();
 
-const TOKEN = process.env.DISCORD_TOKEN!;
-const CLIENT_ID = process.env.CLIENT_ID!;
-const GUILD_ID = process.env.GUILD_ID!;
+// ---------- constantes ----------
+const COMMANDS_DIR = path.join(__dirname, "commands");
 
-const commandsPath = path.join(__dirname, "commands");
-function loadCommandFiles(): string[] {
+const ERR_INTERACTION_EXPIRED = 10062;
+const ERR_INTERACTION_ACKNOWLEDGED = 40060;
+const ERR_UNKNOWN_CHANNEL = 10003;
+const ERR_UNKNOWN_MESSAGE = 10008;
+
+const DEAD_INTERACTION_CODES = new Set<number>([
+  ERR_INTERACTION_EXPIRED,
+  ERR_INTERACTION_ACKNOWLEDGED,
+  ERR_UNKNOWN_CHANNEL,
+  ERR_UNKNOWN_MESSAGE,
+]);
+
+// ---------- tipos ----------
+interface BotConfig {
+  token: string;
+  clientId: string;
+  guildId: string | undefined;
+}
+
+interface BotCommand {
+  data: { name: string; toJSON(): unknown };
+  execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+}
+
+// ---------- config ----------
+function loadConfig(): BotConfig {
+  const token = process.env.DISCORD_TOKEN;
+  const clientId = process.env.CLIENT_ID;
+  const guildId = process.env.GUILD_ID || undefined;
+
+  if (!token) throw new Error("DISCORD_TOKEN é obrigatório no .env");
+  if (!clientId) throw new Error("CLIENT_ID é obrigatório no .env");
+
+  return { token, clientId, guildId };
+}
+
+// ---------- helpers de erro ----------
+function getErrorCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const asRecord = error as { code?: number; rawError?: { code?: number } };
+  return asRecord.code ?? asRecord.rawError?.code;
+}
+
+function isDeadInteractionError(error: unknown): boolean {
+  const code = getErrorCode(error);
+  return code !== undefined && DEAD_INTERACTION_CODES.has(code);
+}
+
+// ---------- carregamento de comandos ----------
+function listCommandFiles(): string[] {
   const files: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith(".ts") || entry.name.endsWith(".js")) files.push(full);
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+      console.error(`[loader] não foi possível ler ${dir}:`, error);
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(fullPath);
+      else if (/\.(ts|js)$/.test(entry.name)) files.push(fullPath);
     }
   };
-  walk(commandsPath);
+  walk(COMMANDS_DIR);
   return files;
 }
 
-async function registerCommands() {
-  const body: any[] = [];
-  for (const file of loadCommandFiles()) {
-    delete require.cache[require.resolve(file)];
-    const mod = require(file);
+function loadCommandFrom(filePath: string): BotCommand | undefined {
+  try {
+    delete require.cache[require.resolve(filePath)];
+    const mod = require(filePath);
     const command = mod.default ?? mod;
-    if (command?.data && command?.execute) body.push(command.data.toJSON());
-    else console.log(`[AVISO] ${file} sem "data" ou "execute"`);
+
+    if (!command?.data || typeof command?.execute !== "function") {
+      console.warn(`[loader] ${filePath} não exporta { data, execute }`);
+      return undefined;
+    }
+    if (typeof command.data.name !== "string" || typeof command.data.toJSON !== "function") {
+      console.warn(`[loader] ${filePath} tem "data" inválido`);
+      return undefined;
+    }
+    return command as BotCommand;
+  } catch (error) {
+    console.error(`[loader] erro ao carregar ${filePath}:`, error);
+    return undefined;
   }
-
-  const rest = new REST().setToken(TOKEN);
-  const route = GUILD_ID
-    ? Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID) 
-    : Routes.applicationCommands(CLIENT_ID);                 
-
-  await rest.put(route, { body });
-  console.log(`✅ ${body.length} comando(s) registrado(s)`);
 }
 
-const commands = new Collection<string, any>();
-function reloadCommandCache() {
-  commands.clear();
-  for (const file of loadCommandFiles()) {
-    delete require.cache[require.resolve(file)];
-    const mod = require(file);
-    const command = mod.default ?? mod;
-    if (command?.data && command?.execute) {
-      commands.set(command.data.name, command);
-    }
+function loadAllCommands(): BotCommand[] {
+  const commands: BotCommand[] = [];
+  for (const file of listCommandFiles()) {
+    const command = loadCommandFrom(file);
+    if (command) commands.push(command);
   }
+  return commands;
+}
+
+// ---------- registro ----------
+async function registerCommands(config: BotConfig, commands: BotCommand[]): Promise<void> {
+  if (commands.length === 0) {
+    console.warn("[register] nenhum comando válido para registrar");
+    return;
+  }
+
+  const body = commands.map((command) => command.data.toJSON());
+  const rest = new REST({ timeout: 30_000 }).setToken(config.token);
+  const route = config.guildId
+    ? Routes.applicationGuildCommands(config.clientId, config.guildId)
+    : Routes.applicationCommands(config.clientId);
+
+  try {
+    await rest.put(route, { body });
+    console.log(
+      `✅ ${body.length} comando(s) registrado(s)${config.guildId ? ` (guild ${config.guildId})` : " (global)"}`,
+    );
+  } catch (error) {
+    console.error("[register] falha ao registrar comandos:", error);
+  }
+}
+
+// ---------- cache ----------
+const commands = new Collection<string, BotCommand>();
+
+function cacheCommands(list: BotCommand[]): void {
+  commands.clear();
+  for (const command of list) commands.set(command.data.name, command);
   console.log(`📦 ${commands.size} comando(s) carregado(s) na memória`);
 }
+
+// ---------- interação ----------
+async function respondWithError(interaction: Interaction): Promise<void> {
+  if (!interaction.isRepliable()) return;
+
+  // Tipagem explícita para o TypeScript não reclamar do enum de flags
+  const payload: InteractionReplyOptions = {
+    content: "❌ Ocorreu um erro ao executar o comando.",
+    flags: MessageFlags.Ephemeral,
+  };
+
+  try {
+    if (interaction.replied || interaction.deferred) await interaction.followUp(payload);
+    else await interaction.reply(payload);
+  } catch (replyError) {
+    if (!isDeadInteractionError(replyError)) {
+      console.error("[interaction] falha ao responder erro:", replyError);
+    }
+  }
+}
+
+async function handleCommandInteraction(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const command = commands.get(interaction.commandName);
+
+  if (!command) {
+    try {
+      await interaction.reply({
+        content: "❌ Este comando não está disponível (cache desatualizado). Reinicie o bot.",
+        flags: MessageFlags.Ephemeral,
+      });
+    } catch (error) {
+      if (!isDeadInteractionError(error)) {
+        console.error("[interaction] falha ao avisar comando ausente:", error);
+      }
+    }
+    return;
+  }
+
+  try {
+    await command.execute(withBrandedResponses(interaction, client));
+  } catch (error) {
+    console.error(`[comando:${interaction.commandName}] erro:`, error);
+    if (isDeadInteractionError(error)) return;
+    await respondWithError(interaction);
+  }
+}
+
+// ---------- client ----------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -72,30 +209,71 @@ const client = new Client({
 });
 
 client.once("clientReady", () => {
-  console.log(`🤖 Bot online como ${client.user?.tag}`);
+  console.log(`🤖 Bot online como ${client.user?.tag ?? "desconhecido"}`);
 });
 
-client.on("interactionCreate", async (interaction) => {
+client.on("interactionCreate", (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-  const command = commands.get(interaction.commandName);
-  if (!command) return;
-  try {
-    await command.execute(interaction);
-  } catch (err) {
-    console.error(`Erro no comando ${interaction.commandName}:`, err);
-    const msg = { content: "❌ Ocorreu um erro ao executar o comando.", ephemeral: true };
-    if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
-    else await interaction.reply(msg);
-  }
+  void handleCommandInteraction(interaction).catch((error) => {
+    console.error("[interaction] erro fatal no handler:", error);
+  });
 });
 
-(async () => {
+client.on("error", (error) => {
+  console.error("[client] erro de gateway:", error);
+});
+
+client.on("warn", (info) => {
+  console.warn("[client] aviso:", info);
+});
+
+client.on("shardDisconnect", (event, shardId) => {
+  console.warn(`[client] shard ${shardId} desconectado (${event.code})`);
+});
+
+client.on("shardReconnecting", (shardId) => {
+  console.log(`[client] shard ${shardId} reconectando...`);
+});
+
+// ---------- segurança de processo ----------
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ Unhandled rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("⚠️ Uncaught exception:", error);
+});
+
+async function shutdown(signal: string): Promise<void> {
+  console.log(`\n${signal} recebido; desligando com segurança...`);
   try {
-    await registerCommands();
-    reloadCommandCache();
-    await client.login(TOKEN);
-  } catch (err) {
-    console.error("❌ Falha ao iniciar:", err);
+    await client.destroy();
+  } catch (error) {
+    console.error("[shutdown] erro ao fechar client:", error);
+  }
+  process.exit(0);
+}
+
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+// ---------- boot ----------
+async function boot(): Promise<void> {
+  const config = loadConfig();
+
+  const loaded = loadAllCommands();
+  await registerCommands(config, loaded);
+  cacheCommands(loaded);
+
+  try {
+    await client.login(config.token);
+  } catch (error) {
+    console.error("❌ Falha no login:", error);
     process.exit(1);
   }
-})();
+}
+
+void boot().catch((error) => {
+  console.error("❌ Falha fatal no boot:", error);
+  process.exit(1);
+});

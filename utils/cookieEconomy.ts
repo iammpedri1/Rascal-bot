@@ -26,11 +26,45 @@ const DAILY_MILESTONE_MIN = 1000;
 const DAILY_MILESTONE_MAX = 3000;
 
 // Work
+const WORK_MIN_LOSS = 300;
+const WORK_MAX_LOSS = 800;
+const WORK_TOOL_MIN_LOSS = 100;
+const WORK_TOOL_MAX_LOSS = 300;
 const WORK_MIN_REWARD = 50;
 const WORK_MAX_REWARD = 300;
-const WORK_MIN_LOSS = 100;
-const WORK_MAX_LOSS = 300;
-const WORK_DISMISSAL_CHANCE = 0.1;
+
+const WORK_PROFESSIONS = [
+  ["Jardineiro(a)", "🌳", 800, 1500],
+  ["Programador(a)", "💻", 1500, 3000],
+  ["Cozinheiro(a)", "👨‍🍳", 700, 1200],
+  ["Astronauta", "👨‍🚀", 5000, 10000],
+  ["Advogado(a)", "⚖️", 2000, 4500],
+  ["Médico(a)", "🩺", 2500, 5000],
+  ["Streamer", "🎮", 100, 8000],
+  ["Padeiro(a)", "🥖", 600, 1100],
+  ["Motorista de app", "🚗", 800, 1600],
+  ["Professor(a)", "📚", 1000, 2500],
+  ["Policial", "👮", 1200, 3000],
+  ["Youtuber", "🎥", 50, 9000],
+  ["Minerador(a)", "⛏️", 900, 2200],
+  ["Lixeiro(a)", "🗑️", 500, 1000],
+  ["Encanador(a)", "🔧", 700, 1400],
+  ["Cientista", "🔬", 3000, 7000],
+  ["Piloto de avião", "✈️", 4000, 8000],
+  ["Chef de cozinha", "🍳", 2000, 4000],
+  ["Personal trainer", "💪", 1200, 2500],
+  ["Fotógrafo(a)", "📸", 900, 2000],
+  ["Designer gráfico", "🎨", 1100, 2400],
+  ["Músico", "🎸", 300, 5000],
+  ["Ator / Atriz", "🎭", 500, 7000],
+  ["Veterinário(a)", "🐶", 1800, 3500],
+  ["Arquiteto(a)", "📐", 2200, 4800],
+  ["Carteiro(a)", "📬", 600, 1200],
+  ["Bombeiro(a)", "🚒", 1500, 2800],
+  ["Dentista", "🦷", 2000, 4200],
+  ["Jornalista", "📰", 1100, 2600],
+  ["Zelador(a)", "🧹", 500, 1000],
+] as const;
 
 // Roubo — balanceado
 const ROB_MIN_TARGET_BALANCE = 50;   // era 20 — evita roubar quem não tem nada
@@ -388,7 +422,10 @@ function work(user, details: TransactionDetails = {}) {
     const currentProfile = getById(profile.id);
     updateStats(profile.id, { work_count: 1 });
 
-    if (Math.random() > 1 - WORK_DISMISSAL_CHANCE) {
+    const roll = Math.random();
+    const profession = WORK_PROFESSIONS[Math.floor(Math.random() * WORK_PROFESSIONS.length)];
+
+    if (roll < 0.15) {
       // A multa nunca pode exceder o saldo que realmente existe.
       const loss = Math.min(currentProfile.balance, randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS));
       if (loss > 0) {
@@ -407,26 +444,55 @@ function work(user, details: TransactionDetails = {}) {
         loss,
         reason: details.reason || null,
         job: details.job || null,
+        event: "dismissal",
         nextAt,
       };
     }
 
-    const baseReward = randomAmount(WORK_MIN_REWARD, WORK_MAX_REWARD);
+    if (roll >= 0.90) {
+      const loss = Math.min(currentProfile.balance, randomAmount(WORK_TOOL_MIN_LOSS, WORK_TOOL_MAX_LOSS));
+      if (loss > 0) {
+        addBalance(profile.id, -loss);
+        updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
+        pushTransaction("work_tool_break", profile.id, -loss, {
+          ...details,
+          note: "Ferramenta quebrada durante o expediente",
+        });
+      }
+
+      return {
+        worked: true,
+        success: false,
+        event: "tool_break",
+        profile: getById(profile.id),
+        loss,
+        job: `${profession[0]} ${profession[1]}`,
+        nextAt,
+      };
+    }
+
+    const baseReward = randomAmount(profession[2], profession[3]);
     const reward = applyCookieBonuses(profile.id, baseReward);
-    addBalance(profile.id, reward);
-    updateStats(profile.id, { cookies_won: reward, total_earned: reward });
-    pushTransaction("work", profile.id, reward, {
+    const critical = roll >= 0.15 && roll < 0.20;
+    const bonus = critical ? randomAmount(100, 300) : 0;
+    const totalReward = critical ? reward * 2 + bonus : reward;
+    addBalance(profile.id, totalReward);
+    updateStats(profile.id, { cookies_won: totalReward, total_earned: totalReward });
+    pushTransaction("work", profile.id, totalReward, {
       ...details,
-      note: details.job || details.note,
+      note: `${profession[0]}${critical ? " (sucesso crítico)" : ""}`,
     });
 
     return {
       worked: true,
       success: true,
+      event: critical ? "critical" : "success",
       profile: getById(profile.id),
-      reward,
+      reward: totalReward,
+      baseReward,
+      bonus,
       perkBonus: reward - baseReward,
-      job: details.job || null,
+      job: `${profession[0]} ${profession[1]}`,
       nextAt,
     };
   });

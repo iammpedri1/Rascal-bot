@@ -1,4 +1,10 @@
-import { EmbedBuilder, type Client, type Interaction } from "discord.js";
+import {
+  EmbedBuilder,
+  type Client,
+  type Interaction,
+  type ChatInputCommandInteraction,
+  type InteractionReplyOptions,
+} from "discord.js";
 
 const { randomColor } = require("../utils/embedStyle") as {
   randomColor: () => number;
@@ -103,7 +109,7 @@ function formatEmbed(embed: unknown): unknown {
   try {
     if (embed instanceof EmbedBuilder) {
       const json = embed.toJSON() as Record<string, unknown>;
-      json.color = safeColor();
+      if (typeof json.color !== "number") json.color = safeColor();
       return stripBranding(normalizeEmbedLimits(json));
     }
 
@@ -113,10 +119,9 @@ function formatEmbed(embed: unknown): unknown {
 
     if (!isRecord(embed)) return embed;
 
-    return {
-      ...stripBranding(normalizeEmbedLimits(embed)),
-      color: safeColor(),
-    };
+    const normalized = stripBranding(normalizeEmbedLimits(embed));
+    if (typeof normalized.color !== "number") normalized.color = safeColor();
+    return normalized;
   } catch (error) {
     console.error("[formatter] falha ao formatar embed:", error);
     return embed;
@@ -185,6 +190,67 @@ function formatPayload(payload: unknown): unknown {
   } catch (error) {
     console.error("[formatter] falha ao formatar payload:", error);
     return payload;
+  }
+}
+
+/**
+ * Publica uma resposta sem o avatar/nome do bot e remove o webhook logo depois.
+ * Interações sem canal compatível continuam usando a resposta deferida normal.
+ */
+export async function sendViaWebhook(
+  interaction: Pick<ChatInputCommandInteraction, "channel" | "isRepliable" | "deferred" | "editReply" | "deleteReply">,
+  payload: InteractionReplyOptions,
+): Promise<unknown> {
+  const channel = interaction.channel;
+  const webhookChannel = channel && "createWebhook" in channel
+    ? channel as {
+      createWebhook(options: { name: string }): Promise<{
+        send(options: Record<string, unknown>): Promise<unknown>;
+        delete(): Promise<unknown>;
+      }>;
+    }
+    : null;
+
+  if (!webhookChannel || !interaction.isRepliable()) {
+    if (interaction.isRepliable()) {
+      return interaction.editReply(payload as Parameters<typeof interaction.editReply>[0]);
+    }
+    throw new Error("A interação não possui um canal compatível nem permite resposta.");
+  }
+
+  let webhook: Awaited<ReturnType<typeof webhookChannel.createWebhook>> | undefined;
+  let sentViaWebhook = false;
+  try {
+    webhook = await webhookChannel.createWebhook({ name: " " });
+    const formatted = formatPayload(payload);
+    const result = await webhook.send({
+      ...(isRecord(formatted) ? formatted : {}),
+      username: " ",
+      avatarURL: null,
+    });
+    sentViaWebhook = true;
+    return result;
+  } catch (error) {
+    console.error("[formatter] falha ao enviar via webhook; usando resposta deferida:", error);
+    if (interaction.isRepliable()) {
+      return interaction.editReply(payload as Parameters<typeof interaction.editReply>[0]);
+    }
+    throw error;
+  } finally {
+    if (webhook) {
+      try {
+        await webhook.delete();
+      } catch (error) {
+        console.error("[formatter] falha ao remover webhook temporário:", error);
+      }
+    }
+    if (sentViaWebhook && interaction.isRepliable() && interaction.deferred) {
+      try {
+        await interaction.deleteReply();
+      } catch (error) {
+        console.error("[formatter] falha ao remover resposta deferida:", error);
+      }
+    }
   }
 }
 

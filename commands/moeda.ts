@@ -1,5 +1,5 @@
 import { defineCommand } from "../types/command";
-const { EmbedBuilder, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
+const { EmbedBuilder, MessageFlags, SlashCommandBuilder } = require("discord.js") as typeof import("discord.js");
 const { buildInlineErrorEmbed } = require("../utils/cookieViews");
 const emoji = require("../utils/emojis");
 
@@ -156,7 +156,7 @@ module.exports = defineCommand({
     if (de === para) {
       return interaction.reply({
         embeds: [buildInlineErrorEmbed(`${emoji.peepSad} As moedas de origem e destino devem ser diferentes.`)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 

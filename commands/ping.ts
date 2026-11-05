@@ -37,11 +37,14 @@ module.exports = defineCommand({
     const rawApiPing = Number(interaction.client.ws.ping);
     const apiPing = Number.isFinite(rawApiPing) && rawApiPing >= 0 ? Math.round(rawApiPing) : -1;
     const memory = collectRuntimeMetrics();
+    const startedTimestamp = interaction.client.readyAt
+      ? Math.floor(interaction.client.readyAt.getTime() / 1000)
+      : Math.floor((Date.now() - (interaction.client.uptime ?? 0)) / 1000);
     const content = [
       `${icon("ping", "🏓")} ${interaction.user} Latência verificada com sucesso.`,
-      `${icon("clock", "🗓️")} **Tempo de Atividade:** \`${formatUptime(interaction.client.uptime)}\``,
-      `${icon("server", "🌐")} **Latência da API:** ${apiPing >= 0 ? `${apiPing}ms` : "Reconectando..."}`,
-      `${icon("botFlag", "💬")} **Latência do Bot:** ${responseTime}ms`,
+      `${icon("server", "🌐")} **Latência da API:** ${apiPing >= 0 ? `\`${apiPing}ms\`` : "Reconectando..."}`,
+      `${icon("botFlag", "💬")} **Resposta:** \`${responseTime}ms\``,
+      `${icon("clock", "🗓️")} **Uptime:** ${formatUptime(interaction.client.uptime)} (online <t:${startedTimestamp}:R>)`,
       `${icon("botFlag", "💬")} **Memória RAM:** ${formatBytes(memory.rssBytes)} (Heap: ${formatBytes(memory.heapUsedBytes)})`,
     ].join("\n");
     return interaction.editReply({ content, allowedMentions: { users: [interaction.user.id] } });

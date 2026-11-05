@@ -37,9 +37,13 @@ function buildPage(interaction, requestedPage: number, global = false) {
     .setTitle(title)
     .setThumbnail(global ? interaction.guild.iconURL({ size: 256 }) : interaction.user.displayAvatarURL({ size: 256 }))
     .setDescription(rows.length
-      ? rows.map(row => describeTransaction(row, resolveEmoji)).join("\n\n")
+      ? rows.map(row => `────────────\n${describeTransaction(row, resolveEmoji)}`).join("\n")
       : "Nenhuma transação registrada no momento.")
-    .setFooter({ text: `Página ${current + 1} de ${pages} | Quantidade de Transações (${total})` });
+    .addFields({
+      name: "Navegação",
+      value: `Página **${current + 1}** de **${pages}** · ${total} transação(ões)`,
+      inline: false,
+    });
 
   const buttons = new ActionRowBuilder().addComponents(
     emoji.setGuildButtonEmoji(new ButtonBuilder()
