@@ -6,7 +6,7 @@ import {
   type ClientOptions,
 } from "discord.js";
 import { CommandHandler } from "../handlers/commandHandler";
-import { EventHandler } from "../handlers/eventHandler";
+import { EventLoader } from "../handlers/eventLoader";
 import type { CommandDefinition } from "../types/command";
 import type { Logger } from "../types/logger";
 
@@ -70,8 +70,7 @@ export class RascalClient extends Client {
     try {
       // Carrega handlers (podem lançar erro se algum arquivo estiver corrompido)
       new CommandHandler(this).load();
-      new EventHandler(this).load();
-
+      new EventLoader(this).load();
       // Efetua o login
       await this.login(token);
       

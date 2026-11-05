@@ -1,4 +1,5 @@
 import { defineCommand } from "../types/command";
+import { randomUUID } from "node:crypto";
 const {
   SlashCommandBuilder,
   EmbedBuilder,
@@ -8,7 +9,7 @@ const {
   ComponentType,
 } = require("discord.js") as typeof import("discord.js");
 
-const { canBet, settleDuel } = require("../utils/cookieEconomy");
+const { reserveStakes, resolveGame, refundGameBets } = require("../utils/gameEconomy");
 const { getAnimeGif } = require("../utils/animeGifs");
 const emoji = require("../utils/emojis");
 const logger = require("../utils/logger");
@@ -81,6 +82,7 @@ module.exports = defineCommand({
       guildId: interaction.guild?.id,
       guildName: interaction.guild?.name,
     };
+    const gameId = `coin-${randomUUID()}`;
 
     if (opponent.id === interaction.user.id) {
       return interaction.reply({
@@ -96,7 +98,12 @@ module.exports = defineCommand({
       });
     }
 
-    if (!canBet(interaction.user, amount)) {
+    const reservation = reserveStakes(gameId, [{
+      userId: interaction.user.id,
+      username: interaction.user.username,
+      amount,
+    }], economyContext);
+    if (!reservation.ok) {
       return interaction.reply({
         content: `Saldo insuficiente. Você não possui ${COOKIE_EMOJI} **${amount.toLocaleString("pt-BR")} cookies** para esta aposta. Verifique seu saldo com \`/cookies saldo\`.`,
         flags: 64,
@@ -127,7 +134,15 @@ module.exports = defineCommand({
       });
 
       const message = await interaction.fetchReply();
-      const { winner, loser } = settleDuel(winnerUser, loserUser, amount, economyContext);
+      const [winnerBalance] = resolveGame(gameId, [{
+        userId: interaction.user.id,
+        username: interaction.user.username,
+        outcome: challengerWon ? "win" : "loss",
+        payout: challengerWon ? amount * 2 : 0,
+        note: "Cara ou coroa contra a casa",
+      }], economyContext);
+      const winner = challengerWon ? winnerBalance : { balance: 0 };
+      const loser = challengerWon ? { balance: 0 } : winnerBalance;
       const gif = await getAnimeGif("win");
 
       await wait(1800);
@@ -215,6 +230,7 @@ module.exports = defineCommand({
           finished = true;
           collector.stop("declined");
 
+          refundGameBets(gameId, economyContext);
           return buttonInteraction.update({
             embeds: [
               new EmbedBuilder()
@@ -226,9 +242,17 @@ module.exports = defineCommand({
           });
         }
 
-        if (!canBet(interaction.user, bet) || (!isHouseBot(interaction, opponent) && !canBet(opponent, bet))) {
+        const opponentReservation = isHouseBot(interaction, opponent)
+          ? { ok: true }
+          : reserveStakes(gameId, [{
+            userId: opponent.id,
+            username: opponent.username,
+            amount: bet,
+          }], economyContext);
+        if (!opponentReservation.ok) {
           finished = true;
           collector.stop("no_balance");
+          refundGameBets(gameId, economyContext);
 
           return buttonInteraction.update({
             content: "Saldo insuficiente para um dos participantes. A aposta não pode ser concluída.",
@@ -263,7 +287,32 @@ module.exports = defineCommand({
           components: [],
         });
 
-        const { winner, loser } = settleDuel(winnerUser, loserUser, bet, economyContext);
+        const balances = resolveGame(gameId, isHouseBot(interaction, opponent)
+          ? [{
+            userId: interaction.user.id,
+            username: interaction.user.username,
+            outcome: challengerWon ? "win" : "loss",
+            payout: challengerWon ? bet * 2 : 0,
+            note: "Cara ou coroa contra a casa",
+          }]
+          : [
+            {
+              userId: interaction.user.id,
+              username: interaction.user.username,
+              outcome: challengerWon ? "win" : "loss",
+              payout: challengerWon ? bet * 2 : 0,
+              note: "Cara ou coroa",
+            },
+            {
+              userId: opponent.id,
+              username: opponent.username,
+              outcome: challengerWon ? "loss" : "win",
+              payout: challengerWon ? 0 : bet * 2,
+              note: "Cara ou coroa",
+            },
+          ], economyContext);
+        const winner = balances.find(result => result.userId === winnerUser.id) ?? { balance: 0 };
+        const loser = balances.find(result => result.userId === loserUser.id) ?? { balance: 0 };
         const gif = await getAnimeGif("win");
 
         await wait(1800);
@@ -316,6 +365,11 @@ module.exports = defineCommand({
 
     collector.on("end", () => {
       if (finished) return;
+      try {
+        refundGameBets(gameId, economyContext);
+      } catch (error) {
+        logger.error("Falha ao estornar aposta expirada do /cara-ou-coroa", error, { gameId });
+      }
 
       message.edit({
         content: "O tempo limite expirou. O desafio foi cancelada automaticamente.",
