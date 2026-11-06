@@ -13,6 +13,8 @@
     "register:compiled": "node dist/slash-commands.js",
     "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
     "security:check": "npm run build && node dist/scripts/security-check.js",
+    "native:build": "napi build --manifest-path rust/Cargo.toml --package rascal-native --release --platform --output-dir native --js rascal-native.js --dts rascal-native.d.ts",
+    "benchmark:text": "npm run build && npm run native:build && node dist/scripts/benchmark-text-normalizer.js",
     "service:install": "npm run build && node dist/scripts/install-service.js",
     "service:uninstall": "npm run build && node dist/scripts/uninstall-service.js"
   },
@@ -23,6 +25,7 @@
     "dotenv": "^17.4.2"
   },
   "devDependencies": {
+    "@napi-rs/cli": "3.10.12",
     "@types/node": "^24.19.2",
     "node-windows": "^1.0.0-beta.8",
     "tsx": "^4.23.15",

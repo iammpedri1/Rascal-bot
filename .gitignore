@@ -1,5 +1,9 @@
 node_modules/
 dist/
+native/*.js
+native/*.d.ts
+native/*.node
+rust/target/
 
 # Secrets and local environment
 .env
