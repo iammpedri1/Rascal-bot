@@ -3,6 +3,7 @@ const cooldowns = require("./cooldowns");
 const { PRIMARY_GUILD_ID } = require("./primaryGuild");
 const blackMarket = require("./blackMarket") as typeof import("./blackMarket");
 const { COLOR_ITEMS, COOLDOWN_TARGETS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
+const { resolveNativeWorkRoll } = require("./nativeWork") as typeof import("./nativeWork");
 const MAX_COOKIE_AMOUNT = 2_147_483_647;
 
 interface TransactionDetails {
@@ -414,99 +415,118 @@ function getDailyStreak(user) {
 
 function work(user, details: TransactionDetails = {}) {
   return db.transaction(() => {
-  const profile = getUser(user);
-  const cooldown = cooldowns.check(profile.id, "trabalhar");
+    const profile = getUser(user);
+    const cooldown = cooldowns.check(profile.id, "trabalhar");
 
-  if (!cooldown.ready) {
-    return {
-      worked: false,
-      profile,
-      remaining: cooldown.remaining,
-      nextAt: cooldown.expiresAt,
-    };
-  }
-
-  const nextAt = cooldowns.consume(profile.id, "trabalhar");
-  const settleWork = db.transaction(() => {
-    const currentProfile = getById(profile.id);
-    updateStats(profile.id, { work_count: 1 });
-
-    const roll = Math.random();
-    const profession = WORK_PROFESSIONS[Math.floor(Math.random() * WORK_PROFESSIONS.length)];
-
-    if (roll < 0.15) {
-      // A multa nunca pode exceder o saldo que realmente existe.
-      const loss = Math.min(currentProfile.balance, randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS));
-      if (loss > 0) {
-        addBalance(profile.id, -loss);
-        updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
-        pushTransaction("work_dismissal", profile.id, -loss, {
-          ...details,
-          note: `Demitido(a): ${details.reason || details.note || "desempenho inadequado"}`,
-        });
-      }
-
+    if (!cooldown.ready) {
       return {
-        worked: true,
-        success: false,
-        profile: getById(profile.id),
-        loss,
-        reason: details.reason || null,
-        job: details.job || null,
-        event: "dismissal",
-        nextAt,
+        worked: false,
+        profile,
+        remaining: cooldown.remaining,
+        nextAt: cooldown.expiresAt,
       };
     }
 
-    if (roll >= 0.90) {
-      const loss = Math.min(currentProfile.balance, randomAmount(WORK_TOOL_MIN_LOSS, WORK_TOOL_MAX_LOSS));
-      if (loss > 0) {
-        addBalance(profile.id, -loss);
-        updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
-        pushTransaction("work_tool_break", profile.id, -loss, {
-          ...details,
-          note: "Ferramenta quebrada durante o expediente",
-        });
+    const nextAt = cooldowns.consume(profile.id, "trabalhar");
+    const settleWork = db.transaction(() => {
+      const currentProfile = getById(profile.id);
+      updateStats(profile.id, { work_count: 1 });
+
+      const randomValues: [number, number, number, number, number, number] = [
+        Math.random(),
+        Math.random(),
+        Math.random(),
+        Math.random(),
+        Math.random(),
+        Math.random(),
+      ];
+      const nativeRoll = resolveNativeWorkRoll(randomValues);
+      const roll = randomValues[0];
+      const professionIndex = nativeRoll?.professionIndex
+        ?? Math.floor(randomValues[1] * WORK_PROFESSIONS.length);
+      const profession = WORK_PROFESSIONS[professionIndex];
+      const event = nativeRoll?.event
+        ?? (roll < 0.15 ? "dismissal" : roll >= 0.90 ? "tool_break" : roll < 0.20 ? "critical" : "success");
+
+      if (event === "dismissal") {
+        const loss = Math.min(
+          currentProfile.balance,
+          nativeRoll?.loss ?? randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS),
+        );
+        if (loss > 0) {
+          addBalance(profile.id, -loss);
+          updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
+          pushTransaction("work_dismissal", profile.id, -loss, {
+            ...details,
+            note: `Demitido(a): ${details.reason || details.note || "desempenho inadequado"}`,
+          });
+        }
+
+        return {
+          worked: true,
+          success: false,
+          profile: getById(profile.id),
+          loss,
+          reason: details.reason || null,
+          job: details.job || null,
+          event,
+          nextAt,
+        };
       }
+
+      if (event === "tool_break") {
+        const loss = Math.min(
+          currentProfile.balance,
+          nativeRoll?.loss ?? randomAmount(WORK_TOOL_MIN_LOSS, WORK_TOOL_MAX_LOSS),
+        );
+        if (loss > 0) {
+          addBalance(profile.id, -loss);
+          updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
+          pushTransaction("work_tool_break", profile.id, -loss, {
+            ...details,
+            note: "Ferramenta quebrada durante o expediente",
+          });
+        }
+
+        return {
+          worked: true,
+          success: false,
+          event,
+          profile: getById(profile.id),
+          loss,
+          job: `${profession[0]} ${profession[1]}`,
+          nextAt,
+        };
+      }
+
+      const baseReward = nativeRoll?.baseReward
+        ?? randomAmount(profession[2], profession[3]);
+      const reward = applyCookieBonuses(profile.id, baseReward);
+      const critical = event === "critical";
+      const bonus = nativeRoll?.bonus ?? (critical ? randomAmount(100, 300) : 0);
+      const totalReward = critical ? reward * 2 + bonus : reward;
+      addBalance(profile.id, totalReward);
+      updateStats(profile.id, { cookies_won: totalReward, total_earned: totalReward });
+      pushTransaction("work", profile.id, totalReward, {
+        ...details,
+        note: `${profession[0]}${critical ? " (sucesso crítico)" : ""}`,
+      });
 
       return {
         worked: true,
-        success: false,
-        event: "tool_break",
+        success: true,
+        event,
         profile: getById(profile.id),
-        loss,
+        reward: totalReward,
+        baseReward,
+        bonus,
+        perkBonus: reward - baseReward,
         job: `${profession[0]} ${profession[1]}`,
         nextAt,
       };
-    }
-
-    const baseReward = randomAmount(profession[2], profession[3]);
-    const reward = applyCookieBonuses(profile.id, baseReward);
-    const critical = roll >= 0.15 && roll < 0.20;
-    const bonus = critical ? randomAmount(100, 300) : 0;
-    const totalReward = critical ? reward * 2 + bonus : reward;
-    addBalance(profile.id, totalReward);
-    updateStats(profile.id, { cookies_won: totalReward, total_earned: totalReward });
-    pushTransaction("work", profile.id, totalReward, {
-      ...details,
-      note: `${profession[0]}${critical ? " (sucesso crítico)" : ""}`,
     });
 
-    return {
-      worked: true,
-      success: true,
-      event: critical ? "critical" : "success",
-      profile: getById(profile.id),
-      reward: totalReward,
-      baseReward,
-      bonus,
-      perkBonus: reward - baseReward,
-      job: `${profession[0]} ${profession[1]}`,
-      nextAt,
-    };
-  });
-
-  return settleWork();
+    return settleWork();
   })();
 }
 
