@@ -4,6 +4,7 @@ native/*.js
 native/*.d.ts
 native/*.node
 rust/target/
+rascal-rust/target/
 
 # Secrets and local environment
 .env

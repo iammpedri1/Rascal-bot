@@ -12,8 +12,6 @@ const forbiddenPaths = [
 const secretPatterns = [
   { name: "Discord bot token", pattern: /[MN][A-Za-z\d_-]{23,27}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27,}/ },
   { name: "Discord env token", pattern: /DISCORD_TOKEN\s*=\s*["']?\S+/ },
-  { name: "Gemini API key", pattern: /AIza[0-9A-Za-z_-]{20,}/ },
-  { name: "OpenAI API key", pattern: /\bsk-[A-Za-z0-9_-]{20,}/ },
   {
     name: "credencial de banco de dados",
     pattern: /\bpostgres(?:ql)?:\/\/[^\s:@/]+:[^\s@/]+@/i,

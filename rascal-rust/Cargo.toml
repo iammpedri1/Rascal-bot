@@ -1,0 +1,10 @@
+[package]
+name = "rascal-rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dotenvy = "0.15"
+poise = "0.6"
+sysinfo = "0.30"
+tokio = { version = "1.30", features = ["full"] }
