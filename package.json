@@ -8,25 +8,30 @@
   "scripts": {
     "build": "node scripts/clean-dist.cjs && tsc && npm run typecheck:strict",
     "typecheck:strict": "tsc -p tsconfig.strict.json",
-    "start": "npm run build && node dist/index.js",
-    "register": "npm run build && node dist/slash-commands.js",
+    "start": "npm run build && npm run register:compiled && node dist/index.js",
+    "register": "npm run build && npm run register:compiled",
+    "register:compiled": "node dist/slash-commands.js",
     "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
     "security:check": "npm run build && node dist/scripts/security-check.js",
+    "native:build": "napi build --manifest-path rust/Cargo.toml --package rascal-native --release --platform --output-dir native --js rascal-native.js --dts rascal-native.d.ts",
+    "benchmark:text": "npm run build && npm run native:build && node dist/scripts/benchmark-text-normalizer.js",
     "service:install": "npm run build && node dist/scripts/install-service.js",
     "service:uninstall": "npm run build && node dist/scripts/uninstall-service.js"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1163.0",
-    "@aws-sdk/lib-dynamodb": "^3.1163.0",
     "@napi-rs/canvas": "^1.0.0",
     "better-sqlite3": "^13.0.3",
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2"
   },
   "devDependencies": {
+    "@napi-rs/cli": "3.10.12",
     "@types/node": "^24.19.2",
     "node-windows": "^1.0.0-beta.8",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "ws": "^8.21.0"
   }
 }

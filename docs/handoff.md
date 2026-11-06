@@ -25,8 +25,8 @@ Bot de Discord em **TypeScript + discord.js v14**, com persistência local em **
 npm ci                    # instala dependências (Node.js 22+)
 npm run build             # limpa dist/, compila e roda typecheck:strict
 npm test                  # build + testes (node --test dist/test)
-npm start                 # build + inicia o bot
-npm run register          # publica os slash commands atuais no Discord
+npm start                 # compila, publica os slash commands e inicia o bot
+npm run register          # publica os slash commands sem iniciar o bot
 npm run security:check    # build + varredura de segurança
 npm run service:install   # serviço systemd de usuário (Linux)
 ```

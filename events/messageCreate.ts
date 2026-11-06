@@ -3,6 +3,7 @@ const { handleAutoMod } = require("../utils/automod");
 const { getAfk, removeAfk } = require("../utils/afkStore");
 const { recordMessage } = require("../utils/messageStats");
 const { isPrimaryGuild } = require("../utils/primaryGuild");
+const { normalizeContent } = require("../utils/textNormalizer");
 
 const AFK_REASON_EMOJI = "<:1000106078:1499822832757113024>";
 const BOT_REPLY_GUILD_COOLDOWN = 45 * 1000;
@@ -27,14 +28,6 @@ const randomReplies = () => [
   `${emoji.party} Esse servidor está movimentado hoje.`,
   `${emoji.clock} Lembrete aleatório: beba água.`,
 ];
-
-function normalizeContent(content) {
-  return String(content || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
 
 function canRandomReply(message) {
   const now = Date.now();

@@ -1,0 +1,32 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run security:check
+      - run: cargo fmt --all --check --manifest-path rust/Cargo.toml
+      - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --manifest-path rust/Cargo.toml --workspace --locked
+      - run: npm run native:build
+      - run: node -e "const n=require('./native/rascal-native.js'); if(n.normalizeContent(' Olá ') !== 'ola') process.exit(1)"
