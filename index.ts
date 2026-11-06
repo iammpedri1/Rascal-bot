@@ -1,10 +1,7 @@
 import "dotenv/config";
-import { RascalClient } from "./core/RascalClient";
-
-const { requireDiscordConfig } = require("./utils/discordConfig") as {
-  requireDiscordConfig(): { token: string; clientId: string; guildId: string };
-};
-const logger = require("./utils/logger");
+import { RascalClient } from "./core/RascalClient.js";
+import { requireDiscordConfig } from "./utils/discordConfig.js";
+import logger from "./utils/logger.js";
 
 async function main(): Promise<void> {
   const { token } = requireDiscordConfig();

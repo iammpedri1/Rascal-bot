@@ -28,9 +28,12 @@ import {
   type MinesState,
 } from "../utils/mines";
 
-const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
+const { randomUUID, randomInt } = require("node:crypto") as typeof import("node:crypto");
 const logger = require("../utils/logger");
 const emoji = require("../utils/emojis");
+
+const GRID_SIZE = 3;
+const MAX_MINES = GRID_SIZE * GRID_SIZE - 1;
 
 function boardRows(gameId: string, state: MinesState, revealAll = false): ActionRowBuilder<ButtonBuilder>[] {
   return Array.from({ length: state.gridSize }, (_, row) => {
@@ -75,7 +78,13 @@ function controls(gameId: string, state: MinesState, disabled = false): ActionRo
   );
 }
 
-function embedFor(gameId: string, state: MinesState, totalCells: number, mineCount: number, color = 0x2b2d31): EmbedBuilder {
+function embedFor(
+  gameId: string,
+  state: MinesState,
+  totalCells: number,
+  mineCount: number,
+  color = 0x2b2d31,
+): EmbedBuilder {
   const nextMultiplier = calculateNextMultiplier(totalCells, mineCount, state.revealed.length);
   const nextPayout = state.bet * state.multiplier * nextMultiplier;
   return new EmbedBuilder()
@@ -91,6 +100,11 @@ function embedFor(gameId: string, state: MinesState, totalCells: number, mineCou
     .setFooter({ text: `Partida #${gameId.slice(0, 8).toUpperCase()}` });
 }
 
+async function replyToBusyInteraction(button: ButtonInteraction, content: string): Promise<void> {
+  if (button.replied || button.deferred) return;
+  await button.reply({ content, flags: 64 }).catch(() => undefined);
+}
+
 async function executeMines(interaction: CommandChatInputInteraction): Promise<void> {
   if (!interaction.guild) {
     await interaction.reply({ content: "Este minijogo deve ser iniciado dentro de um servidor.", flags: 64 });
@@ -99,28 +113,23 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
 
   const bet = interaction.options.getInteger("aposta") ?? 0;
   const mineCount = interaction.options.getInteger("minas") ?? 3;
-  const gridSize = interaction.options.getInteger("tamanho") === 5 ? 5 : 3;
-  const totalCells = gridSize * gridSize;
+  const totalCells = GRID_SIZE * GRID_SIZE;
 
-  if (gridSize === 5) {
-    await interaction.reply({
-      content: "O tabuleiro 5x5 não pode ser exibido junto com os controles: o Discord permite no máximo 5 linhas de componentes. Use o tabuleiro 3x3.",
-      flags: 64,
-    });
+  if (!Number.isSafeInteger(bet) || bet < 0 || bet > 1_000_000) {
+    await interaction.reply({ content: "A aposta deve ser um inteiro entre 0 e 1.000.000 cookies.", flags: 64 });
     return;
   }
-
-  if (!Number.isSafeInteger(bet) || bet < 0) {
-    await interaction.reply({ content: "A aposta deve ser um número inteiro não negativo.", flags: 64 });
-    return;
-  }
-  if (mineCount < 1 || mineCount >= totalCells) {
-    await interaction.reply({ content: `Escolha entre 1 e ${totalCells - 1} minas para um tabuleiro ${gridSize}x${gridSize}.`, flags: 64 });
+  if (!Number.isSafeInteger(mineCount) || mineCount < 1 || mineCount > MAX_MINES) {
+    await interaction.reply({ content: `Escolha entre 1 e ${MAX_MINES} minas para o tabuleiro 3x3.`, flags: 64 });
     return;
   }
 
   const gameId = randomUUID();
   const context = contextFor(interaction);
+  // Construir o estado antes de reservar o jogador evita deixar uma reserva
+  // em memória caso a configuração do jogo seja inválida.
+  const initialState = createMinesGame(bet, mineCount, GRID_SIZE);
+
   if (!activeGames.reserveNew([interaction.user.id], gameId)) {
     await interaction.reply({
       content: "Você já possui uma partida ativa em outro minijogo. Finalize-a ou aguarde a expiração automática.",
@@ -130,7 +139,7 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
   }
 
   let stakeReserved = false;
-  let state = createMinesGame(bet, mineCount, gridSize);
+  let state = initialState;
   let finished = false;
   let processing = false;
 
@@ -143,7 +152,10 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
       }], context);
       if (!reservation.ok) {
         activeGames.releaseGame(gameId);
-        await interaction.reply({ content: `Saldo insuficiente. Seu saldo atual é ${formatCookies(reservation.balance ?? 0)} cookies.`, flags: 64 });
+        await interaction.reply({
+          content: `Saldo insuficiente. Seu saldo atual é ${formatCookies(reservation.balance ?? 0)} cookies.`,
+          flags: 64,
+        });
         return;
       }
       stakeReserved = true;
@@ -161,41 +173,51 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
 
     const finish = (outcome: "win" | "loss" | "refund", payout: number, note: string): void => {
       if (finished) return;
+
+      // Um estorno devolve o hold diretamente. Não chamar resolveGame com
+      // payout 0: resolveGame exige que refund devolva exatamente a aposta.
+      if (stakeReserved) {
+        if (outcome === "refund") {
+          refundGameBets(gameId, context);
+        } else {
+          resolveGame(gameId, [{
+            userId: interaction.user.id,
+            username: interaction.user.username,
+            outcome,
+            payout,
+            note,
+          }], context);
+        }
+        stakeReserved = false;
+      }
+
       finished = true;
       collector.stop(outcome);
-      if (stakeReserved) {
-        resolveGame(gameId, [{
-          userId: interaction.user.id,
-          username: interaction.user.username,
-          outcome,
-          payout,
-          note,
-        }], context);
-      }
       activeGames.releaseGame(gameId);
     };
 
     collector.on("collect", async (button: ButtonInteraction) => {
       if (button.user.id !== interaction.user.id) {
-        await button.reply({ content: "Esta partida pertence a outro usuário.", flags: 64 });
+        await replyToBusyInteraction(button, "Esta partida pertence a outro usuário.");
         return;
       }
-      if (processing || finished) return;
+      if (processing || finished) {
+        await replyToBusyInteraction(button, "Aguarde o processamento da jogada atual.");
+        return;
+      }
+
       processing = true;
       try {
-        const [, action, id, rawIndex] = button.customId.split("|");
-        if (id !== gameId) return;
-        const index = action === "random"
-          ? (() => {
-            const available = Array.from({ length: totalCells }, (_, value) => value)
-              .filter(value => !state.revealed.includes(value));
-            return available[Math.floor(Math.random() * available.length)] ?? -1;
-          })()
-          : Number(rawIndex);
-        if (action !== "reveal" && action !== "random" && action !== "cashout") {
-          await button.reply({ content: "Ação inválida para esta partida.", flags: 64 });
+        const [command, action, id, rawIndex] = button.customId.split("|");
+        if (command !== "mines" || id !== gameId) {
+          await replyToBusyInteraction(button, "Este botão não pertence a esta partida.");
           return;
         }
+        if (action !== "reveal" && action !== "random" && action !== "cashout") {
+          await replyToBusyInteraction(button, "Ação inválida para esta partida.");
+          return;
+        }
+
         if (action === "cashout") {
           const payout = Math.floor(state.bet * state.multiplier);
           finish("win", payout, "/mines retirada");
@@ -206,53 +228,112 @@ async function executeMines(interaction: CommandChatInputInteraction): Promise<v
           return;
         }
 
-        if (index < 0 || index >= totalCells || !Number.isInteger(index)) {
-          await button.reply({ content: "Essa casa não é válida nesta partida.", flags: 64 });
+        const index = action === "random"
+          ? (() => {
+            const available = Array.from({ length: totalCells }, (_, value) => value)
+              .filter((value) => !state.revealed.includes(value));
+            return available.length > 0 ? available[randomInt(available.length)] : -1;
+          })()
+          : Number(rawIndex);
+
+        if (!Number.isInteger(index) || index < 0 || index >= totalCells) {
+          await replyToBusyInteraction(button, "Essa casa não é válida nesta partida.");
           return;
         }
 
         state = revealCell(state, index);
         if (state.isGameOver) {
-          const payout = state.isVictory ? Math.floor(state.bet * state.multiplier) : 0;
-          finish(state.isVictory ? "win" : "loss", payout, state.isVictory ? "/mines vitória" : "/mines explosão");
+          const won = state.isVictory;
+          const payout = won ? Math.floor(state.bet * state.multiplier) : 0;
+          finish(won ? "win" : "loss", payout, won ? "/mines vitória" : "/mines explosão");
           await button.update({
-            embeds: [embedFor(gameId, state, totalCells, mineCount, state.isVictory ? WIN_COLOR : LOSS_COLOR)],
+            embeds: [embedFor(gameId, state, totalCells, mineCount, won ? WIN_COLOR : LOSS_COLOR)],
             components: boardRows(gameId, state, true),
           });
           return;
         }
+
         await button.update({
           embeds: [embedFor(gameId, state, totalCells, mineCount)],
           components: [...boardRows(gameId, state), controls(gameId, state)],
         });
       } catch (error) {
-        logger.error("Erro no minijogo Mines", error);
-        if (stakeReserved && !finished) {
-          try { finish("refund", 0, "/mines erro"); } catch (refundError) { logger.error("Falha ao estornar Mines", refundError); }
+        logger.error("Erro no minijogo Mines", error, { gameId, userId: button.user.id });
+
+        if (!finished) {
+          let refundSucceeded = !stakeReserved;
+          if (stakeReserved) {
+            try {
+              refundGameBets(gameId, context);
+              stakeReserved = false;
+              refundSucceeded = true;
+            } catch (refundError) {
+              logger.error("Falha ao estornar Mines", refundError, { gameId });
+            }
+          }
+          finished = true;
+          collector.stop("error");
+          activeGames.releaseGame(gameId);
+          const messageText = refundSucceeded
+            ? "Ocorreu um erro interno. A aposta foi estornada."
+            : "Ocorreu um erro e não consegui confirmar o estorno. A equipe deverá verificar a reserva da partida.";
+          await replyToBusyInteraction(button, messageText);
+          await message.edit({
+            embeds: [gameEmbedForFailure(gameId, state, totalCells, mineCount, messageText)],
+            components: boardRows(gameId, state, true),
+          }).catch((editError: unknown) => logger.warn("Falha ao atualizar Mines após erro", { gameId, editError }));
+        } else {
+          // A liquidação já ocorreu; falha ao editar a mensagem não pode gerar
+          // um segundo estorno nem uma mensagem dizendo que o pagamento foi revertido.
+          await replyToBusyInteraction(button, "A liquidação já foi processada, mas não consegui atualizar o tabuleiro. Confira seu saldo.");
         }
-        if (!button.replied && !button.deferred) await button.reply({ content: "Ocorreu um erro interno. A aposta foi estornada.", flags: 64 }).catch(() => undefined);
       } finally {
         processing = false;
       }
     });
 
-    collector.once("end", (_collected, reason) => {
+    collector.once("end", async (_collected, reason) => {
       if (finished) return;
       try {
         finish("refund", 0, `/mines ${reason || "expirada"}`);
-        void message.edit({
+        await message.edit({
           embeds: [embedFor(gameId, state, totalCells, mineCount, LOSS_COLOR).setDescription("Partida encerrada por inatividade. A aposta foi estornada.")],
           components: boardRows(gameId, state, true),
         });
       } catch (error) {
-        logger.error("Falha ao encerrar Mines", error);
+        logger.error("Falha ao encerrar Mines ou devolver a aposta", error, { gameId, reason });
+        // Mantém o hold persistido para recuperação na inicialização seguinte.
+        finished = true;
+        activeGames.releaseGame(gameId);
+        await message.edit({
+          embeds: [embedFor(gameId, state, totalCells, mineCount, LOSS_COLOR).setDescription("Partida encerrada. O estorno ficou pendente de recuperação; contate a equipe se o saldo não retornar.")],
+          components: boardRows(gameId, state, true),
+        }).catch(() => undefined);
       }
     });
   } catch (error) {
+    logger.error("Falha ao iniciar Mines", error, { gameId, userId: interaction.user.id });
     activeGames.releaseGame(gameId);
-    if (stakeReserved) refundGameBets(gameId, context);
+    if (stakeReserved) {
+      try {
+        refundGameBets(gameId, context);
+        stakeReserved = false;
+      } catch (refundError) {
+        logger.error("Falha ao devolver aposta após erro de inicialização do Mines", refundError, { gameId });
+      }
+    }
     throw error;
   }
+}
+
+function gameEmbedForFailure(
+  gameId: string,
+  state: MinesState,
+  totalCells: number,
+  mineCount: number,
+  message: string,
+): EmbedBuilder {
+  return embedFor(gameId, state, totalCells, mineCount, LOSS_COLOR).setDescription(message);
 }
 
 module.exports = defineCommand({
@@ -261,8 +342,17 @@ module.exports = defineCommand({
     .setName("mines")
     .setDescription("Desafie sua sorte no Campo Minado e multiplique seus cookies")
     .setDMPermission(false)
-    .addIntegerOption(option => option.setName("aposta").setDescription("Valor da aposta").setMinValue(0).setMaxValue(1_000_000).setRequired(false))
-    .addIntegerOption(option => option.setName("minas").setDescription("Quantidade de minas").setMinValue(1).setMaxValue(24).setRequired(false))
-    .addIntegerOption(option => option.setName("tamanho").setDescription("Tamanho do tabuleiro").setRequired(false).addChoices({ name: "3x3", value: 3 }, { name: "5x5", value: 5 })),
+    .addIntegerOption((option) => option
+      .setName("aposta")
+      .setDescription("Valor da aposta")
+      .setMinValue(0)
+      .setMaxValue(1_000_000)
+      .setRequired(false))
+    .addIntegerOption((option) => option
+      .setName("minas")
+      .setDescription("Quantidade de minas no tabuleiro 3x3")
+      .setMinValue(1)
+      .setMaxValue(MAX_MINES)
+      .setRequired(false)),
   execute: executeMines,
 });
