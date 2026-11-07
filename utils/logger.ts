@@ -39,7 +39,7 @@ function error(message, err, meta = {}) {
   else if (err) console.error(String(err));
 }
 
-module.exports = {
+export default {
   debug,
   error,
   info,

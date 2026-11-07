@@ -292,7 +292,7 @@ const normalizedAliases = new Map(
   Object.entries(legacyAliases).map(([alias, portalName]) => [normalizedName(alias), portalName])
 );
 
-const fallbacks: Record<string, string> = {
+export const EMOJI_FALLBACKS: Record<string, string> = {
   // 🚨 SEUS EMOJIS CUSTOMIZADOS AQUI (Garante que funcionem mesmo sem estar no portal)
   peep_police: "<a:peep_police:1507835774308188301>",
   pand_scary: "<a:pand_scary:1507835761934991412>",
@@ -432,13 +432,14 @@ const compatibilityExports = new Proxy(
     application,
     fetchPortalEmojis,
     setApplicationEmojis,
+    EMOJI_FALLBACKS,
   },
   {
     get(target, property: string | symbol) {
       if (typeof property !== "string") return Reflect.get(target, property);
       if (property in target) return target[property as keyof typeof target];
       const portalName = portalNameFor(property);
-      return getEmoji(portalName, fallbacks[property] || "▫️");
+      return getEmoji(portalName, EMOJI_FALLBACKS[property] || "▫️");
     },
   }
 );

@@ -3,6 +3,8 @@ const cooldowns = require("./cooldowns");
 const { PRIMARY_GUILD_ID } = require("./primaryGuild");
 const blackMarket = require("./blackMarket") as typeof import("./blackMarket");
 const { COLOR_ITEMS, COOLDOWN_TARGETS, SHOP_ITEMS_BY_ID } = require("./cookieShop");
+const { resolveNativeWorkRoll } = require("./nativeWork") as typeof import("./nativeWork");
+const { getEconomyConfig } = require("./economyConfig") as typeof import("./economyConfig");
 const MAX_COOKIE_AMOUNT = 2_147_483_647;
 
 interface TransactionDetails {
@@ -17,22 +19,6 @@ interface TransactionDetails {
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const START_BALANCE = 100;
-
-// Daily rewards
-const DAILY_MIN_REWARD = 900;
-const DAILY_MAX_REWARD = 1800;
-const DAILY_STREAK_WINDOW = 48 * 60 * 60 * 1000;
-const DAILY_MILESTONE_DAYS = 5;
-const DAILY_MILESTONE_MIN = 1000;
-const DAILY_MILESTONE_MAX = 3000;
-
-// Work
-const WORK_MIN_LOSS = 300;
-const WORK_MAX_LOSS = 800;
-const WORK_TOOL_MIN_LOSS = 100;
-const WORK_TOOL_MAX_LOSS = 300;
-const WORK_MIN_REWARD = 50;
-const WORK_MAX_REWARD = 300;
 
 const WORK_PROFESSIONS = [
   ["Jardineiro(a)", "🌳", 800, 1500],
@@ -66,28 +52,6 @@ const WORK_PROFESSIONS = [
   ["Jornalista", "📰", 1100, 2600],
   ["Zelador(a)", "🧹", 500, 1000],
 ] as const;
-
-// Roubo — balanceado
-const ROB_MIN_TARGET_BALANCE = 50;   // era 20 — evita roubar quem não tem nada
-const ROB_SUCCESS_CHANCE = 0.45; // era 0.5 — levemente mais difícil
-const ROB_STEAL_MIN_PCT = 8;    // era 5%
-const ROB_STEAL_MAX_PCT = 20;   // era 15%
-const ROB_PENALTY_MIN = 100;  // era 200 — penalidade mínima menor
-const ROB_PENALTY_MAX = 500;  // era 800 — penalidade máxima menor
-const ROB_PENALTY_SCALE = true; // penalidade proporcional ao saldo do ladrão
-
-// Cooldowns
-const DAILY_COOLDOWN = cooldowns.DURATIONS.daily;
-const WORK_COOLDOWN = cooldowns.DURATIONS.trabalhar;
-const ROB_COOLDOWN = cooldowns.DURATIONS.roubar;
-const BONUS_COOLDOWN = cooldowns.DURATIONS.bonus;
-const REP_COOLDOWN = cooldowns.DURATIONS.rep;
-
-// Impostos
-const DAILY_TAX_RATE = 0.01;
-const DAILY_TAX_MAX = 250;
-const DAILY_TAX_GRACE_BALANCE = 500;
-const INACTIVITY_TAX_PERIOD_MS = 25 * 24 * 60 * 60 * 1000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -231,6 +195,7 @@ function pushTransaction(type, userId, amount, details: TransactionDetails = {})
 // ─── Impostos ─────────────────────────────────────────────────────────────────
 
 function applyDailyTax(userId) {
+  const config = getEconomyConfig();
   const row = db.prepare("SELECT * FROM usuarios WHERE id = ?").get(String(userId));
   const profile = rowToProfile(row);
   const now = Date.now();
@@ -244,7 +209,7 @@ function applyDailyTax(userId) {
     LIMIT 1
   `).get(profile.id);
   const inactivityStart = integer(lastDaily?.createdAt, profile.createdAt || now);
-  const duePeriods = Math.floor(Math.max(0, now - inactivityStart) / INACTIVITY_TAX_PERIOD_MS);
+  const duePeriods = Math.floor(Math.max(0, now - inactivityStart) / config.inactivityTaxPeriodMs);
   const alreadyChargedPeriods = integer(row.inactivity_tax_periods);
   const periods = Math.max(0, duePeriods - alreadyChargedPeriods);
 
@@ -253,12 +218,12 @@ function applyDailyTax(userId) {
   const settle = db.transaction(() => {
     let balance = integer(db.prepare("SELECT cookies FROM usuarios WHERE id = ?").get(profile.id)?.cookies);
     let charged = 0;
-    for (let index = 0; index < periods && balance > DAILY_TAX_GRACE_BALANCE; index++) {
+    for (let index = 0; index < periods && balance > config.dailyTaxGraceBalance; index++) {
       const periodTax = Math.min(
-        DAILY_TAX_MAX,
-        Math.max(1, Math.floor((balance - DAILY_TAX_GRACE_BALANCE) * DAILY_TAX_RATE))
+        config.dailyTaxMax,
+        Math.max(1, Math.floor((balance - config.dailyTaxGraceBalance) * config.dailyTaxRate))
       );
-      const actualTax = Math.min(balance - DAILY_TAX_GRACE_BALANCE, periodTax);
+      const actualTax = Math.min(balance - config.dailyTaxGraceBalance, periodTax);
       balance -= actualTax;
       charged += actualTax;
     }
@@ -286,6 +251,7 @@ function applyDailyTax(userId) {
 // ─── Usuário ──────────────────────────────────────────────────────────────────
 
 function getUser(user) {
+  const config = getEconomyConfig();
   const id = String(user.id);
   const now = Date.now();
 
@@ -295,7 +261,7 @@ function getUser(user) {
     ON CONFLICT(id) DO UPDATE SET
       username   = excluded.username,
       updated_at = excluded.updated_at
-  `).run(id, getUsername(user), START_BALANCE, now, now, now);
+  `).run(id, getUsername(user), config.startBalance, now, now, now);
 
   applyDailyTax(id);
 
@@ -307,7 +273,7 @@ function getProfile(user) {
 }
 
 function setBalance(user, amount) {
-  const balance = Math.max(0, Math.min(MAX_COOKIE_AMOUNT, Math.floor(Number(amount))));
+  const balance = Math.max(0, Math.min(getEconomyConfig().maxCookieAmount, Math.floor(Number(amount))));
   const profile = getUser(user);
   db.prepare("UPDATE usuarios SET cookies = ?, updated_at = ? WHERE id = ?")
     .run(balance, Date.now(), profile.id);
@@ -318,6 +284,7 @@ function setBalance(user, amount) {
 
 function claimDaily(user, details: TransactionDetails = {}) {
   return db.transaction(() => {
+  const config = getEconomyConfig();
   const profile = getUser(user);
   const cooldown = cooldowns.check(profile.id, "daily");
 
@@ -339,15 +306,15 @@ function claimDaily(user, details: TransactionDetails = {}) {
     LIMIT 1
   `).get(profile.id);
 
-  const streak = previousDaily && now - previousDaily.createdAt <= DAILY_STREAK_WINDOW
+  const streak = previousDaily && now - previousDaily.createdAt <= config.dailyStreakWindowMs
     ? profile.dailyStreak + 1
     : 1;
-  const base = randomAmount(DAILY_MIN_REWARD, DAILY_MAX_REWARD);
+  const base = randomAmount(config.dailyMinReward, config.dailyMaxReward);
   const dailyBaseReward = applyCookieBonuses(profile.id, base);
   const dailyBoost = applyPermanentDailyBoost(profile.id, details.guildId, dailyBaseReward);
   const dailyReward = dailyBoost.reward;
-  const streakBonus = streak % DAILY_MILESTONE_DAYS === 0
-    ? randomAmount(DAILY_MILESTONE_MIN, DAILY_MILESTONE_MAX)
+  const streakBonus = streak % config.dailyMilestoneDays === 0
+    ? randomAmount(config.dailyMilestoneMin, config.dailyMilestoneMax)
     : 0;
   const milestoneBaseReward = streakBonus ? applyCookieBonuses(profile.id, streakBonus) : 0;
   const milestoneReward = streakBonus
@@ -389,6 +356,7 @@ function claimDaily(user, details: TransactionDetails = {}) {
 }
 
 function getDailyStreak(user) {
+  const config = getEconomyConfig();
   const profile = getUser(user);
   const lastDaily = db.prepare(`
     SELECT created_at AS createdAt
@@ -397,7 +365,7 @@ function getDailyStreak(user) {
     ORDER BY created_at DESC
     LIMIT 1
   `).get(profile.id);
-  const active = Boolean(lastDaily && Date.now() - lastDaily.createdAt <= DAILY_STREAK_WINDOW);
+  const active = Boolean(lastDaily && Date.now() - lastDaily.createdAt <= config.dailyStreakWindowMs);
 
   return {
     profile,
@@ -405,8 +373,8 @@ function getDailyStreak(user) {
     bestStreak: profile.bestDailyStreak,
     active,
     nextMilestone: active
-      ? DAILY_MILESTONE_DAYS - (profile.dailyStreak % DAILY_MILESTONE_DAYS)
-      : DAILY_MILESTONE_DAYS,
+      ? config.dailyMilestoneDays - (profile.dailyStreak % config.dailyMilestoneDays)
+      : config.dailyMilestoneDays,
   };
 }
 
@@ -414,99 +382,122 @@ function getDailyStreak(user) {
 
 function work(user, details: TransactionDetails = {}) {
   return db.transaction(() => {
-  const profile = getUser(user);
-  const cooldown = cooldowns.check(profile.id, "trabalhar");
+    const config = getEconomyConfig();
+    const profile = getUser(user);
+    const cooldown = cooldowns.check(profile.id, "trabalhar");
 
-  if (!cooldown.ready) {
-    return {
-      worked: false,
-      profile,
-      remaining: cooldown.remaining,
-      nextAt: cooldown.expiresAt,
-    };
-  }
-
-  const nextAt = cooldowns.consume(profile.id, "trabalhar");
-  const settleWork = db.transaction(() => {
-    const currentProfile = getById(profile.id);
-    updateStats(profile.id, { work_count: 1 });
-
-    const roll = Math.random();
-    const profession = WORK_PROFESSIONS[Math.floor(Math.random() * WORK_PROFESSIONS.length)];
-
-    if (roll < 0.15) {
-      // A multa nunca pode exceder o saldo que realmente existe.
-      const loss = Math.min(currentProfile.balance, randomAmount(WORK_MIN_LOSS, WORK_MAX_LOSS));
-      if (loss > 0) {
-        addBalance(profile.id, -loss);
-        updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
-        pushTransaction("work_dismissal", profile.id, -loss, {
-          ...details,
-          note: `Demitido(a): ${details.reason || details.note || "desempenho inadequado"}`,
-        });
-      }
-
+    if (!cooldown.ready) {
       return {
-        worked: true,
-        success: false,
-        profile: getById(profile.id),
-        loss,
-        reason: details.reason || null,
-        job: details.job || null,
-        event: "dismissal",
-        nextAt,
+        worked: false,
+        profile,
+        remaining: cooldown.remaining,
+        nextAt: cooldown.expiresAt,
       };
     }
 
-    if (roll >= 0.90) {
-      const loss = Math.min(currentProfile.balance, randomAmount(WORK_TOOL_MIN_LOSS, WORK_TOOL_MAX_LOSS));
-      if (loss > 0) {
-        addBalance(profile.id, -loss);
-        updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
-        pushTransaction("work_tool_break", profile.id, -loss, {
-          ...details,
-          note: "Ferramenta quebrada durante o expediente",
-        });
+    const nextAt = cooldowns.consume(profile.id, "trabalhar");
+    const settleWork = db.transaction(() => {
+      const currentProfile = getById(profile.id);
+      updateStats(profile.id, { work_count: 1 });
+
+      const randomValues: [number, number, number, number, number, number] = [
+        Math.random(),
+        Math.random(),
+        Math.random(),
+        Math.random(),
+        Math.random(),
+        Math.random(),
+      ];
+      const nativeRoll = resolveNativeWorkRoll(randomValues);
+      const roll = randomValues[0];
+      const professionIndex = nativeRoll?.professionIndex
+        ?? Math.floor(randomValues[1] * WORK_PROFESSIONS.length);
+      const profession = WORK_PROFESSIONS[professionIndex];
+      const event = nativeRoll?.event
+        ?? (roll < 0.15 ? "dismissal" : roll >= 0.90 ? "tool_break" : roll < 0.20 ? "critical" : "success");
+      const nativeLoss = event === "dismissal"
+        ? randomAmount(config.workMinLoss, config.workMaxLoss)
+        : randomAmount(config.workToolMinLoss, config.workToolMaxLoss);
+
+      if (event === "dismissal") {
+        const loss = Math.min(
+          currentProfile.balance,
+          nativeRoll ? nativeLoss : randomAmount(config.workMinLoss, config.workMaxLoss),
+        );
+        if (loss > 0) {
+          addBalance(profile.id, -loss);
+          updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
+          pushTransaction("work_dismissal", profile.id, -loss, {
+            ...details,
+            note: `Demitido(a): ${details.reason || details.note || "desempenho inadequado"}`,
+          });
+        }
+
+        return {
+          worked: true,
+          success: false,
+          profile: getById(profile.id),
+          loss,
+          reason: details.reason || null,
+          job: details.job || null,
+          event,
+          nextAt,
+        };
       }
+
+      if (event === "tool_break") {
+        const loss = Math.min(
+          currentProfile.balance,
+          nativeRoll ? nativeLoss : randomAmount(config.workToolMinLoss, config.workToolMaxLoss),
+        );
+        if (loss > 0) {
+          addBalance(profile.id, -loss);
+          updateStats(profile.id, { cookies_lost: loss, total_spent: loss });
+          pushTransaction("work_tool_break", profile.id, -loss, {
+            ...details,
+            note: "Ferramenta quebrada durante o expediente",
+          });
+        }
+
+        return {
+          worked: true,
+          success: false,
+          event,
+          profile: getById(profile.id),
+          loss,
+          job: `${profession[0]} ${profession[1]}`,
+          nextAt,
+        };
+      }
+
+      const baseReward = nativeRoll?.baseReward
+        ?? randomAmount(profession[2], profession[3]);
+      const reward = applyCookieBonuses(profile.id, baseReward);
+      const critical = event === "critical";
+      const bonus = nativeRoll?.bonus ?? (critical ? randomAmount(100, 300) : 0);
+      const totalReward = critical ? reward * 2 + bonus : reward;
+      addBalance(profile.id, totalReward);
+      updateStats(profile.id, { cookies_won: totalReward, total_earned: totalReward });
+      pushTransaction("work", profile.id, totalReward, {
+        ...details,
+        note: `${profession[0]}${critical ? " (sucesso crítico)" : ""}`,
+      });
 
       return {
         worked: true,
-        success: false,
-        event: "tool_break",
+        success: true,
+        event,
         profile: getById(profile.id),
-        loss,
+        reward: totalReward,
+        baseReward,
+        bonus,
+        perkBonus: reward - baseReward,
         job: `${profession[0]} ${profession[1]}`,
         nextAt,
       };
-    }
-
-    const baseReward = randomAmount(profession[2], profession[3]);
-    const reward = applyCookieBonuses(profile.id, baseReward);
-    const critical = roll >= 0.15 && roll < 0.20;
-    const bonus = critical ? randomAmount(100, 300) : 0;
-    const totalReward = critical ? reward * 2 + bonus : reward;
-    addBalance(profile.id, totalReward);
-    updateStats(profile.id, { cookies_won: totalReward, total_earned: totalReward });
-    pushTransaction("work", profile.id, totalReward, {
-      ...details,
-      note: `${profession[0]}${critical ? " (sucesso crítico)" : ""}`,
     });
 
-    return {
-      worked: true,
-      success: true,
-      event: critical ? "critical" : "success",
-      profile: getById(profile.id),
-      reward: totalReward,
-      baseReward,
-      bonus,
-      perkBonus: reward - baseReward,
-      job: `${profession[0]} ${profession[1]}`,
-      nextAt,
-    };
-  });
-
-  return settleWork();
+    return settleWork();
   })();
 }
 
@@ -549,6 +540,7 @@ function claimBonus(user, details: TransactionDetails = {}) {
 // ─── Roubo balanceado ─────────────────────────────────────────────────────────
 
 function rob(thiefUser, targetUser, details: TransactionDetails = {}) {
+  const config = getEconomyConfig();
   const thief = getUser(thiefUser);
   const target = getUser(targetUser);
 
@@ -559,7 +551,7 @@ function rob(thiefUser, targetUser, details: TransactionDetails = {}) {
   const prison = blackMarket.getActivePrisonStatus(thief.id);
   if (prison) return { ok: false, reason: "prison", thief, target, prison };
 
-  if (target.balance < ROB_MIN_TARGET_BALANCE) {
+  if (target.balance < config.robMinTargetBalance) {
     return { ok: false, reason: "target_balance", thief, target };
   }
 
@@ -603,11 +595,11 @@ function rob(thiefUser, targetUser, details: TransactionDetails = {}) {
     }
 
     const crowbarUsed = blackMarket.consumeInventoryItem(thief.id, "crowbar");
-    const chance = Math.min(0.95, ROB_SUCCESS_CHANCE + (crowbarUsed ? 0.1 : 0));
+    const chance = Math.min(0.95, config.robSuccessChance + (crowbarUsed ? 0.1 : 0));
     const success = Math.random() < chance;
 
     if (success) {
-      const percent = randomAmount(ROB_STEAL_MIN_PCT, ROB_STEAL_MAX_PCT);
+      const percent = randomAmount(config.robStealMinPct, config.robStealMaxPct);
       const stolen = Math.max(1, Math.floor(target.balance * (percent / 100)));
 
       addBalance(target.id, -stolen);
@@ -638,9 +630,9 @@ function rob(thiefUser, targetUser, details: TransactionDetails = {}) {
       };
     }
 
-    let penalty = randomAmount(ROB_PENALTY_MIN, ROB_PENALTY_MAX);
-    if (ROB_PENALTY_SCALE) {
-      const scaledMax = Math.max(ROB_PENALTY_MIN, Math.floor(thief.balance * 0.10));
+    let penalty = randomAmount(config.robPenaltyMin, config.robPenaltyMax);
+    if (config.robPenaltyScale) {
+      const scaledMax = Math.max(config.robPenaltyMin, Math.floor(thief.balance * 0.10));
       penalty = Math.min(penalty, scaledMax, thief.balance);
     }
     penalty = Math.min(thief.balance, Math.max(0, penalty));
@@ -779,10 +771,6 @@ function transfer(fromUser, toUser, amount, details: TransactionDetails = {}) {
 }
 
 // ─── Apostas ──────────────────────────────────────────────────────────────────
-
-function canBet(user, amount) {
-  return getProfile(user).balance >= cleanAmount(amount);
-}
 
 function settleBet(user, amount, result, details: TransactionDetails = {}) {
   const value = cleanAmount(amount);
@@ -1148,25 +1136,12 @@ function equipShopItem(user, itemId) {
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
-  BONUS_COOLDOWN,
-  DAILY_COOLDOWN,
-  DAILY_MAX_REWARD,
-  DAILY_MIN_REWARD,
-  DAILY_MILESTONE_DAYS,
-  DAILY_MILESTONE_MAX,
-  DAILY_MILESTONE_MIN,
-  REP_COOLDOWN,
-  ROB_COOLDOWN,
   START_BALANCE,
-  WORK_COOLDOWN,
-  WORK_MAX_REWARD,
-  WORK_MIN_REWARD,
   addBalance,
   activateCookieBoost,
   applyCookieBonuses,
   updateStats,
   pushTransaction,
-  canBet,
   claimBonus,
   claimDaily,
   getDailyStreak,
